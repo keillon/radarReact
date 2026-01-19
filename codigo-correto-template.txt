@@ -1,0 +1,82 @@
+    // Remover source e layer existentes se houver
+    try {
+      if (style.styleSourceExists("radars-source")) {
+        style.removeStyleSource("radars-source")
+        Log.d("MapboxNavigationView", "Source radars-source removido")
+      }
+      if (style.styleLayerExists("radars-layer")) {
+        style.removeStyleLayer("radars-layer")
+        Log.d("MapboxNavigationView", "Layer radars-layer removido")
+      }
+    } catch (e: Exception) {
+      Log.w("MapboxNavigationView", "Erro ao remover source/layer existente: ${e.message}")
+    }
+
+    // Adicionar GeoJSON source usando a API do Mapbox Maps SDK v11
+    try {
+      // Converter FeatureCollection para JSON string
+      val geoJsonString = featureCollection.toJson()
+      
+      // Criar objeto source com type e data para o Mapbox Maps SDK v11
+      val sourceJson = """
+        {
+          "type": "geojson",
+          "data": $geoJsonString
+        }
+      """.trimIndent()
+      
+      // Adicionar source usando addStyleSource com String (nome) e Value (JSON)
+      val sourceValueResult = com.mapbox.bindgen.Value.fromJson(sourceJson)
+      when (val value = sourceValueResult.value) {
+        null -> {
+          Log.e("MapboxNavigationView", "Erro ao criar Value do JSON: ${sourceValueResult.error}")
+          return
+        }
+        else -> {
+          style.addStyleSource("radars-source", value)
+          Log.d("MapboxNavigationView", "GeoJSON source adicionado com sucesso: ${radars.size} radares")
+        }
+      }
+    } catch (e: Exception) {
+      Log.e("MapboxNavigationView", "Erro ao adicionar GeoJSON source", e)
+      e.printStackTrace()
+      return
+    }
+
+    // Adicionar CircleLayer para renderizar os radares
+    try {
+      // Criar layer JSON manualmente para CircleLayer
+      val layerJson = """
+        {
+          "id": "radars-layer",
+          "type": "circle",
+          "source": "radars-source",
+          "paint": {
+            "circle-color": "#dc2626",
+            "circle-radius": 8,
+            "circle-stroke-width": 2,
+            "circle-stroke-color": "#ffffff",
+            "circle-pitch-scale": "map"
+          }
+        }
+      """.trimIndent()
+      
+      // Converter JSON para Value e adicionar layer
+      val layerValueResult = com.mapbox.bindgen.Value.fromJson(layerJson)
+      when (val value = layerValueResult.value) {
+        null -> {
+          Log.e("MapboxNavigationView", "Erro ao criar Value do layer: ${layerValueResult.error}")
+          return
+        }
+        else -> {
+          style.addStyleLayer(value, null)
+          Log.d("MapboxNavigationView", "CircleLayer adicionado com sucesso")
+        }
+      }
+    } catch (e: Exception) {
+      Log.e("MapboxNavigationView", "Erro ao adicionar CircleLayer", e)
+      e.printStackTrace()
+    }
+  }
+}
+
