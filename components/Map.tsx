@@ -1,19 +1,18 @@
-import React, { useEffect, useState, useRef } from "react";
-import { LogBox } from "react-native";
-import { View, StyleSheet, TouchableOpacity, Text } from "react-native";
 import Mapbox, {
-  MapView,
   Camera,
+  CircleLayer,
+  Images,
+  LineLayer,
+  MapView,
   ShapeSource,
   SymbolLayer,
-  CircleLayer,
-  LineLayer,
   UserLocation,
   UserTrackingMode,
-  Images,
 } from "@rnmapbox/maps";
+import React, { useEffect, useRef, useState } from "react";
+import { Animated, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Radar } from "../services/api";
-import { RouteFeature, MAPBOX_TOKEN, NavigationStep } from "../services/mapbox";
+import { MAPBOX_TOKEN, NavigationStep, RouteFeature } from "../services/mapbox";
 
 Mapbox.setAccessToken(MAPBOX_TOKEN);
 
@@ -25,6 +24,7 @@ interface MapProps {
   currentLocation?: { latitude: number; longitude: number } | null;
   currentStep?: NavigationStep | null;
   interactive?: boolean; // Se false, desativa interação do mapa (útil para overlay)
+  nearbyRadarIds?: Set<string>; // IDs dos radares próximos para animação pulsante
 }
 
 export default function Map({
@@ -35,6 +35,7 @@ export default function Map({
   currentLocation,
   currentStep,
   interactive = true,
+  nearbyRadarIds = new Set(),
 }: MapProps) {
   const [userLocation, setUserLocation] = useState<{
     latitude: number;
@@ -42,6 +43,30 @@ export default function Map({
   } | null>(null);
   const [hasInitialized, setHasInitialized] = useState(false);
   const cameraRef = useRef<any>(null);
+  const pulseAnimation = useRef(new Animated.Value(1)).current;
+  
+  // Animação de pulso para radares próximos
+  useEffect(() => {
+    if (nearbyRadarIds.size > 0) {
+      // Criar loop de animação de pulso
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnimation, {
+            toValue: 1.5,
+            duration: 1000,
+            useNativeDriver: false, // Não pode usar native driver para propriedades do Mapbox
+          }),
+          Animated.timing(pulseAnimation, {
+            toValue: 1,
+            duration: 1000,
+            useNativeDriver: false,
+          }),
+        ])
+      ).start();
+    } else {
+      pulseAnimation.setValue(1);
+    }
+  }, [nearbyRadarIds.size]);
 
   // Atualizar userLocation quando currentLocation mudar
   useEffect(() => {
@@ -129,7 +154,7 @@ export default function Map({
     placa: require("../assets/images/placa.png"), // Fallback
   };
 
-  // Criar GeoJSON para radares com nome da imagem
+  // Criar GeoJSON para radares com nome da imagem e propriedade de proximidade
   const radarsGeoJSON = {
     type: "FeatureCollection" as const,
     features: radars.map((radar) => ({
@@ -144,6 +169,7 @@ export default function Map({
         speedLimit: radar.speedLimit || null,
         type: radar.type || "default",
         iconImage: getPlacaImageName(radar.speedLimit), // Nome da imagem para o ícone
+        isNearby: nearbyRadarIds.has(radar.id) ? 1 : 0, // Flag para animação pulsante
       },
     })),
   };
@@ -396,6 +422,25 @@ export default function Map({
               iconAllowOverlap: true, // Permitir que as placas se sobreponham
               iconIgnorePlacement: true, // Ignorar placement para evitar conflitos
             }}
+          />
+          
+          {/* CircleLayer pulsante para radares próximos - círculo de alerta */}
+          <CircleLayer
+            id="radarPulseLayer"
+            filter={[
+              "all",
+              ["!", ["has", "point_count"]], // Não clusters
+              ["==", ["get", "isNearby"], 1] // Apenas radares próximos
+            ]}
+            style={{
+              circleRadius: 25, // Raio fixo para círculo de alerta
+              circleColor: "rgba(220, 38, 38, 0.2)", // Vermelho semi-transparente
+              circleStrokeWidth: 3,
+              circleStrokeColor: "rgba(220, 38, 38, 0.8)",
+              circleOpacity: 0.7,
+              circlePitchScale: "map",
+            }}
+            layerIndex={385} // Colocar abaixo do SymbolLayer (que está no índice 386)
           />
           
         </ShapeSource>

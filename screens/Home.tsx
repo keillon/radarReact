@@ -89,6 +89,32 @@ const distanceToLineSegment = (
   return calculateDistance(point.latitude, point.longitude, xx, yy);
 };
 
+// Função para calcular distância de um ponto até a rota (distância perpendicular mais próxima)
+const calculateDistanceToRoute = (
+  point: LatLng,
+  routePoints: LatLng[]
+): number => {
+  if (routePoints.length < 2) {
+    // Se não há rota, retornar distância grande
+    return Infinity;
+  }
+
+  let minDistance = Infinity;
+
+  // Verificar distância perpendicular para cada segmento da rota
+  for (let i = 0; i < routePoints.length - 1; i++) {
+    const segmentStart = routePoints[i];
+    const segmentEnd = routePoints[i + 1];
+    
+    const distance = distanceToLineSegment(point, segmentStart, segmentEnd);
+    if (distance < minDistance) {
+      minDistance = distance;
+    }
+  }
+
+  return minDistance;
+};
+
 // Função para filtrar radares próximos à rota
 const filterRadarsNearRoute = (
   radars: Radar[],
@@ -135,14 +161,19 @@ export default function Home() {
     distance: number;
   } | null>(null);
   const [filteredRadars, setFilteredRadars] = useState<Radar[]>([]);
+  const [nearbyRadarIds, setNearbyRadarIds] = useState<Set<string>>(new Set()); // IDs dos radares próximos para animação
   const [showDebug, setShowDebug] = useState(true); // Mostrar em dev, ocultar em release (pode mudar para true para sempre mostrar)
   const locationWatchRef = useRef<any>(null);
   const modalOpacity = useRef(new Animated.Value(0)).current;
+  const modalScale = useRef(new Animated.Value(0.8)).current;
+  const modalPulse = useRef(new Animated.Value(1)).current;
   const lastTtsTime = useRef<{ [key: string]: number }>({});
   const alertedRadarIds = useRef<Set<string>>(new Set()); // Rastrear radares já alertados (apenas uma vez)
   const lastLocationUpdate = useRef<number>(0);
-  const locationUpdateDebounce = useRef<NodeJS.Timeout | null>(null);
+  const locationUpdateDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastCalculatedDistance = useRef<number>(0);
+  const radarZeroTimeRef = useRef<number | null>(null); // Timestamp quando chegou a 0 metros
+  const modalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     initMapbox();
@@ -572,6 +603,8 @@ export default function Home() {
               // Verificar distância até cada radar e alertar (com debounce)
               // Usar debounce para evitar cálculos muito frequentes
               const checkRadarDistance = () => {
+                console.log(`🔍 Verificando radares: filteredRadars=${filteredRadars.length}, routeData=${!!routeData}`);
+                
                 if (filteredRadars.length > 0 && routeData) {
                   // Usar a localização do callback diretamente
                   const checkLocation = {
@@ -579,62 +612,168 @@ export default function Home() {
                     longitude: location.longitude,
                   };
                   
+                  // Obter pontos da rota para cálculo mais preciso
+                  const routePoints = routeData.route.geometry.coordinates.map((coord: number[]) => ({
+                    latitude: coord[1],
+                    longitude: coord[0],
+                  }));
+                  
                   // Encontrar o radar mais próximo
-                  let nearest: { radar: Radar; distance: number } | null = null;
+                  type NearestRadar = { radar: Radar; distance: number; routeDistance: number };
+                  let nearest: NearestRadar | null = null;
                   let minDistance = Infinity;
 
                   filteredRadars.forEach((radar) => {
-                    const distance = calculateDistance(
+                    // Calcular distância direta (Haversine)
+                    const directDistance = calculateDistance(
                       checkLocation.latitude,
                       checkLocation.longitude,
                       radar.latitude,
                       radar.longitude
                     );
 
-                    // Só considerar radares a menos de 300m
-                    if (distance < minDistance && distance < 300) {
-                      minDistance = distance;
-                      nearest = { radar, distance };
+                    // Calcular distância até a rota (distância perpendicular)
+                    const routeDistance = calculateDistanceToRoute(
+                      { latitude: radar.latitude, longitude: radar.longitude },
+                      routePoints
+                    );
+
+                    // Usar a distância direta como principal, mas verificar se está próximo da rota
+                    // Se routeDistance for muito grande (mais de 200m), considerar que o radar não está na rota
+                    // Mas se routeDistance for menor que 200m, considerar o radar como válido
+                    const isNearRoute = routeDistance < 200 || routeDistance === Infinity; // Infinity significa que não há rota válida
+                    
+                    // Só considerar radares a menos de 300m E que estejam próximos à rota OU se não houver rota válida
+                    if (directDistance < minDistance && directDistance < 300 && isNearRoute) {
+                      minDistance = directDistance;
+                      nearest = { 
+                        radar, 
+                        distance: Math.round(directDistance), // Distância direta para exibição
+                        routeDistance: Math.round(routeDistance) // Distância da rota para validação
+                      };
                     }
                   });
 
-                  // Só atualizar se a distância mudou significativamente (mais de 5 metros)
-                  if (nearest !== null) {
-                    const nearestDistance = nearest.distance;
-                    const nearestRadarObj = nearest.radar;
+                  // Verificar se há radar próximo
+                  if (nearest) {
+                    // Type guard explícito para ajudar TypeScript
+                    const nearestData: NearestRadar = nearest;
+                    const nearestDistance = nearestData.distance;
+                    const nearestRadarObj = nearestData.radar;
                     
-                    // Evitar atualizações muito frequentes se a distância não mudou muito
-                    if (Math.abs(nearestDistance - lastCalculatedDistance.current) < 5 && 
+                    console.log(`📍 Radar próximo encontrado: ${nearestRadarObj.id}, distância: ${nearestDistance}m, routeDistance: ${nearestData.routeDistance}m`);
+                    console.log(`📊 Modal será ${nearestDistance <= 200 ? 'exibido' : 'oculto'} (distância: ${nearestDistance}m)`);
+                    
+                    // Evitar atualizações muito frequentes se a distância não mudou muito (tolerância de 3m)
+                    if (Math.abs(nearestDistance - lastCalculatedDistance.current) < 3 && 
                         lastCalculatedDistance.current > 0) {
                       return;
                     }
                     lastCalculatedDistance.current = nearestDistance;
                     
-                    setNearestRadar(nearest);
+                    // Limpar timer anterior se existir
+                    if (modalTimerRef.current) {
+                      clearTimeout(modalTimerRef.current);
+                      modalTimerRef.current = null;
+                    }
                     
-                    // Mostrar modal se estiver entre 200m e 30m (reduzido de 50m para 30m)
-                    if (nearestDistance <= 200 && nearestDistance > 30) {
-                      Animated.timing(modalOpacity, {
-                        toValue: 1,
-                        duration: 300,
-                        useNativeDriver: true,
-                      }).start();
-                    } else if (nearestDistance <= 30) {
-                      // Esconder modal quando passar 30m
-                      Animated.timing(modalOpacity, {
-                        toValue: 0,
-                        duration: 300,
-                        useNativeDriver: true,
-                      }).start(() => {
-                        setNearestRadar(null);
-                      });
+                    // Atualizar conjunto de radares próximos para animação
+                    setNearbyRadarIds(new Set([nearestRadarObj.id]));
+                    
+                    // Mostrar modal se estiver entre 300m e 0m (aumentado de 200m para 300m para aparecer mais cedo)
+                    if (nearestDistance <= 300) {
+                      // Se chegou a 0 metros, iniciar contagem de 3 segundos
+                      if (nearestDistance <= 0 || nearestDistance < 5) {
+                        if (radarZeroTimeRef.current === null) {
+                          radarZeroTimeRef.current = Date.now();
+                        }
+                        
+                        // Manter modal visível por 3 segundos após chegar a 0m
+                        const timeSinceZero = Date.now() - (radarZeroTimeRef.current || 0);
+                        if (timeSinceZero < 3000) {
+                          // Ainda dentro dos 3 segundos, manter modal
+                          setNearestRadar({
+                            radar: nearestRadarObj,
+                            distance: 0,
+                          });
+                          
+                          // Animação de pulso quando muito próximo
+                          Animated.loop(
+                            Animated.sequence([
+                              Animated.timing(modalPulse, {
+                                toValue: 1.1,
+                                duration: 500,
+                                useNativeDriver: true,
+                              }),
+                              Animated.timing(modalPulse, {
+                                toValue: 1,
+                                duration: 500,
+                                useNativeDriver: true,
+                              }),
+                            ])
+                          ).start();
+                        } else {
+                          // Passou 3 segundos, esconder modal
+                          radarZeroTimeRef.current = null;
+                          hideModal();
+                        }
+                      } else {
+                        // Resetar contador se distância aumentou
+                        radarZeroTimeRef.current = null;
+                        modalPulse.stopAnimation();
+                        modalPulse.setValue(1);
+                        
+                        // Mostrar/atualizar modal com animações
+                        setNearestRadar({
+                          radar: nearestRadarObj,
+                          distance: nearestDistance,
+                        });
+                        
+                        // Animações de entrada/atualização
+                        Animated.parallel([
+                          Animated.spring(modalOpacity, {
+                            toValue: 1,
+                            tension: 50,
+                            friction: 7,
+                            useNativeDriver: true,
+                          }),
+                          Animated.spring(modalScale, {
+                            toValue: 1,
+                            tension: 50,
+                            friction: 7,
+                            useNativeDriver: true,
+                          }),
+                        ]).start();
+                        
+                        // Animação de pulso suave quando próximo (entre 50-100m)
+                        if (nearestDistance <= 100 && nearestDistance > 5) {
+                          Animated.loop(
+                            Animated.sequence([
+                              Animated.timing(modalPulse, {
+                                toValue: 1.05,
+                                duration: 800,
+                                useNativeDriver: true,
+                              }),
+                              Animated.timing(modalPulse, {
+                                toValue: 1,
+                                duration: 800,
+                                useNativeDriver: true,
+                              }),
+                            ])
+                          ).start();
+                        }
+                      }
+                    } else {
+                      // Radar muito distante, esconder modal
+                      radarZeroTimeRef.current = null;
+                      hideModal();
                     }
 
                     // Alerta de voz quando radar está próximo - APENAS UMA VEZ por radar
                     const radarId = nearestRadarObj.id;
                     
                     // Verificar se este radar já foi alertado
-                    if (!alertedRadarIds.current.has(radarId) && nearestDistance <= 300 && nearestDistance > 30) {
+                    if (!alertedRadarIds.current.has(radarId) && nearestDistance <= 300 && nearestDistance > 0) {
                       // Marcar como alertado IMEDIATAMENTE para evitar repetição
                       alertedRadarIds.current.add(radarId);
                       
@@ -643,12 +782,15 @@ export default function Home() {
                         message = `Radar a ${Math.round(nearestDistance)} metros`;
                       } else if (nearestDistance > 100) {
                         message = `Atenção! Radar a ${Math.round(nearestDistance)} metros`;
+                      } else if (nearestDistance > 30) {
+                        message = `Cuidado! Radar a ${Math.round(nearestDistance)} metros`;
                       } else {
-                        message = `Cuidado! Radar muito próximo, ${Math.round(nearestDistance)} metros`;
+                        message = `Atenção! Radar próximo`;
                       }
                       
-                      if (nearestRadarObj.speedLimit) {
-                        message += `. Limite de velocidade ${nearestRadarObj.speedLimit} quilômetros por hora`;
+                      const speedLimit = nearestRadarObj.speedLimit;
+                      if (speedLimit) {
+                        message += `. Limite de velocidade ${speedLimit} quilômetros por hora`;
                       }
 
                       if (Tts && typeof Tts.speak === 'function') {
@@ -662,16 +804,36 @@ export default function Home() {
                     }
                   } else {
                     // Esconder modal se não houver radar próximo
+                    console.log(`❌ Nenhum radar próximo encontrado (filteredRadars: ${filteredRadars.length})`);
+                    radarZeroTimeRef.current = null;
                     lastCalculatedDistance.current = 0;
-                    Animated.timing(modalOpacity, {
-                      toValue: 0,
-                      duration: 300,
-                      useNativeDriver: true,
-                    }).start(() => {
-                      setNearestRadar(null);
-                    });
+                    setNearbyRadarIds(new Set()); // Limpar radares próximos
+                    hideModal();
                   }
+                } else {
+                  console.log(`⚠️ Não há radares filtrados ou routeData não disponível`);
                 }
+              };
+              
+              // Função auxiliar para esconder modal com animações
+              const hideModal = () => {
+                modalPulse.stopAnimation();
+                modalPulse.setValue(1);
+                
+                Animated.parallel([
+                  Animated.timing(modalOpacity, {
+                    toValue: 0,
+                    duration: 300,
+                    useNativeDriver: true,
+                  }),
+                  Animated.timing(modalScale, {
+                    toValue: 0.8,
+                    duration: 300,
+                    useNativeDriver: true,
+                  }),
+                ]).start(() => {
+                  setNearestRadar(null);
+                });
               };
               
               // Limpar timeout anterior se existir
@@ -711,6 +873,7 @@ export default function Home() {
             route={route}
             isNavigating={false}
             currentLocation={currentLocation}
+            nearbyRadarIds={nearbyRadarIds}
           />
         </View>
       )}
@@ -734,7 +897,11 @@ export default function Home() {
         <Text style={{ color: 'white', fontSize: 10 }}>📊</Text>
       </TouchableOpacity>
 
-      {/* Alerta de radar - não modal, mas overlay compacto no topo */}
+      {/* Alerta de radar - Modal animado no topo */}
+      {isNavigating && nearestRadar && (() => {
+        console.log(`🎯 Renderizando modal: isNavigating=${isNavigating}, nearestRadar=${!!nearestRadar}, distance=${nearestRadar.distance}m`);
+        return null;
+      })()}
       {isNavigating && nearestRadar && (
         <Animated.View
           style={[
@@ -748,17 +915,51 @@ export default function Home() {
                     outputRange: [-100, 0],
                   }),
                 },
+                {
+                  scale: Animated.multiply(modalScale, modalPulse),
+                },
               ],
             },
           ]}
           pointerEvents="none"
         >
-          <View style={styles.radarAlertContent}>
-            <Text style={styles.radarAlertIcon}>⚠️</Text>
+          <Animated.View 
+            style={[
+              styles.radarAlertContent,
+              {
+                backgroundColor: nearestRadar.distance <= 30 
+                  ? 'rgba(220, 38, 38, 0.95)' // Vermelho quando muito próximo
+                  : nearestRadar.distance <= 100
+                  ? 'rgba(245, 158, 11, 0.95)' // Laranja quando próximo
+                  : 'rgba(59, 130, 246, 0.95)', // Azul quando distante
+              }
+            ]}
+          >
+            <Animated.View
+              style={{
+                transform: [
+                  {
+                    scale: modalPulse,
+                  },
+                ],
+              }}
+            >
+              <Text style={styles.radarAlertIcon}>
+                {nearestRadar.distance <= 30 ? '🚨' : '⚠️'}
+              </Text>
+            </Animated.View>
             <View style={styles.radarAlertTextContainer}>
-              <Text style={styles.radarAlertTitle}>Radar Próximo</Text>
+              <Text style={styles.radarAlertTitle}>
+                {nearestRadar.distance <= 30 
+                  ? 'Radar Muito Próximo!'
+                  : nearestRadar.distance <= 100
+                  ? 'Atenção! Radar Próximo'
+                  : 'Radar Próximo'}
+              </Text>
               <Text style={styles.radarAlertDistance}>
-                {Math.round(nearestRadar.distance)}m
+                {nearestRadar.distance <= 0 || nearestRadar.distance < 5
+                  ? '0m'
+                  : `${Math.round(nearestRadar.distance)}m`}
                 {nearestRadar.radar.speedLimit && (
                   <Text style={styles.radarAlertSpeed}>
                     {" • "}
@@ -767,7 +968,7 @@ export default function Home() {
                 )}
               </Text>
             </View>
-          </View>
+          </Animated.View>
         </Animated.View>
       )}
     </View>
@@ -837,28 +1038,23 @@ const styles = StyleSheet.create({
     left: 16,
     right: 16,
     zIndex: 1000,
+    elevation: 10,
     pointerEvents: "none",
   },
   radarAlertContent: {
-    backgroundColor: "rgba(0, 0, 0, 0.75)", // Fundo mais escuro e transparente
-    borderRadius: 8,
-    padding: 14,
     flexDirection: "row",
     alignItems: "center",
-    borderLeftWidth: 8,
-    borderLeftColor: "#FFFF00", // Borda vermelha à esquerda
+    padding: 16,
+    borderRadius: 12,
     shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
+    shadowRadius: 8,
+    elevation: 8,
   },
   radarAlertIcon: {
-    fontSize: 36,
-    marginRight: 10,
+    fontSize: 32,
+    marginRight: 12,
   },
   radarAlertTextContainer: {
     flex: 1,
