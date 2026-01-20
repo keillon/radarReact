@@ -256,6 +256,7 @@ export default function Home() {
   const [filteredRadars, setFilteredRadars] = useState<Radar[]>([]);
   const [nearbyRadarIds, setNearbyRadarIds] = useState<Set<string>>(new Set()); // IDs dos radares próximos para animação
   const [showDebug, setShowDebug] = useState(false); // Mostrar em dev, ocultar em release (pode mudar para true para sempre mostrar)
+  const [modalVisible, setModalVisible] = useState(false); // Estado para controlar visibilidade do modal
   const locationWatchRef = useRef<any>(null);
   const modalOpacity = useRef(new Animated.Value(0)).current;
   const modalScale = useRef(new Animated.Value(0.8)).current;
