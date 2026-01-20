@@ -256,7 +256,6 @@ export default function Home() {
   const [filteredRadars, setFilteredRadars] = useState<Radar[]>([]);
   const [nearbyRadarIds, setNearbyRadarIds] = useState<Set<string>>(new Set()); // IDs dos radares próximos para animação
   const [showDebug, setShowDebug] = useState(false); // Mostrar em dev, ocultar em release (pode mudar para true para sempre mostrar)
-  const [modalVisible, setModalVisible] = useState(false); // Estado para controlar visibilidade do modal
   const locationWatchRef = useRef<any>(null);
   const modalOpacity = useRef(new Animated.Value(0)).current;
   const modalScale = useRef(new Animated.Value(0.8)).current;
@@ -816,7 +815,6 @@ export default function Home() {
                             radar: nearestRadarObj,
                             distance: 0,
                           });
-                          setModalVisible(true); // Marcar modal como visível
                           
                           // Animações normais (sem pulsação)
                           Animated.parallel([
@@ -847,7 +845,6 @@ export default function Home() {
                           radar: nearestRadarObj,
                           distance: nearestDistance,
                         });
-                        setModalVisible(true); // Marcar modal como visível para ajustar câmera
                         
                         // Animações de entrada/atualização
                         Animated.parallel([
@@ -919,7 +916,6 @@ export default function Home() {
               
               // Função auxiliar para esconder modal com animações
               const hideModal = () => {
-                setModalVisible(false); // Marcar modal como não visível
                 Animated.parallel([
                   Animated.timing(modalOpacity, {
                     toValue: 0,
