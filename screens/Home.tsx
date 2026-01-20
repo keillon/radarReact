@@ -261,10 +261,11 @@ export default function Home() {
   const modalScale = useRef(new Animated.Value(0.8)).current;
   const lastTtsTime = useRef<{ [key: string]: number }>({});
   const alertedRadarIds = useRef<Set<string>>(new Set()); // Rastrear radares já alertados (apenas uma vez)
+  const passedRadarIds = useRef<Set<string>>(new Set()); // Rastrear radares que já foram passados
   const lastLocationUpdate = useRef<number>(0);
   const locationUpdateDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastCalculatedDistance = useRef<number>(0);
-  const radarZeroTimeRef = useRef<number | null>(null); // Timestamp quando chegou a 0 metros
+  const radarZeroTimeRef2 = useRef<number | null>(null); // Timestamp quando chegou a 0 metros
   const modalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -814,6 +815,7 @@ export default function Home() {
                             radar: nearestRadarObj,
                             distance: 0,
                           });
+                          setModalVisible(true); // Marcar modal como visível
                           
                           // Animações normais (sem pulsação)
                           Animated.parallel([
@@ -844,6 +846,7 @@ export default function Home() {
                           radar: nearestRadarObj,
                           distance: nearestDistance,
                         });
+                        setModalVisible(true); // Marcar modal como visível para ajustar câmera
                         
                         // Animações de entrada/atualização
                         Animated.parallel([
@@ -903,7 +906,7 @@ export default function Home() {
                   } else {
                     // Esconder modal se não houver radar próximo
                     console.log(`❌ Nenhum radar próximo encontrado (filteredRadars: ${filteredRadars.length})`);
-                    radarZeroTimeRef.current = null;
+                    radarZeroTimeRef2.current = null;
                     lastCalculatedDistance.current = 0;
                     setNearbyRadarIds(new Set()); // Limpar radares próximos
                     hideModal();
@@ -915,6 +918,7 @@ export default function Home() {
               
               // Função auxiliar para esconder modal com animações
               const hideModal = () => {
+                setModalVisible(false); // Marcar modal como não visível
                 Animated.parallel([
                   Animated.timing(modalOpacity, {
                     toValue: 0,
@@ -1122,7 +1126,7 @@ const styles = StyleSheet.create({
   },
   radarAlertContainer: {
     position: "absolute",
-    bottom: Platform.OS === "ios" ? 60 : 80,
+    bottom: Platform.OS === "ios" ? 60 : 120,
     left: 16,
     right: 16,
     zIndex: 1000,
