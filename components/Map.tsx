@@ -424,25 +424,6 @@ export default function Map({
             }}
           />
           
-          {/* CircleLayer pulsante para radares próximos - círculo de alerta */}
-          <CircleLayer
-            id="radarPulseLayer"
-            filter={[
-              "all",
-              ["!", ["has", "point_count"]], // Não clusters
-              ["==", ["get", "isNearby"], 1] // Apenas radares próximos
-            ]}
-            style={{
-              circleRadius: 25, // Raio fixo para círculo de alerta
-              circleColor: "rgba(220, 38, 38, 0.2)", // Vermelho semi-transparente
-              circleStrokeWidth: 3,
-              circleStrokeColor: "rgba(220, 38, 38, 0.8)",
-              circleOpacity: 0.7,
-              circlePitchScale: "map",
-            }}
-            layerIndex={385} // Colocar abaixo do SymbolLayer (que está no índice 386)
-          />
-          
         </ShapeSource>
         )}
       </MapView>
@@ -469,7 +450,7 @@ const styles = StyleSheet.create({
   },
   locationButton: {
     position: "absolute",
-    bottom: 20,
+    bottom: 200,
     right: 20,
     backgroundColor: "#fff",
     width: 50,
