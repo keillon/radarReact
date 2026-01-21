@@ -22,11 +22,6 @@ import {
   Radar,
   reportRadar,
 } from "../services/api";
-import { 
-  getReportedRadarsLocally,
-  createTempRadar,
-  saveReportedRadarLocally
-} from "../services/reportedRadars";
 import {
   geocodeAddress,
   getRoute,
@@ -34,6 +29,11 @@ import {
   LatLng,
   RouteResponse,
 } from "../services/mapbox";
+import {
+  createTempRadar,
+  getReportedRadarsLocally,
+  saveReportedRadarLocally
+} from "../services/reportedRadars";
 // Importar TTS com tratamento de erro
 let Tts: any = null;
 try {
@@ -841,23 +841,14 @@ export default function Home() {
       
       {isNavigating && origin && destination && !isPreparingNavigation ? (
         <View style={styles.mapContainer}>
-          {/* Botão de reportar radar - estilo Waze */}
-          <TouchableOpacity
-            style={styles.reportRadarButton}
-            onPress={handleReportRadar}
-            disabled={isReportingRadar}
-            activeOpacity={0.7}
-          >
-            {isReportingRadar ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Text style={styles.reportRadarButtonText}>⚠️</Text>
-            )}
-          </TouchableOpacity>
-          
           {/* Renderizar MapboxNavigation primeiro (base) */}
           <MapboxNavigation
-            style={StyleSheet.absoluteFill}
+            style={[
+              StyleSheet.absoluteFill,
+              nearestRadar && {
+                bottom: Platform.OS === "ios" ? 180 : 240, // Ajusta a área visível do mapa para cima quando o modal aparece
+              }
+            ]}
             startOrigin={{
               latitude: origin.latitude,
               longitude: origin.longitude,
@@ -1303,6 +1294,20 @@ export default function Home() {
               }
             }}
           />
+          
+          {/* Botão de reportar radar - estilo Waze */}
+          <TouchableOpacity
+            style={styles.reportRadarButton}
+            onPress={handleReportRadar}
+            disabled={isReportingRadar}
+            activeOpacity={0.7}
+          >
+            {isReportingRadar ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.reportRadarButtonText}>⚠️</Text>
+            )}
+          </TouchableOpacity>
         </View>
       ) : (
         <View style={styles.mapContainer} pointerEvents="box-none">
