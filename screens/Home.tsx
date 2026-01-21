@@ -843,12 +843,7 @@ export default function Home() {
         <View style={styles.mapContainer}>
           {/* Renderizar MapboxNavigation primeiro (base) */}
           <MapboxNavigation
-            style={[
-              StyleSheet.absoluteFill,
-              nearestRadar && {
-                bottom: Platform.OS === "ios" ? 180 : 240, // Ajusta a área visível do mapa para cima quando o modal aparece
-              }
-            ]}
+            style={StyleSheet.absoluteFill}
             startOrigin={{
               latitude: origin.latitude,
               longitude: origin.longitude,
@@ -869,6 +864,8 @@ export default function Home() {
             }))}
             // @ts-ignore - nearbyRadarIds prop exists in MapboxNavigationProps
             nearbyRadarIds={Array.from(nearbyRadarIds)}
+            // @ts-ignore - bottomPadding prop exists in MapboxNavigationProps
+            bottomPadding={nearestRadar ? (Platform.OS === "ios" ? 180 : 240) : 0}
             onLocationChange={(location: any) => {
               // Verificação de null para evitar NullPointerException
               if (!location || location.latitude == null || location.longitude == null) {
