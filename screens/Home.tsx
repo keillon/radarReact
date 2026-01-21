@@ -12,12 +12,14 @@ import {
   View
 } from "react-native";
 import Geolocation from "react-native-geolocation-service";
-import DebugPanel from "../components/DebugPanel";
+
 import Map from "../components/Map";
 import SearchContainer from "../components/SearchContainer";
 import {
   getRadarsNearLocation,
   getRadarsNearRoute,
+  reportRadar,
+  getRecentRadars,
   Radar,
 } from "../services/api";
 import {
@@ -257,7 +259,10 @@ export default function Home() {
   } | null>(null);
   const [filteredRadars, setFilteredRadars] = useState<Radar[]>([]);
   const [nearbyRadarIds, setNearbyRadarIds] = useState<Set<string>>(new Set()); // IDs dos radares próximos para animação
-  const [showDebug, setShowDebug] = useState(false); // Mostrar em dev, ocultar em release (pode mudar para true para sempre mostrar)
+  const [isReportingRadar, setIsReportingRadar] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<number>(Date.now());
+  const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const locationWatchRef = useRef<any>(null);
   const modalOpacity = useRef(new Animated.Value(0)).current;
   const modalScale = useRef(new Animated.Value(0.8)).current;
@@ -601,6 +606,128 @@ export default function Home() {
     setDestination(coords);
   };
 
+  // Função para reportar radar na localização atual
+  const handleReportRadar = async () => {
+    if (!currentLocation) {
+      Alert.alert("Erro", "Não foi possível obter sua localização atual");
+      return;
+    }
+
+    setIsReportingRadar(true);
+    try {
+      const newRadar = await reportRadar({
+        latitude: currentLocation.latitude,
+        longitude: currentLocation.longitude,
+        type: "reportado",
+      });
+
+      // Adicionar o radar reportado à lista local imediatamente
+      setRadars((prev) => {
+        // Verificar se já existe para evitar duplicatas
+        const exists = prev.some((r) => r.id === newRadar.id);
+        if (exists) return prev;
+        return [...prev, newRadar];
+      });
+
+      // Se estiver navegando, também adicionar aos radares filtrados
+      if (isNavigating && routeData) {
+        setFilteredRadars((prev) => {
+          const exists = prev.some((r) => r.id === newRadar.id);
+          if (exists) return prev;
+          return [...prev, newRadar];
+        });
+      }
+
+      Alert.alert("Sucesso", "Radar reportado com sucesso! Outros usuários verão em breve.");
+    } catch (error: any) {
+      console.error("Erro ao reportar radar:", error);
+      Alert.alert(
+        "Erro",
+        error.message || "Não foi possível reportar o radar. Tente novamente."
+      );
+    } finally {
+      setIsReportingRadar(false);
+    }
+  };
+
+  // Sincronizar radares reportados recentemente (em tempo real)
+  const syncRecentRadars = async () => {
+    if (!isNavigating) return;
+
+    try {
+      const recentRadars = await getRecentRadars(lastSyncTime);
+      
+      if (recentRadars.length > 0) {
+        console.log(`🔄 ${recentRadars.length} novos radares sincronizados`);
+        
+        // Adicionar novos radares à lista
+        setRadars((prev) => {
+          const existingIds = new Set(prev.map((r) => r.id));
+          const newRadars = recentRadars.filter((r) => !existingIds.has(r.id));
+          
+          if (newRadars.length > 0) {
+            return [...prev, ...newRadars];
+          }
+          return prev;
+        });
+
+        // Se estiver navegando, também adicionar aos radares filtrados
+        if (routeData && routeData.route?.geometry?.coordinates) {
+          const routePoints = routeData.route.geometry.coordinates.map(
+            (coord: number[]) => ({
+              latitude: coord[1],
+              longitude: coord[0],
+            })
+          );
+          
+          const filtered = filterRadarsNearRoute(recentRadars, routePoints, 100);
+          
+          if (filtered.length > 0) {
+            setFilteredRadars((prev) => {
+              const existingIds = new Set(prev.map((r) => r.id));
+              const newFiltered = filtered.filter((r) => !existingIds.has(r.id));
+              
+              if (newFiltered.length > 0) {
+                return [...prev, ...newFiltered];
+              }
+              return prev;
+            });
+          }
+        }
+      }
+      
+      setLastSyncTime(Date.now());
+    } catch (error) {
+      console.error("Erro ao sincronizar radares recentes:", error);
+    }
+  };
+
+  // Iniciar sincronização em tempo real quando começar a navegar
+  useEffect(() => {
+    if (isNavigating) {
+      // Sincronizar imediatamente
+      syncRecentRadars();
+      
+      // Sincronizar a cada 15 segundos
+      syncIntervalRef.current = setInterval(() => {
+        syncRecentRadars();
+      }, 15000); // 15 segundos
+    } else {
+      // Parar sincronização quando parar de navegar
+      if (syncIntervalRef.current) {
+        clearInterval(syncIntervalRef.current);
+        syncIntervalRef.current = null;
+      }
+    }
+
+    return () => {
+      if (syncIntervalRef.current) {
+        clearInterval(syncIntervalRef.current);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNavigating]);
+
   return (
     <View style={styles.container}>
       {!isNavigating && !isPreparingNavigation && (
@@ -643,6 +770,20 @@ export default function Home() {
       
       {isNavigating && origin && destination && !isPreparingNavigation ? (
         <View style={styles.mapContainer}>
+          {/* Botão de reportar radar - estilo Waze */}
+          <TouchableOpacity
+            style={styles.reportRadarButton}
+            onPress={handleReportRadar}
+            disabled={isReportingRadar}
+            activeOpacity={0.7}
+          >
+            {isReportingRadar ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.reportRadarButtonText}>⚠️</Text>
+            )}
+          </TouchableOpacity>
+          
           {/* Renderizar MapboxNavigation primeiro (base) */}
           <MapboxNavigation
             style={StyleSheet.absoluteFill}
@@ -1304,5 +1445,26 @@ const styles = StyleSheet.create({
     pointerEvents: "box-none",
     zIndex: 1,
     elevation: 0, // Android
+  },
+  reportRadarButton: {
+    position: "absolute",
+    bottom: Platform.OS === "ios" ? 100 : 140,
+    right: 20,
+    backgroundColor: "#3b82f6",
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    zIndex: 1000,
+  },
+  reportRadarButtonText: {
+    fontSize: 28,
+    color: "#fff",
   },
 });
