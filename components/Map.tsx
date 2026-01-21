@@ -157,7 +157,14 @@ export default function Map({
   // Criar GeoJSON para radares com nome da imagem e propriedade de proximidade
   const radarsGeoJSON = {
     type: "FeatureCollection" as const,
-    features: radars.map((radar) => ({
+    features: (radars || []).filter(radar => 
+      radar != null && 
+      radar.id != null && 
+      typeof radar.latitude === 'number' && 
+      typeof radar.longitude === 'number' &&
+      !isNaN(radar.latitude) &&
+      !isNaN(radar.longitude)
+    ).map((radar) => ({
       type: "Feature" as const,
       id: radar.id,
       geometry: {
@@ -169,28 +176,32 @@ export default function Map({
         speedLimit: radar.speedLimit || null,
         type: radar.type || "default",
         iconImage: getPlacaImageName(radar.speedLimit), // Nome da imagem para o ícone
-        isNearby: nearbyRadarIds.has(radar.id) ? 1 : 0, // Flag para animação pulsante
+        isNearby: nearbyRadarIds?.has(radar.id) ? 1 : 0, // Flag para animação pulsante
       },
     })),
   };
 
   // Debug: verificar se radares estão sendo passados
   useEffect(() => {
-    console.log(`🗺️ Map: ${radars.length} radares recebidos para renderizar`);
-    if (radars.length > 0) {
-      console.log(`📍 Primeiro radar:`, {
-        id: radars[0].id,
-        lat: radars[0].latitude,
-        lng: radars[0].longitude,
-        speedLimit: radars[0].speedLimit,
-        iconImage: getPlacaImageName(radars[0].speedLimit),
-      });
-      console.log(`📦 GeoJSON criado com ${radarsGeoJSON.features.length} features`);
-      console.log(`🖼️ Imagens disponíveis:`, Object.keys(placaImages).join(", "));
+    const validRadars = radars || [];
+    console.log(`🗺️ Map: ${validRadars.length} radares recebidos para renderizar`);
+    if (validRadars.length > 0 && validRadars[0] != null) {
+      const firstRadar = validRadars[0];
+      if (firstRadar.id != null && typeof firstRadar.latitude === 'number' && typeof firstRadar.longitude === 'number') {
+        console.log(`📍 Primeiro radar:`, {
+          id: firstRadar.id,
+          lat: firstRadar.latitude,
+          lng: firstRadar.longitude,
+          speedLimit: firstRadar.speedLimit,
+          iconImage: getPlacaImageName(firstRadar.speedLimit),
+        });
+        console.log(`📦 GeoJSON criado com ${radarsGeoJSON.features.length} features`);
+        console.log(`🖼️ Imagens disponíveis:`, Object.keys(placaImages).join(", "));
+      }
     } else {
-      console.warn(`⚠️ Map: Nenhum radar para renderizar`);
+      console.warn(`⚠️ Map: Nenhum radar válido para renderizar`);
     }
-  }, [radars.length]);
+  }, [radars?.length || 0]);
 
   return (
     <View style={styles.container} pointerEvents="box-none">
@@ -240,7 +251,7 @@ export default function Map({
         )}
 
         {/* Camada de rota usando componentes nativos do SDK */}
-        {route && (
+        {route && route.geometry && route.geometry.coordinates && Array.isArray(route.geometry.coordinates) && route.geometry.coordinates.length > 0 && (
           <ShapeSource id="route" shape={route}>
             <LineLayer
               id="routeLine"
@@ -268,7 +279,7 @@ export default function Map({
         )}
 
         {/* Marcador de destino */}
-        {route && route.geometry.coordinates.length > 0 && (
+        {route && route.geometry && route.geometry.coordinates && Array.isArray(route.geometry.coordinates) && route.geometry.coordinates.length > 0 && (
           <ShapeSource
             id="destination"
             shape={{
@@ -278,7 +289,7 @@ export default function Map({
                 coordinates:
                   route.geometry.coordinates[
                     route.geometry.coordinates.length - 1
-                  ],
+                  ] || [0, 0],
               },
               properties: {},
             }}
@@ -307,14 +318,16 @@ export default function Map({
         {isNavigating &&
           currentStep &&
           currentStep.geometry &&
-          currentStep.geometry.coordinates.length > 0 && (
+          Array.isArray(currentStep.geometry.coordinates) &&
+          currentStep.geometry.coordinates.length > 0 &&
+          currentStep.geometry.coordinates[0] != null && (
             <ShapeSource
               id="nextManeuver"
               shape={{
                 type: "Feature",
                 geometry: {
                   type: "Point",
-                  coordinates: currentStep.geometry.coordinates[0],
+                  coordinates: currentStep.geometry.coordinates[0] || [0, 0],
                 },
                 properties: {},
               }}
@@ -349,7 +362,7 @@ export default function Map({
         />
 
         {/* Camada de radares com clustering */}
-        {radars.length > 0 && radarsGeoJSON.features.length > 0 && (
+        {radars && radars.length > 0 && radarsGeoJSON.features && radarsGeoJSON.features.length > 0 && (
           <ShapeSource
             id="radars"
             shape={radarsGeoJSON}
@@ -357,14 +370,22 @@ export default function Map({
             clusterRadius={50}
             clusterMaxZoomLevel={14}
             onPress={(event) => {
-              console.log("Radar pressionado:", event);
-              if (onRadarPress && event.features && event.features.length > 0) {
-                const feature = event.features[0];
-                const radarId = feature.properties?.id || feature.id;
-                const radar = radars.find(r => r.id === radarId);
-                if (radar) {
-                  onRadarPress(radar);
+              try {
+                console.log("Radar pressionado:", event);
+                if (onRadarPress && event?.features && Array.isArray(event.features) && event.features.length > 0) {
+                  const feature = event.features[0];
+                  if (feature != null) {
+                    const radarId = feature.properties?.id || feature.id;
+                    if (radarId != null && radars != null) {
+                      const radar = radars.find(r => r != null && r.id === radarId);
+                      if (radar != null) {
+                        onRadarPress(radar);
+                      }
+                    }
+                  }
                 }
+              } catch (error) {
+                console.error("Erro ao processar press do radar:", error);
               }
             }}
           >
