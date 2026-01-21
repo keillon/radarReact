@@ -282,6 +282,25 @@ export default function Home() {
     initMapbox();
     requestLocationPermission();
     
+    // Carregar radares reportados localmente ao iniciar
+    const loadLocalRadars = async () => {
+      try {
+        const localRadars = await getReportedRadarsLocally();
+        if (localRadars.length > 0) {
+          console.log(`📦 Carregando ${localRadars.length} radares reportados localmente`);
+          setRadars((prev) => {
+            const existingIds = new Set(prev.map((r) => r.id));
+            const newRadars = localRadars.filter((r) => !existingIds.has(r.id));
+            return newRadars.length > 0 ? [...prev, ...newRadars] : prev;
+          });
+        }
+      } catch (error) {
+        console.error("Erro ao carregar radares locais:", error);
+      }
+    };
+    
+    loadLocalRadars();
+    
     // Configurar TTS se disponível (aguardar inicialização do módulo nativo)
     if (Tts) {
       // Verificar se o módulo nativo está pronto antes de configurar
