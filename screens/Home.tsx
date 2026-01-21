@@ -1,19 +1,20 @@
 import MapboxNavigation from "@pawan-pk/react-native-mapbox-navigation";
 import React, { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Animated,
   PermissionsAndroid,
   Platform,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View
 } from "react-native";
 import Geolocation from "react-native-geolocation-service";
 import DebugPanel from "../components/DebugPanel";
 import Map from "../components/Map";
+import SearchContainer from "../components/SearchContainer";
 import {
   getRadarsNearLocation,
   getRadarsNearRoute,
@@ -244,6 +245,7 @@ export default function Home() {
   const [route, setRoute] = useState<any>(null);
   const [routeData, setRouteData] = useState<RouteResponse | null>(null);
   const [isNavigating, setIsNavigating] = useState(false);
+  const [isPreparingNavigation, setIsPreparingNavigation] = useState(false);
   const [radars, setRadars] = useState<Radar[]>([]);
   const [loading, setLoading] = useState(false);
   const [geocoding, setGeocoding] = useState(false);
@@ -259,6 +261,8 @@ export default function Home() {
   const locationWatchRef = useRef<any>(null);
   const modalOpacity = useRef(new Animated.Value(0)).current;
   const modalScale = useRef(new Animated.Value(0.8)).current;
+  const loadingOpacity = useRef(new Animated.Value(0)).current;
+  const loadingScale = useRef(new Animated.Value(0.9)).current;
   const lastTtsTime = useRef<{ [key: string]: number }>({});
   const alertedRadarIds = useRef<Set<string>>(new Set()); // Rastrear radares já alertados (apenas uma vez)
   const passedRadarIds = useRef<Set<string>>(new Set()); // Rastrear radares que já foram passados
@@ -382,12 +386,34 @@ export default function Home() {
       return;
     }
 
+    // Mostrar loading imediatamente
     setLoading(true);
     setGeocoding(true);
+    setIsPreparingNavigation(true);
+    
+    // Animação de entrada do loading imediatamente
+    Animated.parallel([
+      Animated.timing(loadingOpacity, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.spring(loadingScale, {
+        toValue: 1,
+        tension: 50,
+        friction: 7,
+        useNativeDriver: true,
+      }),
+    ]).start();
+    
     try {
-      // Converter endereço em coordenadas
-      const destinationCoords = await geocodeAddress(destinationText.trim());
-      setDestination(destinationCoords);
+      // Se já temos coordenadas de destino (selecionado do autocomplete), usar diretamente
+      // Caso contrário, fazer geocode do texto digitado
+      let destinationCoords = destination;
+      if (!destinationCoords) {
+        destinationCoords = await geocodeAddress(destinationText.trim());
+        setDestination(destinationCoords);
+      }
 
       // Buscar rota com instruções (o SDK vai calcular a rota internamente, mas buscamos para obter os pontos para radares)
       const routeResponse = await getRoute(origin, destinationCoords);
@@ -442,10 +468,54 @@ export default function Home() {
         }
       }
 
+      // Loading já está sendo exibido desde o início
+      // Aguardar um pouco para garantir que tudo está pronto antes de mostrar a navegação
+      // Isso evita que o componente apareça se montando
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 500));
+      
       // Iniciar navegação com o SDK
       setIsNavigating(true);
+      
+      // Aguardar mais um pouco para garantir que o MapboxNavigation está renderizado
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 300));
+      
+      // Animação de saída do loading
+      Animated.parallel([
+        Animated.timing(loadingOpacity, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(loadingScale, {
+          toValue: 0.9,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        // Esconder animação de loading após animação
+        setIsPreparingNavigation(false);
+        loadingOpacity.setValue(0);
+        loadingScale.setValue(0.9);
+      });
     } catch (error: any) {
       console.error("Erro ao buscar rota:", error);
+      // Resetar animações em caso de erro
+      Animated.parallel([
+        Animated.timing(loadingOpacity, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(loadingScale, {
+          toValue: 0.9,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        setIsPreparingNavigation(false);
+        loadingOpacity.setValue(0);
+        loadingScale.setValue(0.9);
+      });
       Alert.alert(
         "Erro",
         error.message ||
@@ -523,60 +593,55 @@ export default function Home() {
     };
   }, [isNavigating]);
 
+  const handleDestinationSelect = async (
+    address: string,
+    coords: LatLng
+  ) => {
+    setDestinationText(address);
+    setDestination(coords);
+  };
+
   return (
     <View style={styles.container}>
-      {!isNavigating && (
-        <View style={styles.inputContainer}>
-          <View style={styles.inputRow}>
-            <Text style={styles.label}>Origem:</Text>
-            <View style={styles.locationDisplay}>
-              <Text style={styles.locationText}>
-                {origin
-                  ? `📍 Localização atual (${origin.latitude.toFixed(
-                      4
-                    )}, ${origin.longitude.toFixed(4)})`
-                  : "📍 Obtendo localização..."}
-              </Text>
-            </View>
-          </View>
-          <View style={styles.inputRow}>
-            <Text style={styles.label}>Destino:</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Digite o endereço de destino (ex: Av. Paulista, 1000, São Paulo)"
-              value={destinationText}
-              onChangeText={setDestinationText}
-              editable={true}
-              clearButtonMode="while-editing"
-              autoCapitalize="words"
-              autoCorrect={false}
-            />
-          </View>
-          <TouchableOpacity
-            style={[
-              styles.button,
-              (loading || !origin) && styles.buttonDisabled,
-            ]}
-            onPress={handleSearchRoute}
-            disabled={loading || !origin}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.buttonText}>
-              {geocoding
-                ? "Buscando endereço..."
-                : loading
-                ? "Calculando rota..."
-                : "Buscar Rota"}
-            </Text>
-          </TouchableOpacity>
-          {radars.length > 0 && (
-            <Text style={styles.radarCount}>
-              {radars.length} radar(es) encontrado(s) na rota
-            </Text>
-          )}
-        </View>
+      {!isNavigating && !isPreparingNavigation && (
+        <SearchContainer
+          origin={origin}
+          destinationText={destinationText}
+          onDestinationChange={setDestinationText}
+          onDestinationSelect={handleDestinationSelect}
+          onSearchRoute={handleSearchRoute}
+          loading={loading}
+          geocoding={geocoding}
+          radarsCount={radars.length}
+        />
       )}
-      {isNavigating && origin && destination ? (
+      
+      {/* Animação de loading durante preparação da navegação */}
+      {isPreparingNavigation && (
+        <Animated.View 
+          style={[
+            styles.loadingOverlay,
+            {
+              opacity: loadingOpacity,
+            },
+          ]}
+        >
+          <Animated.View 
+            style={[
+              styles.loadingContainer,
+              {
+                transform: [{ scale: loadingScale }],
+              },
+            ]}
+          >
+            <ActivityIndicator size="large" color="#3b82f6" />
+            <Text style={styles.loadingText}>Preparando navegação...</Text>
+            <Text style={styles.loadingSubtext}>Aguarde um momento</Text>
+          </Animated.View>
+        </Animated.View>
+      )}
+      
+      {isNavigating && origin && destination && !isPreparingNavigation ? (
         <View style={styles.mapContainer}>
           {/* Renderizar MapboxNavigation primeiro (base) */}
           <MapboxNavigation
@@ -602,91 +667,105 @@ export default function Home() {
             // @ts-ignore - nearbyRadarIds prop exists in MapboxNavigationProps
             nearbyRadarIds={Array.from(nearbyRadarIds)}
             onLocationChange={(location: any) => {
-              const now = Date.now();
-              
-              // Debounce de atualização de localização para evitar movimentos erráticos
-              if (locationUpdateDebounce.current) {
-                clearTimeout(locationUpdateDebounce.current);
+              // Verificação de null para evitar NullPointerException
+              if (!location || location.latitude == null || location.longitude == null) {
+                return;
               }
               
-              // Aumentar debounce para 1 segundo para evitar atualizações muito frequentes
-              locationUpdateDebounce.current = setTimeout(() => {
-                const newLocation = {
-                  latitude: location.latitude,
-                  longitude: location.longitude,
-                };
+              try {
+                const now = Date.now();
                 
-                // Só atualizar se a localização mudou significativamente (mais de 20 metros)
-                // Aumentado de 10 para 20 metros para evitar movimentos erráticos
-                if (currentLocation) {
-                  const distance = calculateDistance(
-                    currentLocation.latitude,
-                    currentLocation.longitude,
-                    newLocation.latitude,
-                    newLocation.longitude
-                  );
-                  
-                  // Se a distância for muito pequena (< 20m), não atualizar
-                  // Isso evita que a localização fique "pulando" por causa de ruído do GPS
-                  if (distance < 20) {
-                    return;
-                  }
-                  
-                  // Verificar se a mudança é muito grande (possível erro do GPS)
-                  // Se mudou mais de 100m em menos de 2 segundos, provavelmente é erro
-                  if (distance > 100 && now - lastLocationUpdate.current < 2000) {
-                    console.warn("⚠️ Mudança de localização muito grande, ignorando (possível erro GPS)");
-                    return;
-                  }
+                // Debounce de atualização de localização para evitar movimentos erráticos
+                if (locationUpdateDebounce.current) {
+                  clearTimeout(locationUpdateDebounce.current);
                 }
                 
-                setCurrentLocation(newLocation);
-                lastLocationUpdate.current = now;
-              }, 1000); // Debounce de 1 segundo para evitar atualizações muito frequentes
-
-              // Buscar radares próximos durante navegação (atualizar conforme se move)
-              // Usar debounce para não fazer muitas requisições
-              if (
-                !locationWatchRef.current?.lastRadarFetch ||
-                now - locationWatchRef.current.lastRadarFetch > 30000 // 30 segundos
-              ) {
-                getRadarsNearLocation(
-                  location.latitude,
-                  location.longitude,
-                  500 // raio de 500m durante navegação
-                )
-                  .then((nearbyRadars) => {
-                    // Filtrar apenas radares próximos à rota
-                    if (routeData) {
-                      const routePoints = routeData.route.geometry.coordinates.map(
-                        (coord: number[]) => ({
-                          latitude: coord[1],
-                          longitude: coord[0],
-                        })
+                // Aumentar debounce para 1 segundo para evitar atualizações muito frequentes
+                locationUpdateDebounce.current = setTimeout(() => {
+                  try {
+                    const newLocation = {
+                      latitude: location.latitude,
+                      longitude: location.longitude,
+                    };
+                    
+                    // Só atualizar se a localização mudou significativamente (mais de 20 metros)
+                    // Aumentado de 10 para 20 metros para evitar movimentos erráticos
+                    if (currentLocation) {
+                      const distance = calculateDistance(
+                        currentLocation.latitude,
+                        currentLocation.longitude,
+                        newLocation.latitude,
+                        newLocation.longitude
                       );
-                      const filtered = filterRadarsNearRoute(nearbyRadars, routePoints, 100);
-                      // Mesclar com radares existentes da rota
-                      setRadars((prev) => {
-                        const existingIds = new Set(prev.map((r) => r.id));
-                        const newRadars = filtered.filter(
-                          (r) => !existingIds.has(r.id)
-                        );
-                        const merged = newRadars.length > 0
-                          ? [...prev, ...newRadars]
-                          : prev;
-                        // Re-filtrar todos os radares
-                        const allFiltered = filterRadarsNearRoute(merged, routePoints, 100);
-                        setFilteredRadars(allFiltered);
-                        return allFiltered;
-                      });
+                      
+                      // Se a distância for muito pequena (< 20m), não atualizar
+                      // Isso evita que a localização fique "pulando" por causa de ruído do GPS
+                      if (distance < 20) {
+                        return;
+                      }
+                      
+                      // Verificar se a mudança é muito grande (possível erro do GPS)
+                      // Se mudou mais de 100m em menos de 2 segundos, provavelmente é erro
+                      if (distance > 100 && now - lastLocationUpdate.current < 2000) {
+                        console.warn("⚠️ Mudança de localização muito grande, ignorando (possível erro GPS)");
+                        return;
+                      }
                     }
-                  })
-                  .catch((error) => {
-                    console.error(
-                      "Erro ao buscar radares durante navegação:",
-                      error
-                    );
-                  });
+                    
+                    setCurrentLocation(newLocation);
+                    lastLocationUpdate.current = now;
+                  } catch (error) {
+                    console.error("Erro ao processar localização:", error);
+                  }
+                }, 1000); // Debounce de 1 segundo para evitar atualizações muito frequentes
+
+                // Buscar radares próximos durante navegação (atualizar conforme se move)
+                // Usar debounce para não fazer muitas requisições
+                if (
+                  !locationWatchRef.current?.lastRadarFetch ||
+                  now - locationWatchRef.current.lastRadarFetch > 30000 // 30 segundos
+                ) {
+                  getRadarsNearLocation(
+                    location.latitude,
+                    location.longitude,
+                    500 // raio de 500m durante navegação
+                  )
+                    .then((nearbyRadars) => {
+                      try {
+                        // Filtrar apenas radares próximos à rota
+                        if (routeData && routeData.route?.geometry?.coordinates) {
+                          const routePoints = routeData.route.geometry.coordinates.map(
+                            (coord: number[]) => ({
+                              latitude: coord[1],
+                              longitude: coord[0],
+                            })
+                          );
+                          const filtered = filterRadarsNearRoute(nearbyRadars, routePoints, 100);
+                          // Mesclar com radares existentes da rota
+                          setRadars((prev) => {
+                            const existingIds = new Set(prev.map((r) => r.id));
+                            const newRadars = filtered.filter(
+                              (r) => !existingIds.has(r.id)
+                            );
+                            const merged = newRadars.length > 0
+                              ? [...prev, ...newRadars]
+                              : prev;
+                            // Re-filtrar todos os radares
+                            const allFiltered = filterRadarsNearRoute(merged, routePoints, 100);
+                            setFilteredRadars(allFiltered);
+                            return allFiltered;
+                          });
+                        }
+                      } catch (error) {
+                        console.error("Erro ao processar radares próximos:", error);
+                      }
+                    })
+                    .catch((error) => {
+                      console.error(
+                        "Erro ao buscar radares durante navegação:",
+                        error
+                      );
+                    });
 
                 if (!locationWatchRef.current) {
                   locationWatchRef.current = { lastRadarFetch: now };
@@ -695,25 +774,69 @@ export default function Home() {
                 }
               }
 
+              // Função auxiliar para esconder modal com animações
+              const hideModal = () => {
+                Animated.parallel([
+                  Animated.timing(modalOpacity, {
+                    toValue: 0,
+                    duration: 300,
+                    useNativeDriver: true,
+                  }),
+                  Animated.timing(modalScale, {
+                    toValue: 0.8,
+                    duration: 300,
+                    useNativeDriver: true,
+                  }),
+                ]).start(() => {
+                  setNearestRadar(null);
+                });
+              };
+              
               // Verificar distância até cada radar e alertar (com debounce)
               // Usar debounce para evitar cálculos muito frequentes
               const checkRadarDistance = () => {
-                console.log(`🔍 Verificando radares: filteredRadars=${filteredRadars.length}, routeData=${!!routeData}`);
-                
-                if (filteredRadars.length > 0 && routeData) {
-                  // Usar a localização do callback diretamente
-                  const checkLocation = {
-                    latitude: location.latitude,
-                    longitude: location.longitude,
-                  };
+                try {
+                  // Verificações de null para evitar NullPointerException
+                  if (!location || location.latitude == null || location.longitude == null) {
+                    return;
+                  }
                   
-                  // Obter pontos da rota para cálculo mais preciso
-                  const routePoints = routeData.route.geometry.coordinates.map((coord: number[]) => ({
-                    latitude: coord[1],
-                    longitude: coord[0],
-                  }));
+                  if (!routeData || !routeData.route || !routeData.route.geometry || !routeData.route.geometry.coordinates) {
+                    return;
+                  }
                   
-                  // Encontrar o radar mais próximo
+                  console.log(`🔍 Verificando radares: filteredRadars=${filteredRadars.length}, routeData=${!!routeData}`);
+                  
+                  if (filteredRadars.length > 0 && routeData) {
+                    // Usar a localização do callback diretamente
+                    const checkLocation = {
+                      latitude: location.latitude,
+                      longitude: location.longitude,
+                    };
+                    
+                    // Obter pontos da rota para cálculo mais preciso
+                    const coordinates = routeData.route.geometry.coordinates;
+                    if (!Array.isArray(coordinates) || coordinates.length === 0) {
+                      return;
+                    }
+                    
+                    const routePoints: LatLng[] = coordinates
+                      .map((coord: number[]) => {
+                        if (!Array.isArray(coord) || coord.length < 2) {
+                          return null;
+                        }
+                        return {
+                          latitude: coord[1],
+                          longitude: coord[0],
+                        };
+                      })
+                      .filter((point: LatLng | null): point is LatLng => point !== null);
+                    
+                    if (routePoints.length === 0) {
+                      return;
+                    }
+                  
+                    // Encontrar o radar mais próximo
                   type NearestRadar = { radar: Radar; distance: number; routeDistance: number };
                   let nearest: NearestRadar | null = null;
                   let minDistance = Infinity;
@@ -912,25 +1035,10 @@ export default function Home() {
                 } else {
                   console.log(`⚠️ Não há radares filtrados ou routeData não disponível`);
                 }
-              };
-              
-              // Função auxiliar para esconder modal com animações
-              const hideModal = () => {
-                Animated.parallel([
-                  Animated.timing(modalOpacity, {
-                    toValue: 0,
-                    duration: 300,
-                    useNativeDriver: true,
-                  }),
-                  Animated.timing(modalScale, {
-                    toValue: 0.8,
-                    duration: 300,
-                    useNativeDriver: true,
-                  }),
-                ]).start(() => {
-                  setNearestRadar(null);
-                });
-              };
+              } catch (error) {
+                console.error("Erro ao verificar distância dos radares:", error);
+              }
+            };
               
               // Limpar timeout anterior se existir
               if (locationUpdateDebounce.current) {
@@ -939,26 +1047,48 @@ export default function Home() {
               
               // Agendar verificação com debounce
               locationUpdateDebounce.current = setTimeout(checkRadarDistance, 1000); // Debounce de 1 segundo para cálculos de distância
+              } catch (error) {
+                console.error("Erro no callback onLocationChange:", error);
+              }
             }}
             onRouteProgressChange={(progress: any) => {
-              // Progresso da rota atualizado pelo SDK
-              // Logs removidos para evitar travamento - este callback é chamado muito frequentemente
-              // progress.speedLimit contém o limite de velocidade em km/h (se disponível)
+              // Verificação de null para evitar NullPointerException
+              if (!progress) {
+                return;
+              }
+              try {
+                // Progresso da rota atualizado pelo SDK
+                // Logs removidos para evitar travamento - este callback é chamado muito frequentemente
+                // progress.speedLimit contém o limite de velocidade em km/h (se disponível)
+              } catch (error) {
+                console.error("Erro ao processar progresso da rota:", error);
+              }
             }}
             onArrive={() => {
               Alert.alert("Chegada", "Você chegou ao destino!");
               setIsNavigating(false);
+              setIsPreparingNavigation(false);
               setRouteData(null);
               setRoute(null);
             }}
             onCancelNavigation={() => {
               setIsNavigating(false);
+              setIsPreparingNavigation(false);
               setRouteData(null);
               setRoute(null);
             }}
             onError={(error: any) => {
-              console.error("Erro na navegação:", error);
-              Alert.alert("Erro", error.message || "Erro na navegação");
+              try {
+                if (!error) {
+                  console.error("Erro na navegação: erro desconhecido");
+                  return;
+                }
+                console.error("Erro na navegação:", error);
+                const errorMessage = error?.message || error?.toString() || "Erro na navegação";
+                Alert.alert("Erro", errorMessage);
+              } catch (e) {
+                console.error("Erro ao processar erro de navegação:", e);
+              }
             }}
           />
         </View>
@@ -974,25 +1104,7 @@ export default function Home() {
         </View>
       )}
 
-      {/* Painel de Debug - mostra logs na tela */}
-      <DebugPanel visible={showDebug} />
-      
-      {/* Botão para mostrar/ocultar debug (triple tap no canto superior direito) */}
-      <TouchableOpacity
-        style={{
-          position: 'absolute',
-          top: 10,
-          right: 10,
-          backgroundColor: showDebug ? 'rgba(255, 0, 0, 0.7)' : 'rgba(0, 0, 0, 0.5)',
-          padding: 8,
-          borderRadius: 20,
-          zIndex: 1000,
-          display: 'none'
-        }}
-        onPress={() => setShowDebug(!showDebug)}
-      >
-        <Text style={{ color: 'white', fontSize: 10 }}>📊</Text>
-      </TouchableOpacity>
+
 
       {/* Alerta de radar - Modal animado no topo */}
       {isNavigating && nearestRadar && (() => {
@@ -1067,59 +1179,6 @@ export default function Home() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  inputContainer: {
-    backgroundColor: "#fff",
-    padding: 16,
-    paddingTop: Platform.OS === "ios" ? 50 : 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
-    zIndex: 1,
-    position: "relative",
-  },
-  inputRow: {
-    marginBottom: 12,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: "600",
-    marginBottom: 4,
-    color: "#374151",
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 14,
-    backgroundColor: "#fff",
-    color: "#000",
-  },
-  locationDisplay: {
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    borderRadius: 8,
-    padding: 12,
-    backgroundColor: "#f3f4f6",
-  },
-  locationText: {
-    fontSize: 14,
-    color: "#374151",
-  },
-  button: {
-    backgroundColor: "#3b82f6",
-    padding: 14,
-    borderRadius: 8,
-    alignItems: "center",
-    marginTop: 8,
-  },
-  buttonDisabled: {
-    backgroundColor: "#9ca3af",
-  },
-  buttonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
   },
   radarAlertContainer: {
     position: "absolute",
@@ -1202,6 +1261,43 @@ const styles = StyleSheet.create({
   mapContainer: {
     flex: 1,
     position: "relative",
+  },
+  loadingOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.85)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 9999,
+    elevation: 9999,
+  },
+  loadingContainer: {
+    backgroundColor: "#ffffff",
+    borderRadius: 20,
+    padding: 40,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 10,
+    minWidth: 200,
+  },
+  loadingText: {
+    marginTop: 20,
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#1f2937",
+    textAlign: "center",
+  },
+  loadingSubtext: {
+    marginTop: 8,
+    fontSize: 14,
+    color: "#6b7280",
+    textAlign: "center",
   },
   radarsOverlay: {
     ...StyleSheet.absoluteFillObject,
