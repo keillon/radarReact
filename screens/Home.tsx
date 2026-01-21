@@ -22,7 +22,11 @@ import {
   Radar,
   reportRadar,
 } from "../services/api";
-import { getReportedRadarsLocally } from "../services/reportedRadars";
+import { 
+  getReportedRadarsLocally,
+  createTempRadar,
+  saveReportedRadarLocally
+} from "../services/reportedRadars";
 import {
   geocodeAddress,
   getRoute,
@@ -676,7 +680,6 @@ export default function Home() {
       // Se o erro não for crítico (ex: rede), tentar salvar localmente
       if (error?.message?.includes("404") || error?.message?.includes("Network")) {
         try {
-          const { createTempRadar, saveReportedRadarLocally } = await import("../services/reportedRadars");
           const tempRadar = createTempRadar({
             latitude: currentLocation.latitude,
             longitude: currentLocation.longitude,
