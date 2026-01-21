@@ -1,5 +1,5 @@
 import MapboxNavigation from "@pawan-pk/react-native-mapbox-navigation";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -651,7 +651,7 @@ export default function Home() {
   };
 
   // Sincronizar radares reportados recentemente (em tempo real)
-  const syncRecentRadars = async () => {
+  const syncRecentRadars = useCallback(async () => {
     if (!isNavigating) return;
 
     try {
@@ -700,7 +700,7 @@ export default function Home() {
     } catch (error) {
       console.error("Erro ao sincronizar radares recentes:", error);
     }
-  };
+  }, [isNavigating, routeData, lastSyncTime]);
 
   // Iniciar sincronização em tempo real quando começar a navegar
   useEffect(() => {
@@ -725,8 +725,7 @@ export default function Home() {
         clearInterval(syncIntervalRef.current);
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isNavigating]);
+  }, [isNavigating, syncRecentRadars]);
 
   return (
     <View style={styles.container}>
