@@ -260,7 +260,7 @@ export default function Home() {
   const [filteredRadars, setFilteredRadars] = useState<Radar[]>([]);
   const [nearbyRadarIds, setNearbyRadarIds] = useState<Set<string>>(new Set()); // IDs dos radares próximos para animação
   const [isReportingRadar, setIsReportingRadar] = useState(false);
-  const [lastSyncTime, setLastSyncTime] = useState<number>(Date.now());
+  const lastSyncTimeRef = useRef<number>(Date.now());
   const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const locationWatchRef = useRef<any>(null);
@@ -655,7 +655,7 @@ export default function Home() {
     if (!isNavigating) return;
 
     try {
-      const recentRadars = await getRecentRadars(lastSyncTime);
+      const recentRadars = await getRecentRadars(lastSyncTimeRef.current);
       
       if (recentRadars.length > 0) {
         console.log(`🔄 ${recentRadars.length} novos radares sincronizados`);
@@ -696,11 +696,11 @@ export default function Home() {
         }
       }
       
-      setLastSyncTime(Date.now());
+      lastSyncTimeRef.current = Date.now();
     } catch (error) {
       console.error("Erro ao sincronizar radares recentes:", error);
     }
-  }, [isNavigating, routeData, lastSyncTime]);
+  }, [isNavigating, routeData]);
 
   // Iniciar sincronização em tempo real quando começar a navegar
   useEffect(() => {
