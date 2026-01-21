@@ -1,5 +1,8 @@
 const API_BASE_URL = "http://72.60.247.18:3000";
 
+// Importar funções de reportedRadars (import estático para evitar problemas)
+import { createTempRadar, saveReportedRadarLocally } from "./reportedRadars";
+
 export interface Radar {
   id: string;
   latitude: number;
@@ -200,9 +203,6 @@ export const reportRadar = async (
       if (response.status === 404) {
         console.log(`⚠️ Endpoint /radars/report não disponível (404), criando radar localmente`);
         
-        // Importar dinamicamente para evitar dependência circular
-        const { createTempRadar, saveReportedRadarLocally } = await import("./reportedRadars");
-        
         // Criar radar temporário
         const tempRadar = createTempRadar({
           latitude: request.latitude,
@@ -243,8 +243,6 @@ export const reportRadar = async (
       console.log(`⚠️ Erro de rede ao reportar radar, criando localmente`);
       
       try {
-        const { createTempRadar, saveReportedRadarLocally } = await import("./reportedRadars");
-        
         const tempRadar = createTempRadar({
           latitude: request.latitude,
           longitude: request.longitude,
