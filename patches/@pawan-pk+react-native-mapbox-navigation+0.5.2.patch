@@ -622,6 +622,14 @@ index 41a3ba0..2fbc32d 100644
        }
  
        // update the camera position to account for the new route
++      // Adicionar delay para dar tempo do zoom acontecer antes de focar
+       viewportDataSource.onRouteChanged(routeUpdateResult.navigationRoutes.first())
+-      viewportDataSource.evaluate()
++      
++      // Delay de 800ms para dar tempo do zoom acontecer primeiro
++      binding.mapView.postDelayed({
++        viewportDataSource.evaluate()
++      }, 800)
 @@ -458,10 +472,7 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
        val style = binding.mapView.mapboxMap.style
        if (style != null) {
