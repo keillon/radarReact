@@ -6,7 +6,7 @@ try {
   console.warn("AsyncStorage não pôde ser importado:", error);
 }
 
-import { Radar } from "./api";
+import type { Radar } from "./api";
 
 const REPORTED_RADARS_KEY = "@radar_bot:reported_radars";
 const PENDING_SYNC_KEY = "@radar_bot:pending_sync_radars";
