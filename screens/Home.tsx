@@ -18,10 +18,11 @@ import SearchContainer from "../components/SearchContainer";
 import {
   getRadarsNearLocation,
   getRadarsNearRoute,
-  reportRadar,
   getRecentRadars,
   Radar,
+  reportRadar,
 } from "../services/api";
+import { getReportedRadarsLocally } from "../services/reportedRadars";
 import {
   geocodeAddress,
   getRoute,
@@ -1447,7 +1448,7 @@ const styles = StyleSheet.create({
   },
   reportRadarButton: {
     position: "absolute",
-    bottom: Platform.OS === "ios" ? 100 : 140,
+    bottom: Platform.OS === "ios" ? 100 : 230,
     right: 20,
     backgroundColor: "#3b82f6",
     width: 60,
