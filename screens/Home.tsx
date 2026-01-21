@@ -641,6 +641,9 @@ export default function Home() {
         type: "reportado",
       });
 
+      // Verificar se é um radar temporário (salvo localmente)
+      const isLocalRadar = newRadar.id.startsWith("temp_");
+
       // Adicionar o radar reportado à lista local imediatamente
       setRadars((prev) => {
         // Verificar se já existe para evitar duplicatas
@@ -658,9 +661,55 @@ export default function Home() {
         });
       }
 
-      Alert.alert("Sucesso", "Radar reportado com sucesso! Outros usuários verão em breve.");
+      // Mensagem diferente dependendo se foi salvo localmente ou no backend
+      if (isLocalRadar) {
+        Alert.alert(
+          "Radar Reportado",
+          "Radar salvo localmente! Ele aparecerá no mapa e será sincronizado quando o servidor estiver disponível."
+        );
+      } else {
+        Alert.alert("Sucesso", "Radar reportado com sucesso! Outros usuários verão em breve.");
+      }
     } catch (error: any) {
       console.error("Erro ao reportar radar:", error);
+      
+      // Se o erro não for crítico (ex: rede), tentar salvar localmente
+      if (error?.message?.includes("404") || error?.message?.includes("Network")) {
+        try {
+          const { createTempRadar, saveReportedRadarLocally } = await import("../services/reportedRadars");
+          const tempRadar = createTempRadar({
+            latitude: currentLocation.latitude,
+            longitude: currentLocation.longitude,
+            type: "reportado",
+          });
+          
+          await saveReportedRadarLocally(tempRadar);
+          
+          // Adicionar ao mapa
+          setRadars((prev) => {
+            const exists = prev.some((r) => r.id === tempRadar.id);
+            if (exists) return prev;
+            return [...prev, tempRadar];
+          });
+          
+          if (isNavigating && routeData) {
+            setFilteredRadars((prev) => {
+              const exists = prev.some((r) => r.id === tempRadar.id);
+              if (exists) return prev;
+              return [...prev, tempRadar];
+            });
+          }
+          
+          Alert.alert(
+            "Radar Salvo Localmente",
+            "O servidor não está disponível, mas o radar foi salvo localmente e aparecerá no mapa. Ele será sincronizado quando o servidor estiver disponível."
+          );
+          return;
+        } catch (localError) {
+          console.error("Erro ao salvar localmente:", localError);
+        }
+      }
+      
       Alert.alert(
         "Erro",
         error.message || "Não foi possível reportar o radar. Tente novamente."
