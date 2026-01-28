@@ -1,4 +1,4 @@
-package com.radarbot
+package radarbot
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate

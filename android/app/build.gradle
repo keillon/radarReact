@@ -113,7 +113,7 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace "com.radarbot"
+    namespace "radarbot"
     defaultConfig {
         applicationId "com.radarbot"
         minSdkVersion rootProject.ext.minSdkVersion
