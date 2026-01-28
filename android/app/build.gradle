@@ -146,6 +146,13 @@ android {
         exclude group: "com.mapbox.module", module: "maps-telemetry-ndk27"
         // Excluir dash-native que causa conflitos
         exclude group: "com.mapbox.navigator", module: "dash-native"
+        // Excluir versões antigas do Mapbox Navigation que causam conflitos
+        exclude group: "com.mapbox.navigation", module: "navigator"
+        exclude group: "com.mapbox.navigation", module: "base"
+        exclude group: "com.mapbox.navigation", module: "core"
+        exclude group: "com.mapbox.navigation", module: "ui-maps"
+        exclude group: "com.mapbox.navigation", module: "ui-utils"
+        exclude group: "com.mapbox.navigation", module: "utils"
     }
     signingConfigs {
         debug {
