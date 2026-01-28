@@ -1,4 +1,4 @@
-package com.radarbot
+package radarbot
 
 import android.app.Application
 import com.facebook.react.PackageList
@@ -11,6 +11,7 @@ import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
 import com.facebook.react.defaults.DefaultReactNativeHost
 import com.facebook.soloader.SoLoader
 import com.mapboxnavigation.MapboxNavigationViewPackage
+import com.radarbot.CustomNavigationPackage
 
 class MainApplication : Application(), ReactApplication {
 
@@ -32,6 +33,10 @@ class MainApplication : Application(), ReactApplication {
                 )
                 packages.add(MapboxNavigationViewPackage())
               }
+
+              // Adicionar nosso package de navegação customizada
+              packages.add(CustomNavigationPackage())
+              android.util.Log.d("MainApplication", "CustomNavigationPackage adicionado")
               return packages
             }
 
