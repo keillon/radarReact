@@ -137,11 +137,15 @@ android {
             force "com.mapbox.maps:android:11.16.2"
             force "com.mapbox.maps:android-core:11.16.2"
             force "com.mapbox.module:maps-telemetry:11.16.2"
+            // Resolver conflitos do Mapbox Navigation
+            force "com.mapbox.navigator:mapbox-navigation-native:182.0.2"
         }
         // Excluir versões ndk27 para evitar duplicatas
         exclude group: "com.mapbox.maps", module: "android-ndk27"
         exclude group: "com.mapbox.maps", module: "android-core-ndk27"
         exclude group: "com.mapbox.module", module: "maps-telemetry-ndk27"
+        // Excluir dash-native que causa conflitos
+        exclude group: "com.mapbox.navigator", module: "dash-native"
     }
     signingConfigs {
         debug {
