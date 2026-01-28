@@ -11,7 +11,7 @@ import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
 import com.facebook.react.defaults.DefaultReactNativeHost
 import com.facebook.soloader.SoLoader
 import com.mapboxnavigation.MapboxNavigationViewPackage
-import com.radarbot.CustomNavigationPackage
+import radarbot.CustomNavigationPackage
 
 class MainApplication : Application(), ReactApplication {
 
@@ -42,10 +42,10 @@ class MainApplication : Application(), ReactApplication {
 
             override fun getJSMainModuleName(): String = "index"
 
-            override fun getUseDeveloperSupport(): Boolean = BuildConfig.DEBUG
+            override fun getUseDeveloperSupport(): Boolean = true
 
-            override val isNewArchEnabled: Boolean = BuildConfig.IS_NEW_ARCHITECTURE_ENABLED
-            override val isHermesEnabled: Boolean = BuildConfig.IS_HERMES_ENABLED
+            override val isNewArchEnabled: Boolean = false
+            override val isHermesEnabled: Boolean = true
           }
 
   override val reactHost: ReactHost
@@ -54,9 +54,5 @@ class MainApplication : Application(), ReactApplication {
   override fun onCreate() {
     super.onCreate()
     SoLoader.init(this, false)
-    if (BuildConfig.IS_NEW_ARCHITECTURE_ENABLED) {
-      // If you opted-in for the New Architecture, we load the native entry point for this app.
-      load()
-    }
   }
 }

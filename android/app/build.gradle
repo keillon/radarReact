@@ -137,22 +137,14 @@ android {
             force "com.mapbox.maps:android:11.16.2"
             force "com.mapbox.maps:android-core:11.16.2"
             force "com.mapbox.module:maps-telemetry:11.16.2"
-            // Resolver conflitos do Mapbox Navigation
-            force "com.mapbox.navigator:mapbox-navigation-native:182.0.2"
         }
         // Excluir versões ndk27 para evitar duplicatas
         exclude group: "com.mapbox.maps", module: "android-ndk27"
         exclude group: "com.mapbox.maps", module: "android-core-ndk27"
         exclude group: "com.mapbox.module", module: "maps-telemetry-ndk27"
-        // Excluir dash-native que causa conflitos
+        // Excluir todas as versões conflitantes do Mapbox Navigation
+        exclude group: "com.mapbox.navigation"
         exclude group: "com.mapbox.navigator", module: "dash-native"
-        // Excluir versões antigas do Mapbox Navigation que causam conflitos
-        exclude group: "com.mapbox.navigation", module: "navigator"
-        exclude group: "com.mapbox.navigation", module: "base"
-        exclude group: "com.mapbox.navigation", module: "core"
-        exclude group: "com.mapbox.navigation", module: "ui-maps"
-        exclude group: "com.mapbox.navigation", module: "ui-utils"
-        exclude group: "com.mapbox.navigation", module: "utils"
     }
     signingConfigs {
         debug {
@@ -180,11 +172,12 @@ dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
     
-    // Dependências para navegação customizada
-    implementation 'com.mapbox.navigation:android:2.18.2'
+    // Dependências para navegação customizada (sem Mapbox Navigation SDK)
     implementation 'com.squareup.retrofit2:retrofit:2.9.0'
     implementation 'com.squareup.retrofit2:converter-gson:2.9.0'
     implementation 'com.google.android.gms:play-services-location:21.0.1'
+    // Usar apenas Mapbox Maps SDK (sem Navigation)
+    implementation 'com.mapbox.maps:android:11.16.2'
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")

@@ -44,12 +44,10 @@ class CustomNavigationManager(reactContext: ReactApplicationContext) :
         val mapView = findMapView() // Precisa implementar busca pelo MapView
         val accessToken = getMapboxAccessToken()
         navigationEngine = CustomNavigationEngine(mapView!!, accessToken)
-
-        // Configurar listeners
-        setupNavigationListeners()
       }
 
       navigationEngine?.startNavigation(originPoint, destinationPoint, waypointPoints)
+      emitEvent("onNavigationStart", null)
     } catch (e: Exception) {
       Log.e(TAG, "Erro ao iniciar navegação", e)
       emitError("Falha ao iniciar navegação: ${e.message}")
@@ -61,6 +59,7 @@ class CustomNavigationManager(reactContext: ReactApplicationContext) :
     try {
       Log.d(TAG, "Parando navegação customizada")
       navigationEngine?.stopNavigation()
+      emitEvent("onNavigationFinish", null)
     } catch (e: Exception) {
       Log.e(TAG, "Erro ao parar navegação", e)
       emitError("Falha ao parar navegação: ${e.message}")
@@ -96,12 +95,13 @@ class CustomNavigationManager(reactContext: ReactApplicationContext) :
   fun getRouteProgress(promise: com.facebook.react.bridge.Promise) {
     try {
       val progress = navigationEngine?.getRouteProgress()
-      if (progress != null) {
+      val totalPoints = navigationEngine?.getTotalRoutePoints()
+      
+      if (progress != null && totalPoints != null) {
         val progressMap = Arguments.createMap()
-        progressMap.putDouble("distanceTraveled", progress.distanceTraveled.toDouble())
-        progressMap.putDouble("distanceRemaining", progress.distanceRemaining.toDouble())
-        progressMap.putDouble("durationRemaining", progress.durationRemaining)
-        progressMap.putDouble("fractionTraveled", progress.fractionTraveled.toDouble())
+        progressMap.putInt("currentPoint", progress)
+        progressMap.putInt("totalPoints", totalPoints)
+        progressMap.putDouble("fractionTraveled", if (totalPoints > 0) progress.toDouble() / totalPoints.toDouble() else 0.0)
         promise.resolve(progressMap)
       } else {
         promise.reject("NO_PROGRESS", "Progresso não disponível")
@@ -109,67 +109,6 @@ class CustomNavigationManager(reactContext: ReactApplicationContext) :
     } catch (e: Exception) {
       promise.reject("PROGRESS_ERROR", e.message)
     }
-  }
-
-  private fun setupNavigationListeners() {
-    navigationEngine?.setNavigationListener(
-            object : CustomNavigationEngine.NavigationListener {
-              override fun onRouteCalculated(
-                      route: com.mapbox.api.directions.v5.models.DirectionsRoute
-              ) {
-                Log.d(TAG, "Rota calculada com sucesso")
-                emitEvent("onNavigationStart", null)
-              }
-
-              override fun onNavigationStarted() {
-                emitEvent("onNavigationStart", null)
-              }
-
-              override fun onNavigationFinished() {
-                emitEvent("onNavigationFinish", null)
-              }
-
-              override fun onNavigationError(error: String) {
-                emitError(error)
-              }
-
-              override fun onRerouteNeeded() {
-                Log.d(TAG, "Recálculo de rota necessário")
-              }
-            }
-    )
-
-    navigationEngine?.setLocationListener(
-            object : CustomNavigationEngine.LocationListener {
-              override fun onLocationUpdate(location: android.location.Location) {
-                val locationMap = Arguments.createMap()
-                locationMap.putDouble("latitude", location.latitude)
-                locationMap.putDouble("longitude", location.longitude)
-                locationMap.putDouble("accuracy", location.accuracy.toDouble())
-                locationMap.putDouble("bearing", location.bearing.toDouble())
-                emitEvent("onLocationChange", locationMap)
-              }
-
-              override fun onLocationError(error: String) {
-                emitError(error)
-              }
-            }
-    )
-
-    navigationEngine?.setRouteProgressListener(
-            object : CustomNavigationEngine.RouteProgressListener {
-              override fun onRouteProgressUpdate(
-                      progress: com.mapbox.navigation.base.trip.model.RouteProgress
-              ) {
-                val progressMap = Arguments.createMap()
-                progressMap.putDouble("distanceTraveled", progress.distanceTraveled.toDouble())
-                progressMap.putDouble("distanceRemaining", progress.distanceRemaining.toDouble())
-                progressMap.putDouble("durationRemaining", progress.durationRemaining)
-                progressMap.putDouble("fractionTraveled", progress.fractionTraveled.toDouble())
-                emitEvent("onRouteProgressChange", progressMap)
-              }
-            }
-    )
   }
 
   private fun emitEvent(eventName: String, data: WritableMap?) {
