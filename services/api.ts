@@ -1,8 +1,5 @@
 const API_BASE_URL = "http://72.60.247.18:3000";
 
-// Importar funções de reportedRadars (import estático para evitar problemas)
-import { createTempRadar, saveReportedRadarLocally } from "./reportedRadars";
-
 export interface Radar {
   id: string;
   latitude: number;
@@ -51,12 +48,12 @@ const mapApiRadarToRadar = (apiRadar: ApiRadarResponse): Radar => {
 export const getRadarsNearLocation = async (
   latitude: number,
   longitude: number,
-  radius: number = 1000 // em metros, padrão 1000m
+  radius: number = 1000, // em metros, padrão 1000m
 ): Promise<Radar[]> => {
   try {
     const url = `${API_BASE_URL}/radars?lat=${latitude}&lon=${longitude}&radius=${radius}`;
     console.log(`🔍 Buscando radares em: ${url}`);
-    
+
     const response = await fetch(url, {
       method: "GET",
       headers: {
@@ -64,20 +61,24 @@ export const getRadarsNearLocation = async (
       },
     });
 
-    console.log(`📡 Resposta da API: status=${response.status}, ok=${response.ok}`);
+    console.log(
+      `📡 Resposta da API: status=${response.status}, ok=${response.ok}`,
+    );
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`❌ Erro HTTP ${response.status}: ${errorText}`);
-      throw new Error(`Erro ao buscar radares: ${response.status} ${response.statusText}`);
+      throw new Error(
+        `Erro ao buscar radares: ${response.status} ${response.statusText}`,
+      );
     }
 
     const data = await response.json();
     console.log(`📦 Dados recebidos:`, JSON.stringify(data).substring(0, 200));
-    
+
     const radars = (data.radars || []).map(mapApiRadarToRadar);
     console.log(
-      `✅ ${radars.length} radares encontrados próximos à localização`
+      `✅ ${radars.length} radares encontrados próximos à localização`,
     );
     return radars;
   } catch (error: any) {
@@ -87,14 +88,17 @@ export const getRadarsNearLocation = async (
       name: error?.name,
       url: url,
     };
-    console.error("Erro ao buscar radares por localização:", JSON.stringify(errorDetails, null, 2));
+    console.error(
+      "Erro ao buscar radares por localização:",
+      JSON.stringify(errorDetails, null, 2),
+    );
     throw new Error(`Erro ao buscar radares: ${errorDetails.message}`);
   }
 };
 
 // Buscar radares próximos à rota (POST)
 export const getRadarsNearRoute = async (
-  request: NearRouteRequest
+  request: NearRouteRequest,
 ): Promise<Radar[]> => {
   try {
     const url = `${API_BASE_URL}/radars/near-route`;
@@ -102,10 +106,12 @@ export const getRadarsNearRoute = async (
       route: request.route,
       radius: request.radius || 500, // Aumentado para 500m para capturar mais radares
     };
-    
+
     console.log(`🔍 Buscando radares próximos à rota: ${url}`);
-    console.log(`📋 Rota com ${request.route.length} pontos, raio=${request.radius || 500}m`);
-    
+    console.log(
+      `📋 Rota com ${request.route.length} pontos, raio=${request.radius || 500}m`,
+    );
+
     const response = await fetch(url, {
       method: "POST",
       headers: {
@@ -114,29 +120,40 @@ export const getRadarsNearRoute = async (
       body: JSON.stringify(requestBody),
     });
 
-    console.log(`📡 Resposta da API: status=${response.status}, ok=${response.ok}`);
+    console.log(
+      `📡 Resposta da API: status=${response.status}, ok=${response.ok}`,
+    );
 
     if (!response.ok) {
       const errorText = await response.text();
       // Se for 404, a rota não existe - usar fallback silenciosamente
       if (response.status === 404) {
-        console.log(`⚠️ Rota /radars/near-route não disponível (404), usando fallback`);
+        console.log(
+          `⚠️ Rota /radars/near-route não disponível (404), usando fallback`,
+        );
         throw new Error("ROUTE_NOT_FOUND"); // Erro especial para identificar 404
       }
       console.error(`❌ Erro HTTP ${response.status}: ${errorText}`);
-      throw new Error(`Erro ao buscar radares: ${response.status} ${response.statusText}`);
+      throw new Error(
+        `Erro ao buscar radares: ${response.status} ${response.statusText}`,
+      );
     }
 
     const data = await response.json();
     console.log(`📦 Dados recebidos:`, JSON.stringify(data).substring(0, 200));
-    
+
     const radars = (data.radars || []).map(mapApiRadarToRadar);
     console.log(`✅ ${radars.length} radares encontrados próximos à rota`);
     return radars;
   } catch (error: any) {
     // Se for erro 404 (rota não existe), usar fallback silenciosamente
-    if (error?.message === "ROUTE_NOT_FOUND" || error?.message?.includes("404")) {
-      console.log("🔄 Usando fallback: buscando radares por localização média da rota");
+    if (
+      error?.message === "ROUTE_NOT_FOUND" ||
+      error?.message?.includes("404")
+    ) {
+      console.log(
+        "🔄 Usando fallback: buscando radares por localização média da rota",
+      );
     } else {
       const errorDetails = {
         message: error?.message || "Erro desconhecido",
@@ -144,19 +161,27 @@ export const getRadarsNearRoute = async (
         name: error?.name,
         url: `${API_BASE_URL}/radars/near-route`,
       };
-      console.error("Erro ao buscar radares por rota:", JSON.stringify(errorDetails, null, 2));
+      console.error(
+        "Erro ao buscar radares por rota:",
+        JSON.stringify(errorDetails, null, 2),
+      );
     }
-    
+
     // Se falhar, tentar buscar por localização média da rota
     if (request.route && request.route.length > 0) {
       const midPoint = request.route[Math.floor(request.route.length / 2)];
-      console.log(`📍 Buscando radares próximos ao ponto médio da rota (${midPoint.latitude}, ${midPoint.longitude})`);
+      console.log(
+        `📍 Buscando radares próximos ao ponto médio da rota (${midPoint.latitude}, ${midPoint.longitude})`,
+      );
       return getRadarsNearLocation(
         midPoint.latitude,
         midPoint.longitude,
-        request.radius || 1000
+        request.radius || 1000,
       ).catch((fallbackError: any) => {
-        console.error("❌ Erro no fallback:", fallbackError?.message || "Erro desconhecido");
+        console.error(
+          "❌ Erro no fallback:",
+          fallbackError?.message || "Erro desconhecido",
+        );
         return []; // Retornar array vazio em vez de lançar erro
       });
     }
@@ -175,13 +200,15 @@ export interface ReportRadarRequest {
 
 // Reportar um radar (POST) - com fallback para armazenamento local
 export const reportRadar = async (
-  request: ReportRadarRequest
+  request: ReportRadarRequest,
 ): Promise<Radar> => {
   try {
     const url = `${API_BASE_URL}/radars/report`;
     console.log(`📤 Reportando radar em: ${url}`);
-    console.log(`📍 Localização: lat=${request.latitude}, lon=${request.longitude}`);
-    
+    console.log(
+      `📍 Localização: lat=${request.latitude}, lon=${request.longitude}`,
+    );
+
     const response = await fetch(url, {
       method: "POST",
       headers: {
@@ -196,13 +223,21 @@ export const reportRadar = async (
       }),
     });
 
-    console.log(`📡 Resposta da API: status=${response.status}, ok=${response.ok}`);
+    console.log(
+      `📡 Resposta da API: status=${response.status}, ok=${response.ok}`,
+    );
 
     if (!response.ok) {
       // Se o endpoint não existir (404), criar radar localmente
       if (response.status === 404) {
-        console.log(`⚠️ Endpoint /radars/report não disponível (404), criando radar localmente`);
-        
+        console.log(
+          `⚠️ Endpoint /radars/report não disponível (404), criando radar localmente`,
+        );
+
+        // Importar dinamicamente para evitar dependência circular
+        const { createTempRadar, saveReportedRadarLocally } =
+          await import("./reportedRadars");
+
         // Criar radar temporário
         const tempRadar = createTempRadar({
           latitude: request.latitude,
@@ -210,75 +245,92 @@ export const reportRadar = async (
           speedLimit: request.speedLimit,
           type: request.type || "reportado",
         });
-        
+
         // Salvar localmente
         await saveReportedRadarLocally(tempRadar);
-        
+
         console.log(`✅ Radar criado localmente com ID: ${tempRadar.id}`);
         return tempRadar;
       }
-      
+
       const errorText = await response.text();
       console.error(`❌ Erro HTTP ${response.status}: ${errorText}`);
-      throw new Error(`Erro ao reportar radar: ${response.status} ${response.statusText}`);
+      throw new Error(
+        `Erro ao reportar radar: ${response.status} ${response.statusText}`,
+      );
     }
 
     const data = await response.json();
     console.log(`✅ Radar reportado com sucesso no backend:`, data);
-    
+
     const radar = mapApiRadarToRadar(data.radar || data);
-    
+
     // Salvar também localmente para backup
     try {
       const { saveReportedRadarLocally } = await import("./reportedRadars");
       await saveReportedRadarLocally(radar);
     } catch (localError) {
-      console.warn("Erro ao salvar radar localmente (não crítico):", localError);
+      console.warn(
+        "Erro ao salvar radar localmente (não crítico):",
+        localError,
+      );
     }
-    
+
     return radar;
   } catch (error: any) {
     // Se for erro de rede ou timeout, criar radar localmente
-    if (error?.message?.includes("Network") || error?.message?.includes("timeout") || error?.message?.includes("Failed to fetch")) {
+    if (
+      error?.message?.includes("Network") ||
+      error?.message?.includes("timeout") ||
+      error?.message?.includes("Failed to fetch")
+    ) {
       console.log(`⚠️ Erro de rede ao reportar radar, criando localmente`);
-      
+
       try {
+        const { createTempRadar, saveReportedRadarLocally } =
+          await import("./reportedRadars");
+
         const tempRadar = createTempRadar({
           latitude: request.latitude,
           longitude: request.longitude,
           speedLimit: request.speedLimit,
           type: request.type || "reportado",
         });
-        
+
         await saveReportedRadarLocally(tempRadar);
-        console.log(`✅ Radar criado localmente devido a erro de rede: ${tempRadar.id}`);
+        console.log(
+          `✅ Radar criado localmente devido a erro de rede: ${tempRadar.id}`,
+        );
         return tempRadar;
       } catch (localError) {
         console.error("Erro ao criar radar localmente:", localError);
       }
     }
-    
+
     const errorDetails = {
       message: error?.message || "Erro desconhecido",
       stack: error?.stack,
       name: error?.name,
       url: `${API_BASE_URL}/radars/report`,
     };
-    console.error("Erro ao reportar radar:", JSON.stringify(errorDetails, null, 2));
+    console.error(
+      "Erro ao reportar radar:",
+      JSON.stringify(errorDetails, null, 2),
+    );
     throw new Error(`Erro ao reportar radar: ${errorDetails.message}`);
   }
 };
 
 // Buscar radares reportados recentemente (GET) - para sincronização em tempo real
 export const getRecentRadars = async (
-  since?: number // timestamp em ms - apenas radares reportados após este timestamp
+  since?: number, // timestamp em ms - apenas radares reportados após este timestamp
 ): Promise<Radar[]> => {
   try {
-    const url = since 
+    const url = since
       ? `${API_BASE_URL}/radars/recent?since=${since}`
       : `${API_BASE_URL}/radars/recent`;
     console.log(`🔄 Buscando radares recentes: ${url}`);
-    
+
     const response = await fetch(url, {
       method: "GET",
       headers: {
@@ -286,12 +338,16 @@ export const getRecentRadars = async (
       },
     });
 
-    console.log(`📡 Resposta da API: status=${response.status}, ok=${response.ok}`);
+    console.log(
+      `📡 Resposta da API: status=${response.status}, ok=${response.ok}`,
+    );
 
     if (!response.ok) {
       // Se o endpoint não existir, retornar array vazio (não é crítico)
       if (response.status === 404) {
-        console.log(`⚠️ Endpoint /radars/recent não disponível (404), retornando array vazio`);
+        console.log(
+          `⚠️ Endpoint /radars/recent não disponível (404), retornando array vazio`,
+        );
         return [];
       }
       const errorText = await response.text();
@@ -304,7 +360,10 @@ export const getRecentRadars = async (
     console.log(`✅ ${radars.length} radares recentes encontrados`);
     return radars;
   } catch (error: any) {
-    console.error("Erro ao buscar radares recentes:", error?.message || "Erro desconhecido");
+    console.error(
+      "Erro ao buscar radares recentes:",
+      error?.message || "Erro desconhecido",
+    );
     return []; // Retornar array vazio em vez de lançar erro
   }
 };

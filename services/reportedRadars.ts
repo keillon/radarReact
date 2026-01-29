@@ -6,7 +6,7 @@ try {
   console.warn("AsyncStorage não pôde ser importado:", error);
 }
 
-import type { Radar } from "./api";
+import { Radar } from "./api";
 
 const REPORTED_RADARS_KEY = "@radar_bot:reported_radars";
 const PENDING_SYNC_KEY = "@radar_bot:pending_sync_radars";
@@ -18,9 +18,9 @@ const isAsyncStorageAvailable = (): boolean => {
       return false;
     }
     return (
-      typeof AsyncStorage.getItem === 'function' &&
-      typeof AsyncStorage.setItem === 'function' &&
-      typeof AsyncStorage.removeItem === 'function'
+      typeof AsyncStorage.getItem === "function" &&
+      typeof AsyncStorage.setItem === "function" &&
+      typeof AsyncStorage.removeItem === "function"
     );
   } catch (error) {
     return false;
@@ -33,16 +33,22 @@ const generateTempId = (): string => {
 };
 
 // Salvar radar reportado localmente
-export const saveReportedRadarLocally = async (radar: Radar): Promise<Radar> => {
+export const saveReportedRadarLocally = async (
+  radar: Radar,
+): Promise<Radar> => {
   if (!isAsyncStorageAvailable()) {
-    console.warn("AsyncStorage não disponível. Radar não será salvo localmente.");
+    console.warn(
+      "AsyncStorage não disponível. Radar não será salvo localmente.",
+    );
     return radar;
   }
 
   try {
     // Buscar radares reportados existentes
     const existingData = await AsyncStorage.getItem(REPORTED_RADARS_KEY);
-    const reportedRadars: Radar[] = existingData ? JSON.parse(existingData) : [];
+    const reportedRadars: Radar[] = existingData
+      ? JSON.parse(existingData)
+      : [];
 
     // Adicionar novo radar (evitar duplicatas)
     const exists = reportedRadars.some((r) => r.id === radar.id);
@@ -51,18 +57,24 @@ export const saveReportedRadarLocally = async (radar: Radar): Promise<Radar> => 
         ...radar,
         reportedAt: Date.now(), // Adicionar timestamp
       } as any);
-      await AsyncStorage.setItem(REPORTED_RADARS_KEY, JSON.stringify(reportedRadars));
+      await AsyncStorage.setItem(
+        REPORTED_RADARS_KEY,
+        JSON.stringify(reportedRadars),
+      );
       console.log(`✅ Radar salvo localmente: ${radar.id}`);
     }
 
     // Adicionar à fila de sincronização
     const pendingData = await AsyncStorage.getItem(PENDING_SYNC_KEY);
     const pendingRadars: Radar[] = pendingData ? JSON.parse(pendingData) : [];
-    
+
     const pendingExists = pendingRadars.some((r) => r.id === radar.id);
     if (!pendingExists) {
       pendingRadars.push(radar);
-      await AsyncStorage.setItem(PENDING_SYNC_KEY, JSON.stringify(pendingRadars));
+      await AsyncStorage.setItem(
+        PENDING_SYNC_KEY,
+        JSON.stringify(pendingRadars),
+      );
       console.log(`📤 Radar adicionado à fila de sincronização: ${radar.id}`);
     }
 
@@ -84,7 +96,7 @@ export const getReportedRadarsLocally = async (): Promise<Radar[]> => {
     if (!data) {
       return [];
     }
-    
+
     const radars: Radar[] = JSON.parse(data);
     return radars;
   } catch (error) {
@@ -129,4 +141,3 @@ export const createTempRadar = (request: {
     type: request.type || "reportado",
   };
 };
-

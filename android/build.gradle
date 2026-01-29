@@ -6,6 +6,9 @@ buildscript {
         targetSdkVersion = 35
         ndkVersion = "26.1.10909125"
         kotlinVersion = "1.9.22"
+        // Versão única do Play Services para evitar "interface but class was expected" (RNFusedLocation)
+        playServicesLocationVersion = "21.0.1"
+        googlePlayServicesVersion = "21.0.1"
     }
     repositories {
         google()

@@ -6,6 +6,8 @@ import Home from "./screens/Home";
 // Suprimir warnings conhecidos que não afetam o funcionamento
 LogBox.ignoreLogs([
   "new NativeEventEmitter",
+  "addListener",
+  "removeListeners",
   "AnimatedCoordinatesArray could not obtain AnimatedWithChildren",
   "AnimatedShape could not obtain AnimatedWithChildren",
 ]);

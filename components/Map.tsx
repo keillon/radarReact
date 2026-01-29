@@ -10,7 +10,13 @@ import Mapbox, {
   UserTrackingMode,
 } from "@rnmapbox/maps";
 import React, { useEffect, useRef, useState } from "react";
-import { Animated, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  Animated,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { Radar } from "../services/api";
 import { MAPBOX_TOKEN, NavigationStep, RouteFeature } from "../services/mapbox";
 
@@ -44,7 +50,7 @@ export default function Map({
   const [hasInitialized, setHasInitialized] = useState(false);
   const cameraRef = useRef<any>(null);
   const pulseAnimation = useRef(new Animated.Value(1)).current;
-  
+
   // Animação de pulso para radares próximos
   useEffect(() => {
     if (nearbyRadarIds.size > 0) {
@@ -61,7 +67,7 @@ export default function Map({
             duration: 1000,
             useNativeDriver: false,
           }),
-        ])
+        ]),
       ).start();
     } else {
       pulseAnimation.setValue(1);
@@ -121,15 +127,17 @@ export default function Map({
   // Função para mapear velocidade para nome da imagem da placa
   const getPlacaImageName = (speedLimit: number | null | undefined): string => {
     if (!speedLimit || speedLimit === 0) return "placa0";
-    
+
     // Mapear para as velocidades disponíveis (20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160)
-    const speeds = [20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160];
-    
+    const speeds = [
+      20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160,
+    ];
+
     // Encontrar a velocidade mais próxima disponível
-    const closestSpeed = speeds.reduce((prev, curr) => 
-      Math.abs(curr - speedLimit) < Math.abs(prev - speedLimit) ? curr : prev
+    const closestSpeed = speeds.reduce((prev, curr) =>
+      Math.abs(curr - speedLimit) < Math.abs(prev - speedLimit) ? curr : prev,
     );
-    
+
     return `placa${closestSpeed}`;
   };
 
@@ -157,49 +165,46 @@ export default function Map({
   // Criar GeoJSON para radares com nome da imagem e propriedade de proximidade
   const radarsGeoJSON = {
     type: "FeatureCollection" as const,
-    features: (radars || []).filter(radar => 
-      radar != null && 
-      radar.id != null && 
-      typeof radar.latitude === 'number' && 
-      typeof radar.longitude === 'number' &&
-      !isNaN(radar.latitude) &&
-      !isNaN(radar.longitude)
-    ).map((radar) => ({
-      type: "Feature" as const,
-      id: radar.id,
-      geometry: {
-        type: "Point" as const,
-        coordinates: [radar.longitude, radar.latitude],
-      },
-      properties: {
+    features: (radars || [])
+      .filter(
+        (radar) =>
+          radar != null &&
+          radar.id != null &&
+          typeof radar.latitude === "number" &&
+          typeof radar.longitude === "number" &&
+          !isNaN(radar.latitude) &&
+          !isNaN(radar.longitude),
+      )
+      .map((radar) => ({
+        type: "Feature" as const,
         id: radar.id,
-        speedLimit: radar.speedLimit || null,
-        type: radar.type || "default",
-        iconImage: getPlacaImageName(radar.speedLimit), // Nome da imagem para o ícone
-        isNearby: nearbyRadarIds?.has(radar.id) ? 1 : 0, // Flag para animação pulsante
-      },
-    })),
+        geometry: {
+          type: "Point" as const,
+          coordinates: [radar.longitude, radar.latitude],
+        },
+        properties: {
+          id: radar.id,
+          speedLimit: radar.speedLimit || null,
+          type: radar.type || "default",
+          iconImage: getPlacaImageName(radar.speedLimit), // Nome da imagem para o ícone
+          isNearby: nearbyRadarIds?.has(radar.id) ? 1 : 0, // Flag para animação pulsante
+        },
+      })),
   };
 
-  // Debug: verificar se radares estão sendo passados
+  // Debug (apenas em desenvolvimento): log de radares recebidos
   useEffect(() => {
+    if (!__DEV__) return;
     const validRadars = radars || [];
-    console.log(`🗺️ Map: ${validRadars.length} radares recebidos para renderizar`);
     if (validRadars.length > 0 && validRadars[0] != null) {
       const firstRadar = validRadars[0];
-      if (firstRadar.id != null && typeof firstRadar.latitude === 'number' && typeof firstRadar.longitude === 'number') {
-        console.log(`📍 Primeiro radar:`, {
-          id: firstRadar.id,
-          lat: firstRadar.latitude,
-          lng: firstRadar.longitude,
-          speedLimit: firstRadar.speedLimit,
-          iconImage: getPlacaImageName(firstRadar.speedLimit),
-        });
-        console.log(`📦 GeoJSON criado com ${radarsGeoJSON.features.length} features`);
-        console.log(`🖼️ Imagens disponíveis:`, Object.keys(placaImages).join(", "));
+      if (
+        firstRadar.id != null &&
+        typeof firstRadar.latitude === "number" &&
+        typeof firstRadar.longitude === "number"
+      ) {
+        console.log(`🗺️ Map: ${validRadars.length} radares para renderizar`);
       }
-    } else {
-      console.warn(`⚠️ Map: Nenhum radar válido para renderizar`);
     }
   }, [radars?.length || 0]);
 
@@ -251,68 +256,75 @@ export default function Map({
         )}
 
         {/* Camada de rota usando componentes nativos do SDK */}
-        {route && route.geometry && route.geometry.coordinates && Array.isArray(route.geometry.coordinates) && route.geometry.coordinates.length > 0 && (
-          <ShapeSource id="route" shape={route}>
-            <LineLayer
-              id="routeLine"
-              style={{
-                lineColor: isNavigating ? "#3b82f6" : "#60a5fa",
-                lineWidth: isNavigating ? 6 : 4,
-                lineCap: "round",
-                lineJoin: "round",
-                lineGradient: isNavigating
-                  ? [
-                      "interpolate",
-                      ["linear"],
-                      ["line-progress"],
-                      0,
-                      "#3b82f6",
-                      0.5,
-                      "#60a5fa",
-                      1,
-                      "#93c5fd",
-                    ]
-                  : undefined,
-              }}
-            />
-          </ShapeSource>
-        )}
+        {route &&
+          route.geometry &&
+          route.geometry.coordinates &&
+          Array.isArray(route.geometry.coordinates) &&
+          route.geometry.coordinates.length > 0 && (
+            <ShapeSource id="route" shape={route}>
+              <LineLayer
+                id="routeLine"
+                style={{
+                  lineColor: isNavigating ? "#3b82f6" : "#60a5fa",
+                  lineWidth: isNavigating ? 6 : 4,
+                  lineCap: "round",
+                  lineJoin: "round",
+                  lineGradient: isNavigating
+                    ? [
+                        "interpolate",
+                        ["linear"],
+                        ["line-progress"],
+                        0,
+                        "#3b82f6",
+                        0.5,
+                        "#60a5fa",
+                        1,
+                        "#93c5fd",
+                      ]
+                    : undefined,
+                }}
+              />
+            </ShapeSource>
+          )}
 
         {/* Marcador de destino */}
-        {route && route.geometry && route.geometry.coordinates && Array.isArray(route.geometry.coordinates) && route.geometry.coordinates.length > 0 && (
-          <ShapeSource
-            id="destination"
-            shape={{
-              type: "Feature",
-              geometry: {
-                type: "Point",
-                coordinates:
-                  route.geometry.coordinates[
+        {route &&
+          route.geometry &&
+          route.geometry.coordinates &&
+          Array.isArray(route.geometry.coordinates) &&
+          route.geometry.coordinates.length > 0 && (
+            <ShapeSource
+              id="destination"
+              shape={{
+                type: "Feature",
+                geometry: {
+                  type: "Point",
+                  coordinates: route.geometry.coordinates[
                     route.geometry.coordinates.length - 1
                   ] || [0, 0],
-              },
-              properties: {},
-            }}
-          >
-            <CircleLayer
-              id="destinationMarker"
-              style={{
-                circleColor: "#10b981",
-                circleRadius: 10,
-                circleStrokeWidth: 3,
-                circleStrokeColor: "#fff",
+                },
+                properties: {},
               }}
-            />
-            <SymbolLayer
-              id="destinationLabel"
-              style={{
-                textField: "📍",
-                textSize: 20,
-                textOffset: [0, -2],
-              }}
-            />
-          </ShapeSource>
-        )}
+            >
+              <CircleLayer
+                id="destinationMarker"
+                style={{
+                  circleColor: "#10b981",
+                  circleRadius: 10,
+                  circleStrokeWidth: 3,
+                  circleStrokeColor: "#fff",
+                }}
+              />
+              <SymbolLayer
+                id="destinationLabel"
+                style={{
+                  textField: "📍",
+                  textSize: 20,
+                  textOffset: [0, -2],
+                }}
+              />
+            </ShapeSource>
+          )}
 
         {/* Marcador de próxima manobra */}
         {isNavigating &&
@@ -354,7 +366,7 @@ export default function Map({
           )}
 
         {/* Adicionar imagens das placas ao mapa - DEVE estar antes do ShapeSource que as usa */}
-        <Images 
+        <Images
           images={placaImages}
           onImageMissing={(imageId) => {
             console.warn(`⚠️ Imagem faltando no mapa: ${imageId}`);
@@ -362,91 +374,100 @@ export default function Map({
         />
 
         {/* Camada de radares com clustering */}
-        {radars && radars.length > 0 && radarsGeoJSON.features && radarsGeoJSON.features.length > 0 && (
-          <ShapeSource
-            id="radars"
-            shape={radarsGeoJSON}
-            cluster
-            clusterRadius={50}
-            clusterMaxZoomLevel={14}
-            onPress={(event) => {
-              try {
-                console.log("Radar pressionado:", event);
-                if (onRadarPress && event?.features && Array.isArray(event.features) && event.features.length > 0) {
-                  const feature = event.features[0];
-                  if (feature != null) {
-                    const radarId = feature.properties?.id || feature.id;
-                    if (radarId != null && radars != null) {
-                      const radar = radars.find(r => r != null && r.id === radarId);
-                      if (radar != null) {
-                        onRadarPress(radar);
+        {radars &&
+          radars.length > 0 &&
+          radarsGeoJSON.features &&
+          radarsGeoJSON.features.length > 0 && (
+            <ShapeSource
+              id="radars"
+              shape={radarsGeoJSON}
+              cluster
+              clusterRadius={50}
+              clusterMaxZoomLevel={14}
+              onPress={(event) => {
+                try {
+                  console.log("Radar pressionado:", event);
+                  if (
+                    onRadarPress &&
+                    event?.features &&
+                    Array.isArray(event.features) &&
+                    event.features.length > 0
+                  ) {
+                    const feature = event.features[0];
+                    if (feature != null) {
+                      const radarId = feature.properties?.id || feature.id;
+                      if (radarId != null && radars != null) {
+                        const radar = radars.find(
+                          (r) => r != null && r.id === radarId,
+                        );
+                        if (radar != null) {
+                          onRadarPress(radar);
+                        }
                       }
                     }
                   }
+                } catch (error) {
+                  console.error("Erro ao processar press do radar:", error);
                 }
-              } catch (error) {
-                console.error("Erro ao processar press do radar:", error);
-              }
-            }}
-          >
-          {/* Clusters */}
-          <CircleLayer
-            id="radarClusters"
-            filter={["has", "point_count"]}
-            style={{
-              circleColor: [
-                "step",
-                ["get", "point_count"],
-                "#fbbf24",
-                10,
-                "#8b5800",
-                50,
-                "#000",
-              ],
-              circleRadius: [
-                "step",
-                ["get", "point_count"],
-                20,
-                10,
-                30,
-                50,
-                40,
-              ],
-              circleStrokeWidth: 2,
-              circleStrokeColor: "#fbbf24",
-            }}
-          />
+              }}
+            >
+              {/* Clusters */}
+              <CircleLayer
+                id="radarClusters"
+                filter={["has", "point_count"]}
+                style={{
+                  circleColor: [
+                    "step",
+                    ["get", "point_count"],
+                    "#fbbf24",
+                    10,
+                    "#8b5800",
+                    50,
+                    "#000",
+                  ],
+                  circleRadius: [
+                    "step",
+                    ["get", "point_count"],
+                    20,
+                    10,
+                    30,
+                    50,
+                    40,
+                  ],
+                  circleStrokeWidth: 2,
+                  circleStrokeColor: "#fbbf24",
+                }}
+              />
 
-          {/* Contagem de clusters */}
-          <SymbolLayer
-            id="radarClusterCount"
-            filter={["has", "point_count"]}
-            style={{
-              textField: "{point_count_abbreviated}",
-              textFont: ["Open Sans Regular", "Arial Unicode MS Regular"],
-              textSize: 12,
-              textColor: "#fff",
-            }}
-          />
+              {/* Contagem de clusters */}
+              <SymbolLayer
+                id="radarClusterCount"
+                filter={["has", "point_count"]}
+                style={{
+                  textField: "{point_count_abbreviated}",
+                  textFont: ["Open Sans Regular", "Arial Unicode MS Regular"],
+                  textSize: 12,
+                  textColor: "#fff",
+                }}
+              />
 
-          {/* Marcadores individuais de radares usando placas */}
-          <SymbolLayer
-            id="radarMarkers"
-            filter={["!", ["has", "point_count"]]}
-            style={{
-              iconImage: [
-                "coalesce",
-                ["get", "iconImage"],
-                "placa" // Fallback se iconImage não existir
-              ],
-              iconSize: 0.1, // Aumentar tamanho para melhor visibilidade
-              iconAllowOverlap: true, // Permitir que as placas se sobreponham
-              iconIgnorePlacement: true, // Ignorar placement para evitar conflitos
-            }}
-          />
-          
-        </ShapeSource>
-        )}
+              {/* Marcadores individuais de radares usando placas */}
+              <SymbolLayer
+                id="radarMarkers"
+                filter={["!", ["has", "point_count"]]}
+                style={{
+                  iconImage: [
+                    "coalesce",
+                    ["get", "iconImage"],
+                    "placa", // Fallback se iconImage não existir
+                  ],
+                  iconSize: 0.1, // Aumentar tamanho para melhor visibilidade
+                  iconAllowOverlap: true, // Permitir que as placas se sobreponham
+                  iconIgnorePlacement: true, // Ignorar placement para evitar conflitos
+                }}
+              />
+            </ShapeSource>
+          )}
       </MapView>
       {!isNavigating && userLocation && (
         <TouchableOpacity
