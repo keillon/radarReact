@@ -1509,7 +1509,7 @@ const styles = StyleSheet.create({
     color: "#FFFF00",
   },
   radarAlertSpeed: {
-    fontSize: 12,
+    fontSize: 46,
     fontWeight: "500",
     color: "rgba(255, 255, 255, 0.85)",
   },
