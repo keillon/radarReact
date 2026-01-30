@@ -321,6 +321,70 @@ export const reportRadar = async (
   }
 };
 
+// Atualizar radar (PATCH) - para o editor: mover posição, limite, inativar
+export interface UpdateRadarRequest {
+  latitude?: number;
+  longitude?: number;
+  speedLimit?: number;
+  situacao?: string; // ex: "ativo" | "inativo"
+}
+
+export const updateRadar = async (
+  id: string,
+  request: UpdateRadarRequest,
+): Promise<Radar | null> => {
+  try {
+    const url = `${API_BASE_URL}/radars/${id}`;
+    const body: Record<string, unknown> = {};
+    if (request.latitude != null) body.latitude = request.latitude;
+    if (request.longitude != null) body.longitude = request.longitude;
+    if (request.speedLimit != null) body.velocidadeLeve = request.speedLimit;
+    if (request.situacao != null) body.situacao = request.situacao;
+
+    const response = await fetch(url, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        console.warn("Endpoint PATCH /radars/:id não disponível");
+        return null;
+      }
+      const text = await response.text();
+      throw new Error(`Erro ao atualizar radar: ${response.status} ${text}`);
+    }
+
+    const data = await response.json();
+    return mapApiRadarToRadar(data.radar || data);
+  } catch (error: any) {
+    console.error("Erro ao atualizar radar:", error?.message);
+    return null;
+  }
+};
+
+// Deletar ou inativar radar (DELETE)
+export const deleteRadar = async (id: string): Promise<boolean> => {
+  try {
+    const url = `${API_BASE_URL}/radars/${id}`;
+    const response = await fetch(url, { method: "DELETE" });
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        console.warn("Endpoint DELETE /radars/:id não disponível");
+        return false;
+      }
+      const text = await response.text();
+      throw new Error(`Erro ao deletar radar: ${response.status} ${text}`);
+    }
+    return true;
+  } catch (error: any) {
+    console.error("Erro ao deletar radar:", error?.message);
+    return false;
+  }
+};
+
 // Buscar radares reportados recentemente (GET) - para sincronização em tempo real
 export const getRecentRadars = async (
   since?: number, // timestamp em ms - apenas radares reportados após este timestamp

@@ -240,7 +240,11 @@ const filterRadarsNearRoute = (
   });
 };
 
-export default function Home() {
+interface HomeProps {
+  onOpenEditor?: () => void;
+}
+
+export default function Home({ onOpenEditor }: HomeProps) {
   const [origin, setOrigin] = useState<LatLng | null>(null);
   const [destination, setDestination] = useState<LatLng | null>(null);
   const [destinationText, setDestinationText] = useState<string>("");
@@ -783,6 +787,15 @@ export default function Home() {
 
   return (
     <View style={styles.container}>
+      {onOpenEditor && !isNavigating && !isPreparingNavigation && (
+        <TouchableOpacity
+          style={styles.editorButton}
+          onPress={onOpenEditor}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.editorButtonText}>Editor de radares</Text>
+        </TouchableOpacity>
+      )}
       {!isNavigating && !isPreparingNavigation && (
         <SearchContainer
           origin={origin}
@@ -1427,10 +1440,10 @@ export default function Home() {
               {
                 backgroundColor:
                   nearestRadar.distance <= 30
-                    ? "rgba(220, 38, 38, 0.95)" // Vermelho quando muito próximo
+                    ? "rgba(255,255,255,1)" // Transparente quando muito próximo
                     : nearestRadar.distance <= 100
-                      ? "rgba(245, 158, 11, 0.95)" // Laranja quando próximo
-                      : "rgba(59, 130, 246, 0.95)", // Azul quando distante
+                      ? "rgba(255,255,255,1)" // Transparente quando próximo
+                      : "rgba(255,255,255,1)", // Transparente quando distante
               },
             ]}
           >
@@ -1620,5 +1633,25 @@ const styles = StyleSheet.create({
   reportRadarButtonText: {
     fontSize: 28,
     color: "#fff",
+  },
+  editorButton: {
+    position: "absolute",
+    top: Platform.OS === "ios" ? 54 : 48,
+    right: 16,
+    zIndex: 100,
+    backgroundColor: "#1f2937",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  editorButtonText: {
+    fontSize: 13,
+    color: "#fff",
+    fontWeight: "600",
   },
 });

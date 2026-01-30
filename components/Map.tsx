@@ -26,6 +26,8 @@ interface MapProps {
   radars: Radar[];
   route?: RouteFeature | null;
   onRadarPress?: (radar: Radar) => void;
+  /** Chamado quando o usuário toca no mapa (fora de um radar). Coordenadas do toque. */
+  onMapPress?: (coords: { latitude: number; longitude: number }) => void;
   isNavigating?: boolean;
   currentLocation?: { latitude: number; longitude: number } | null;
   currentStep?: NavigationStep | null;
@@ -37,6 +39,7 @@ export default function Map({
   radars,
   route,
   onRadarPress,
+  onMapPress,
   isNavigating = false,
   currentLocation,
   currentStep,
@@ -224,6 +227,14 @@ export default function Map({
         compassEnabled={interactive}
         compassPosition={{ bottom: 420, right: 20 }}
         scaleBarEnabled={false}
+        onPress={(event) => {
+          const geometry = event?.geometry as { coordinates?: number[] } | undefined;
+          const coords = geometry?.coordinates;
+          if (onMapPress && Array.isArray(coords) && coords.length >= 2) {
+            const [lng, lat] = coords;
+            onMapPress({ latitude: lat, longitude: lng });
+          }
+        }}
       >
         <Camera
           ref={cameraRef}
