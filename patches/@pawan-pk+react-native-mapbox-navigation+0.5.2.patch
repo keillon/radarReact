@@ -50,22 +50,19 @@ index 7d28df3..3656ea3 100644
    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
    implementation 'androidx.cardview:cardview:1.0.0'
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
-index 41a3ba0..ba44e32 100644
+index 41a3ba0..87b1bb3 100644
 --- a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
 +++ b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
-@@ -3,24 +3,39 @@ package com.mapboxnavigation
+@@ -3,24 +3,30 @@ package com.mapboxnavigation
  import android.annotation.SuppressLint
  import android.content.res.Configuration
  import android.content.res.Resources
 +import android.graphics.BitmapFactory
-+import android.graphics.Color
-+import android.view.ViewGroup
  import android.util.Log
++import android.view.Gravity
  import android.view.LayoutInflater
  import android.view.View
  import android.widget.FrameLayout
-+import android.widget.ImageView
-+import android.widget.TextView
  import com.facebook.react.bridge.Arguments
  import com.facebook.react.uimanager.ThemedReactContext
  import com.facebook.react.uimanager.events.RCTEventEmitter
@@ -74,7 +71,6 @@ index 41a3ba0..ba44e32 100644
 -import com.mapbox.api.directions.v5.models.DirectionsWaypoint
  import com.mapbox.api.directions.v5.models.RouteOptions
  import com.mapbox.bindgen.Expected
-+import com.mapbox.common.MapboxOptions
  import com.mapbox.common.location.Location
 +import com.mapbox.geojson.Feature
 +import com.mapbox.geojson.FeatureCollection
@@ -83,18 +79,13 @@ index 41a3ba0..ba44e32 100644
  import com.mapbox.maps.CameraOptions
  import com.mapbox.maps.EdgeInsets
  import com.mapbox.maps.ImageHolder
-+import com.mapbox.maps.RenderedQueryGeometry
-+import com.mapbox.maps.RenderedQueryOptions
-+import com.mapbox.maps.ScreenCoordinate
  import com.mapbox.maps.plugin.LocationPuck2D
  import com.mapbox.maps.plugin.animation.camera
-+import com.mapbox.maps.plugin.gestures.addOnMapClickListener
-+import com.mapbox.maps.plugin.gestures.gestures
-+import com.mapbox.maps.plugin.gestures.removeOnMapClickListener
++import com.mapbox.maps.plugin.compass.compass
  import com.mapbox.maps.plugin.locationcomponent.location
  import com.mapbox.navigation.base.TimeFormat
  import com.mapbox.navigation.base.extensions.applyDefaultNavigationOptions
-@@ -50,6 +65,7 @@ import com.mapbox.navigation.tripdata.progress.model.EstimatedTimeToArrivalForma
+@@ -50,13 +56,13 @@ import com.mapbox.navigation.tripdata.progress.model.EstimatedTimeToArrivalForma
  import com.mapbox.navigation.tripdata.progress.model.PercentDistanceTraveledFormatter
  import com.mapbox.navigation.tripdata.progress.model.TimeRemainingFormatter
  import com.mapbox.navigation.tripdata.progress.model.TripProgressUpdateFormatter
@@ -102,27 +93,47 @@ index 41a3ba0..ba44e32 100644
  import com.mapbox.navigation.ui.base.util.MapboxNavigationConsumer
  import com.mapbox.navigation.ui.components.maneuver.model.ManeuverPrimaryOptions
  import com.mapbox.navigation.ui.components.maneuver.model.ManeuverSecondaryOptions
-@@ -57,6 +73,7 @@ import com.mapbox.navigation.ui.components.maneuver.model.ManeuverSubOptions
+ import com.mapbox.navigation.ui.components.maneuver.model.ManeuverSubOptions
  import com.mapbox.navigation.ui.components.maneuver.model.ManeuverViewOptions
  import com.mapbox.navigation.ui.components.maneuver.view.MapboxManeuverView
- import com.mapbox.navigation.ui.components.tripprogress.view.MapboxTripProgressView
-+import com.mapbox.navigation.ui.components.speedlimit.view.MapboxSpeedInfoView
+-import com.mapbox.navigation.ui.components.tripprogress.view.MapboxTripProgressView
  import com.mapbox.navigation.ui.maps.NavigationStyles
  import com.mapbox.navigation.ui.maps.camera.NavigationCamera
  import com.mapbox.navigation.ui.maps.camera.data.MapboxNavigationViewportDataSource
-@@ -83,7 +100,8 @@ import com.mapboxnavigation.databinding.NavigationViewBinding
+@@ -73,17 +79,24 @@ import com.mapbox.navigation.ui.maps.route.line.api.MapboxRouteLineView
+ import com.mapbox.navigation.ui.maps.route.line.model.MapboxRouteLineApiOptions
+ import com.mapbox.navigation.ui.maps.route.line.model.MapboxRouteLineViewOptions
+ import com.mapbox.navigation.ui.maps.route.line.model.RouteLineColorResources
++import com.mapbox.navigation.ui.maps.route.callout.api.DefaultRouteCalloutAdapter
++import com.mapbox.maps.viewannotation.ViewAnnotationManager
+ import com.mapbox.navigation.voice.api.MapboxSpeechApi
+ import com.mapbox.navigation.voice.api.MapboxVoiceInstructionsPlayer
+ import com.mapbox.navigation.voice.model.SpeechAnnouncement
+ import com.mapbox.navigation.voice.model.SpeechError
+ import com.mapbox.navigation.voice.model.SpeechValue
+ import com.mapbox.navigation.voice.model.SpeechVolume
++import com.mapbox.navigation.base.ExperimentalPreviewMapboxNavigationAPI
+ import com.mapboxnavigation.databinding.NavigationViewBinding
++import java.text.SimpleDateFormat
++import java.util.Date
  import java.util.Locale
  
  @SuppressLint("ViewConstructor")
 -class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout(context.baseContext) {
++@OptIn(ExperimentalPreviewMapboxNavigationAPI::class)
 +class MapboxNavigationView(private val context: ThemedReactContext) :
 +        FrameLayout(context.baseContext) {
    private companion object {
      private const val BUTTON_ANIMATION_DURATION = 1500L
    }
-@@ -96,25 +114,23 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
-   private var distanceUnit: String = DirectionsCriteria.IMPERIAL
-   private var locale = Locale.getDefault()
+@@ -93,28 +106,26 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+   private var destinationTitle: String = "Destination"
+   private var waypoints: List<Point> = listOf()
+   private var waypointLegs: List<WaypointLegs> = listOf()
+-  private var distanceUnit: String = DirectionsCriteria.IMPERIAL
+-  private var locale = Locale.getDefault()
++  private var distanceUnit: String = DirectionsCriteria.METRIC
++  private var locale = Locale("pt", "BR")
  
 -  /**
 -   * Bindings to the example layout.
@@ -155,7 +166,7 @@ index 41a3ba0..ba44e32 100644
  
    /**
     * Mapbox Navigation entry point. There should only be one instance of this object for the app.
-@@ -128,36 +144,76 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -128,38 +139,31 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
     */
    private val pixelDensity = Resources.getSystem().displayMetrics.density
    private val overviewPadding: EdgeInsets by lazy {
@@ -193,8 +204,8 @@ index 41a3ba0..ba44e32 100644
 -      40.0 * pixelDensity
 -    )
 +    EdgeInsets(30.0 * pixelDensity, 380.0 * pixelDensity, 110.0 * pixelDensity, 40.0 * pixelDensity)
-+  }
-+
+   }
+ 
 +  // Properties for radar functionality
 +  private var radars: List<RadarPoint> = listOf()
 +  private var filteredRadars: List<RadarPoint> = listOf() // Radares filtrados próximos à rota
@@ -207,56 +218,11 @@ index 41a3ba0..ba44e32 100644
 +  private var currentRouteIndex: Int = 0
 +  private var currentRoute: NavigationRoute? = null // Rota atual para filtrar radares
 +  private var navigationInitialized: Boolean = false
-+  private var alternativeRouteTapListenerRegistered: Boolean = false
-+  private var baseFollowingPadding: EdgeInsets? = null
-+  private var baseOverviewPadding: EdgeInsets? = null
-+  private val alternativeRouteTapListener: (Point) -> Boolean = { clickedPoint ->
-+    if (alternativeRoutes.size <= 1) {
-+      false
-+    } else {
-+      try {
-+        val style = getCurrentStyle()
-+        if (style == null) {
-+          false
-+        } else {
-+          val screen: ScreenCoordinate = binding.mapView.mapboxMap.pixelForCoordinate(clickedPoint)
-+          // 1) Tentar selecionar pela bolha/callout (mais preciso)
-+          val options =
-+                  RenderedQueryOptions(
-+                          listOf("alternative-routes-callouts-circle-layer", "alternative-routes-callouts-layer"),
-+                          null
-+                  )
-+          binding.mapView.mapboxMap.queryRenderedFeatures(
-+                  RenderedQueryGeometry(screen),
-+                  options
-+          ) { expected ->
-+            val features = expected.value ?: emptyList()
-+            val first = features.firstOrNull()?.queriedFeature?.feature
-+            val idxStr = try { first?.getStringProperty("routeIndex") } catch (_: Exception) { null }
-+            val idx = idxStr?.toIntOrNull()
-+            if (idx != null) {
-+              selectAlternativeRoute(idx, source = "callout")
-+            }
-+          }
 +
-+          // 2) Se não tocar no callout, tentar selecionar pela linha (distância ao polyline)
-+          val idxByLine = findClosestAlternativeRouteIndex(clickedPoint)
-+          if (idxByLine != null) {
-+            selectAlternativeRoute(idxByLine, source = "line")
-+            true
-+          } else {
-+            false
-+          }
-+        }
-+      } catch (e: Exception) {
-+        Log.w("MapboxNavigationView", "Erro ao processar toque em rota alternativa: ${e.message}")
-+        false
-+      }
-+    }
-   }
- 
    /**
-@@ -167,12 +223,23 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+    * Generates updates for the [MapboxManeuverView] to display the upcoming maneuver instructions
+    * and remaining distance to the maneuver point.
+@@ -167,12 +171,23 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
    private lateinit var maneuverApi: MapboxManeuverApi
  
    /**
@@ -268,8 +234,8 @@ index 41a3ba0..ba44e32 100644
  
    /**
 -   * Stores and updates the state of whether the voice instructions should be played as they come or muted.
-+   * Speed Limit API: formata dados de limite de velocidade para o MapboxSpeedInfoView.
-+   * Ver: https://docs.mapbox.com/android/navigation/guides/ui-components/speed-limit/
++   * Speed Limit API: formata dados de limite de velocidade para o MapboxSpeedInfoView. Ver:
++   * https://docs.mapbox.com/android/navigation/guides/ui-components/speed-limit/
 +   */
 +  private val speedInfoApi: MapboxSpeedInfoApi by lazy { MapboxSpeedInfoApi() }
 +
@@ -282,7 +248,7 @@ index 41a3ba0..ba44e32 100644
     */
    private var isVoiceInstructionsMuted = false
      set(value) {
-@@ -187,134 +254,130 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -187,134 +202,132 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
      }
  
    /**
@@ -427,9 +393,10 @@ index 41a3ba0..ba44e32 100644
    }
  
    private val routeLineApiOptions: MapboxRouteLineApiOptions by lazy {
--    MapboxRouteLineApiOptions.Builder()
+     MapboxRouteLineApiOptions.Builder()
 -      .build()
-+    MapboxRouteLineApiOptions.Builder().build()
++            .isRouteCalloutsEnabled(true)
++            .build()
    }
  
    /**
@@ -490,7 +457,7 @@ index 41a3ba0..ba44e32 100644
     */
    private val routeArrowView: MapboxRouteArrowView by lazy {
      MapboxRouteArrowView(routeArrowOptions)
-@@ -323,54 +386,79 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -323,54 +336,81 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
    /**
     * Gets notified with location updates.
     *
@@ -577,14 +544,16 @@ index 41a3ba0..ba44e32 100644
 +              context.getJSModule(RCTEventEmitter::class.java)
 +                      .receiveEvent(id, "onLocationChange", event)
 +
-+              // Speed Limit: conforme doc oficial https://docs.mapbox.com/android/navigation/guides/ui-components/speed-limit/
++              // Speed Limit: conforme doc oficial
++              // https://docs.mapbox.com/android/navigation/guides/ui-components/speed-limit/
 +              val opts = distanceFormatterOptions
 +              if (opts != null) {
 +                try {
-+                  val value = speedInfoApi.updatePostedAndCurrentSpeed(
-+                    locationMatcherResult,
-+                    opts,
-+                  )
++                  val value =
++                          speedInfoApi.updatePostedAndCurrentSpeed(
++                                  locationMatcherResult,
++                                  opts,
++                          )
 +                  if (value != null) {
 +                    binding.speedLimitView.render(value)
 +                    binding.speedLimitView.visibility = View.VISIBLE
@@ -607,7 +576,7 @@ index 41a3ba0..ba44e32 100644
 +      filterRadarsNearRoute()
      }
 -  }
-     
+ 
 -  /**
 -   * Gets notified with progress along the currently active route.
 -   */
@@ -615,7 +584,7 @@ index 41a3ba0..ba44e32 100644
      // update the camera position to account for the progressed fragment of the route
      if (routeProgress.fractionTraveled.toDouble() != 0.0) {
        viewportDataSource.onRouteProgressChanged(routeProgress)
-@@ -387,48 +475,67 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -387,48 +427,108 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
      // update top banner with maneuver instructions
      val maneuvers = maneuverApi.getManeuvers(routeProgress)
      maneuvers.fold(
@@ -676,32 +645,12 @@ index 41a3ba0..ba44e32 100644
 +            }
      )
  
-     // update bottom trip progress summary
+-    // update bottom trip progress summary
 -    binding.tripProgressView.render(
 -      tripProgressApi.getTripProgress(routeProgress)
 -    )
-+    binding.tripProgressView.render(tripProgressApi.getTripProgress(routeProgress))
-+    
-+    // Atualizar detalhes adicionais do Trip Progress
-+    try {
-+      val tripProgressDetailsId = context.resources.getIdentifier("tripProgressDetails", "id", context.packageName)
-+      if (tripProgressDetailsId != 0) {
-+        val tripProgressDetails = binding.tripProgressCard.findViewById<android.widget.TextView>(tripProgressDetailsId)
-+        tripProgressDetails?.let {
-+          val distanceKm = routeProgress.distanceRemaining / 1000.0
-+          val durationMinutes = (routeProgress.durationRemaining / 60).toInt()
-+          val progressPercent = (routeProgress.fractionTraveled * 100).toInt()
-+          
-+          val detailsText = when {
-+            durationMinutes < 60 -> "${durationMinutes}min restantes • ${progressPercent}% concluído"
-+            else -> "${durationMinutes / 60}h ${durationMinutes % 60}min restantes • ${progressPercent}% concluído"
-+          }
-+          it.text = detailsText
-+        }
-+      }
-+    } catch (e: Exception) {
-+      Log.d("MapboxNavigationView", "Erro ao atualizar detalhes do trip progress: ${e.message}")
-+    }
++    // update trip progress: duas linhas (tempo em destaque + distância — ETA), estilo primeira imagem
++    updateTripProgressUi(routeProgress)
  
      val event = Arguments.createMap()
      event.putDouble("distanceTraveled", routeProgress.distanceTraveled.toDouble())
@@ -713,10 +662,72 @@ index 41a3ba0..ba44e32 100644
 -      .receiveEvent(id, "onRouteProgressChange", event)
 +    context.getJSModule(RCTEventEmitter::class.java)
 +            .receiveEvent(id, "onRouteProgressChange", event)
++  }
++
++  /**
++   * Atualiza a barra de trip progress no estilo da primeira imagem:
++   * Linha 1: tempo restante (número em destaque + " min" ou " h X min")
++   * Linha 2: distância restante — ETA (ex: "0.3 mi — 10:42 am")
++   */
++  private fun updateTripProgressUi(routeProgress: RouteProgress) {
++    try {
++      val durationRemainingSec = routeProgress.durationRemaining
++      val distanceRemainingM = routeProgress.distanceRemaining
++      val isImperial = distanceUnit == DirectionsCriteria.IMPERIAL
++
++      // Linha 1: tempo restante
++      val totalMinutes = (durationRemainingSec / 60).toInt()
++      val timeValue: String
++      val timeUnit: String
++      if (totalMinutes < 60) {
++        timeValue = totalMinutes.toString()
++        timeUnit = " min"
++      } else {
++        val hours = totalMinutes / 60
++        val mins = totalMinutes % 60
++        timeValue = hours.toString()
++        timeUnit = if (mins > 0) " h $mins min" else " h"
++      }
++      binding.tripProgressTimeValue.text = timeValue
++      binding.tripProgressTimeUnit.text = timeUnit
++
++      // Linha 2: distância — ETA
++      val distanceStr =
++              if (isImperial) {
++                val miles = distanceRemainingM / 1609.34
++                when {
++                  miles < 0.00019 -> "${(distanceRemainingM * 3.28084).toInt()} ft"
++                  miles < 1.0 -> String.format(locale, "%.1f mi", miles)
++                  else -> String.format(locale, "%.0f mi", miles)
++                }
++              } else {
++                val km = distanceRemainingM / 1000.0
++                when {
++                  km < 0.001 -> "${distanceRemainingM.toInt()} m"
++                  km < 1.0 -> String.format(locale, "%.1f km", km)
++                  else -> String.format(locale, "%.0f km", km)
++                }
++              }
++      val etaMillis = System.currentTimeMillis() + (durationRemainingSec * 1000).toLong()
++      val etaStr =
++              try {
++                val sdf = SimpleDateFormat("h:mm a", locale)
++                sdf.format(Date(etaMillis))
++              } catch (e: Exception) {
++                try {
++                  SimpleDateFormat("HH:mm", locale).format(Date(etaMillis))
++                } catch (e2: Exception) {
++                  "--"
++                }
++              }
++      binding.tripProgressDistanceEta.text = "$distanceStr — $etaStr"
++    } catch (e: Exception) {
++      Log.d("MapboxNavigationView", "updateTripProgressUi: ${e.message}")
++    }
    }
  
    /**
-@@ -436,17 +543,35 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -436,14 +536,23 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
     *
     * A change can mean:
     * - routes get changed with [MapboxNavigation.setNavigationRoutes]
@@ -727,36 +738,23 @@ index 41a3ba0..ba44e32 100644
     */
    private val routesObserver = RoutesObserver { routeUpdateResult ->
      if (routeUpdateResult.navigationRoutes.isNotEmpty()) {
-+      // Atualizar cache local (top 3) para UI / seleção
-+      alternativeRoutes = routeUpdateResult.navigationRoutes.take(3)
-+      currentRouteIndex = 0
-+
+-      // generate route geometries asynchronously and render them
 +      // Armazenar rota atual para filtrar radares
 +      currentRoute = routeUpdateResult.navigationRoutes.first()
-+      
++
 +      // Filtrar radares próximos à rota
 +      filterRadarsNearRoute()
-+      
-       // generate route geometries asynchronously and render them
--      routeLineApi.setNavigationRoutes(
++
++      // generate route geometries with SDK default callouts (duration/ETA per route)
++      val alternativesMetadata = mapboxNavigation?.getAlternativeMetadataFor(routeUpdateResult.navigationRoutes)
+       routeLineApi.setNavigationRoutes(
 -        routeUpdateResult.navigationRoutes
--      ) { value ->
-+      routeLineApi.setNavigationRoutes(routeUpdateResult.navigationRoutes) { value ->
-         binding.mapView.mapboxMap.style?.apply { 
++              routeUpdateResult.navigationRoutes,
++              alternativesMetadata ?: emptyList()
+       ) { value ->
+         binding.mapView.mapboxMap.style?.apply {
            routeLineView.renderRouteDrawData(this, value)
-+          // Adicionar callouts após a linha da rota estar renderizada
-+          binding.mapView.postDelayed({
-+            getCurrentStyle()?.let { style ->
-+              addRouteCallouts(routeUpdateResult.navigationRoutes.first())
-+              if (alternativeRoutes.size > 1) {
-+                showAlternativeRoutes(alternativeRoutes)
-+              }
-+            }
-+          }, 400)
-         }
-       }
- 
-@@ -454,14 +579,16 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -454,14 +563,16 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
        viewportDataSource.onRouteChanged(routeUpdateResult.navigationRoutes.first())
        viewportDataSource.evaluate()
      } else {
@@ -764,7 +762,7 @@ index 41a3ba0..ba44e32 100644
 +      currentRoute = null
 +      filteredRadars = radars
 +      updateRadarsOnMap()
-+      
++
        // remove the route line and route arrow from the map
        val style = binding.mapView.mapboxMap.style
        if (style != null) {
@@ -777,49 +775,28 @@ index 41a3ba0..ba44e32 100644
          }
          routeArrowView.render(style, routeArrowApi.clearArrows())
        }
-@@ -476,30 +603,52 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
-     onCreate()
+@@ -477,156 +588,200 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
    }
  
--  private fun onCreate() {
+   private fun onCreate() {
 -    // initialize Mapbox Navigation
 -    mapboxNavigation = if (MapboxNavigationProvider.isCreated()) {
 -      MapboxNavigationProvider.retrieve()
-+  private fun ensureMapboxAccessTokenConfigured() {
-+    val existingToken = runCatching { MapboxOptions.accessToken }.getOrNull()
-+    if (!existingToken.isNullOrBlank()) {
-+      return
-+    }
-+
-+    val resId = context.resources.getIdentifier("mapbox_access_token", "string", context.packageName)
-+    val tokenFromResources =
-+            if (resId != 0) runCatching { context.getString(resId) }.getOrNull() else null
-+
-+    if (!tokenFromResources.isNullOrBlank()) {
-+      MapboxOptions.accessToken = tokenFromResources
-+      Log.d("MapboxNavigationView", "✅ MapboxOptions.accessToken configurado via resources")
-     } else {
+-    } else {
 -      MapboxNavigationProvider.create(
 -        NavigationOptions.Builder(context)
 -          .build()
-+      Log.e(
-+              "MapboxNavigationView",
-+              "❌ mapbox_access_token não encontrado. Defina em src/main/res/values/mapbox_access_token.xml ou via MapboxOptions.accessToken."
-       )
+-      )
++    // initialize Mapbox Navigation v3.18.0 (token lido de res/values ou MapboxOptions)
++    if (!MapboxNavigationProvider.isCreated()) {
++      val navigationOptions =
++              NavigationOptions.Builder(context)
++                      .build()
++      MapboxNavigationProvider.create(navigationOptions)
      }
++    mapboxNavigation = MapboxNavigationProvider.retrieve()
    }
  
-+  private fun onCreate() {
-+    // initialize Mapbox Navigation v3.18.0
-+    if (!MapboxNavigationProvider.isCreated()) {
-+      // No SDK v3.x, o token vem de MapboxOptions ou de mapbox_access_token.xml (resources).
-+      ensureMapboxAccessTokenConfigured()
-+      val navigationOptions = NavigationOptions.Builder(context).build()
-+      MapboxNavigationProvider.create(navigationOptions)
-+    }
-+    mapboxNavigation = MapboxNavigationProvider.retrieve()
-+  }
-+
    @SuppressLint("MissingPermission")
    private fun initNavigation() {
      if (origin == null || destination == null) {
@@ -833,60 +810,86 @@ index 41a3ba0..ba44e32 100644
 +      navigationInitialized = true
 +      Log.d("MapboxNavigationView", "Iniciando navegação: origin=$origin, destination=$destination")
  
-     // Recenter Camera
+-    // Recenter Camera
 -    val initialCameraOptions = CameraOptions.Builder()
 -      .zoom(14.0)
 -      .center(origin)
 -      .build()
-+    val initialCameraOptions = CameraOptions.Builder().zoom(14.0).center(origin).build()
-     binding.mapView.mapboxMap.setCamera(initialCameraOptions)
+-    binding.mapView.mapboxMap.setCamera(initialCameraOptions)
++      // Recenter Camera
++      val initialCameraOptions = CameraOptions.Builder().zoom(14.0).center(origin).build()
++      binding.mapView.mapboxMap.setCamera(initialCameraOptions)
  
-     // Start Navigation
-@@ -508,14 +657,13 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
-     // set the animations lifecycle listener to ensure the NavigationCamera stops
-     // automatically following the user location when the map is interacted with
-     binding.mapView.camera.addCameraAnimationsLifecycleListener(
+-    // Start Navigation
+-    startNavigation()
++      // Start Navigation
++      startNavigation()
+ 
+-    // set the animations lifecycle listener to ensure the NavigationCamera stops
+-    // automatically following the user location when the map is interacted with
+-    binding.mapView.camera.addCameraAnimationsLifecycleListener(
 -      NavigationBasicGesturesHandler(navigationCamera)
-+            NavigationBasicGesturesHandler(navigationCamera)
-     )
-     navigationCamera.registerNavigationCameraStateChangeObserver { navigationCameraState ->
-       // shows/hide the recenter button depending on the camera state
-       when (navigationCameraState) {
+-    )
+-    navigationCamera.registerNavigationCameraStateChangeObserver { navigationCameraState ->
+-      // shows/hide the recenter button depending on the camera state
+-      when (navigationCameraState) {
 -        NavigationCameraState.TRANSITION_TO_FOLLOWING,
 -        NavigationCameraState.FOLLOWING -> binding.recenter.visibility = View.INVISIBLE
 -
-+        NavigationCameraState.TRANSITION_TO_FOLLOWING, NavigationCameraState.FOLLOWING ->
-+                binding.recenter.visibility = View.INVISIBLE
-         NavigationCameraState.TRANSITION_TO_OVERVIEW,
-         NavigationCameraState.OVERVIEW,
-         NavigationCameraState.IDLE -> binding.recenter.visibility = View.VISIBLE
-@@ -532,63 +680,89 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
-     } else {
-       viewportDataSource.followingPadding = followingPadding
-     }
-+    // Guardar paddings base (sem extra do modal) para não acumular.
-+    baseOverviewPadding = viewportDataSource.overviewPadding
-+    baseFollowingPadding = viewportDataSource.followingPadding
- 
+-        NavigationCameraState.TRANSITION_TO_OVERVIEW,
+-        NavigationCameraState.OVERVIEW,
+-        NavigationCameraState.IDLE -> binding.recenter.visibility = View.VISIBLE
++      // set the animations lifecycle listener to ensure the NavigationCamera stops
++      // automatically following the user location when the map is interacted with
++      binding.mapView.camera.addCameraAnimationsLifecycleListener(
++              NavigationBasicGesturesHandler(navigationCamera)
++      )
++      navigationCamera.registerNavigationCameraStateChangeObserver { navigationCameraState ->
++        // shows/hide the recenter button depending on the camera state
++        when (navigationCameraState) {
++          NavigationCameraState.TRANSITION_TO_FOLLOWING, NavigationCameraState.FOLLOWING ->
++                  binding.recenter.visibility = View.INVISIBLE
++          NavigationCameraState.TRANSITION_TO_OVERVIEW,
++          NavigationCameraState.OVERVIEW,
++          NavigationCameraState.IDLE -> binding.recenter.visibility = View.VISIBLE
++        }
++      }
++      // set the padding values depending on screen orientation and visible view layout
++      if (this.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
++        viewportDataSource.overviewPadding = landscapeOverviewPadding
++      } else {
++        viewportDataSource.overviewPadding = overviewPadding
++      }
++      if (this.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
++        viewportDataSource.followingPadding = landscapeFollowingPadding
++      } else {
++        viewportDataSource.followingPadding = followingPadding
+       }
+-    }
+-    // set the padding values depending on screen orientation and visible view layout
+-    if (this.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+-      viewportDataSource.overviewPadding = landscapeOverviewPadding
+-    } else {
+-      viewportDataSource.overviewPadding = overviewPadding
+-    }
+-    if (this.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+-      viewportDataSource.followingPadding = landscapeFollowingPadding
+-    } else {
+-      viewportDataSource.followingPadding = followingPadding
+-    }
+-
 -    // make sure to use the same DistanceFormatterOptions across different features
-+    // Aplicar extraBottomPadding (modal radar) caso já tenha sido setado via React.
-+    updateCameraPadding()
-+
-+    // make sure to use the same DistanceFormatterOptions across different features (incl. Speed Limit API)
-     val unitType = if (distanceUnit == "imperial") UnitType.IMPERIAL else UnitType.METRIC
+-    val unitType = if (distanceUnit == "imperial") UnitType.IMPERIAL else UnitType.METRIC
 -    val distanceFormatterOptions = DistanceFormatterOptions.Builder(context)
 -      .unitType(unitType)
 -      .build()
-+    val options = DistanceFormatterOptions.Builder(context).unitType(unitType).build()
-+    distanceFormatterOptions = options
- 
-     // initialize maneuver api that feeds the data to the top banner maneuver view
+-
+-    // initialize maneuver api that feeds the data to the top banner maneuver view
 -    maneuverApi = MapboxManeuverApi(
 -      MapboxDistanceFormatter(distanceFormatterOptions)
 -    )
-+    maneuverApi = MapboxManeuverApi(MapboxDistanceFormatter(options))
  
-     // initialize bottom progress view
+-    // initialize bottom progress view
 -    tripProgressApi = MapboxTripProgressApi(
 -      TripProgressUpdateFormatter.Builder(context)
 -        .distanceRemainingFormatter(
@@ -903,26 +906,7 @@ index 41a3ba0..ba44e32 100644
 -        )
 -        .build()
 -    )
-+    tripProgressApi =
-+            MapboxTripProgressApi(
-+                    TripProgressUpdateFormatter.Builder(context)
-+                            .distanceRemainingFormatter(
-+                                    DistanceRemainingFormatter(options)
-+                            )
-+                            .timeRemainingFormatter(TimeRemainingFormatter(context))
-+                            .percentRouteTraveledFormatter(PercentDistanceTraveledFormatter())
-+                            .estimatedTimeToArrivalFormatter(
-+                                    EstimatedTimeToArrivalFormatter(
-+                                            context,
-+                                            TimeFormat.NONE_SPECIFIED
-+                                    )
-+                            )
-+                            .build()
-+            )
-+    // Estilizar TripProgress (texto amarelo / ícones brancos) após inflate.
-+    tintTripProgressViewColors()
-+    
-     // initialize voice instructions api and the voice instruction player
+-    // initialize voice instructions api and the voice instruction player
 -    speechApi = MapboxSpeechApi(
 -      context,
 -      locale.language
@@ -931,69 +915,142 @@ index 41a3ba0..ba44e32 100644
 -      context,
 -      locale.language
 -    )
-+    speechApi = MapboxSpeechApi(context, locale.language)
-+    try {
-+      voiceInstructionsPlayer = MapboxVoiceInstructionsPlayer(context, locale.language)
-+    } catch (e: Exception) {
-+      Log.w("MapboxNavigationView", "Voice instructions não disponíveis: ${e.message}")
-+      voiceInstructionsPlayer = null
-+    }
- 
-     // load map style
-     binding.mapView.mapboxMap.loadStyle(NavigationStyles.NAVIGATION_DAY_STYLE) {
-       // Ensure that the route line related layers are present before the route arrow
-       routeLineView.initializeLayers(it)
++      // make sure to use the same DistanceFormatterOptions across different features (incl. Speed
++      // Limit API)
++      val unitType = if (distanceUnit == "imperial") UnitType.IMPERIAL else UnitType.METRIC
++      val options = DistanceFormatterOptions.Builder(context).unitType(unitType).build()
++      distanceFormatterOptions = options
 +
-+      // Registrar listener para o usuário escolher entre rotas alternativas (top 3)
-+      if (!alternativeRouteTapListenerRegistered) {
-+        try {
-+          binding.mapView.gestures.addOnMapClickListener(alternativeRouteTapListener)
-+          alternativeRouteTapListenerRegistered = true
-+          Log.d("MapboxNavigationView", "✅ Listener de toque para rotas alternativas registrado")
-+        } catch (e: Exception) {
-+          Log.w("MapboxNavigationView", "Erro ao registrar listener de rotas alternativas: ${e.message}")
-+        }
-+      }
-+      
-+      // Carregar imagens de radar e registrar listener
++      // initialize maneuver api that feeds the data to the top banner maneuver view
++      maneuverApi = MapboxManeuverApi(MapboxDistanceFormatter(options))
++
++      // initialize bottom progress view
++      tripProgressApi =
++              MapboxTripProgressApi(
++                      TripProgressUpdateFormatter.Builder(context)
++                              .distanceRemainingFormatter(DistanceRemainingFormatter(options))
++                              .timeRemainingFormatter(TimeRemainingFormatter(context))
++                              .percentRouteTraveledFormatter(PercentDistanceTraveledFormatter())
++                              .estimatedTimeToArrivalFormatter(
++                                      EstimatedTimeToArrivalFormatter(
++                                              context,
++                                              TimeFormat.NONE_SPECIFIED
++                                      )
++                              )
++                              .build()
++              )
++
++      // initialize voice instructions api and the voice instruction player (pt-BR)
++      val voiceLanguage = locale.toLanguageTag()
++      speechApi = MapboxSpeechApi(context, voiceLanguage)
 +      try {
-+        loadRadarImages(it)
-+        registerImageMissingListener(it)
-+        // Atualizar radares se já houver algum definido
-+        if (radars.isNotEmpty()) {
-+          updateRadarsOnMap()
-+        }
++        voiceInstructionsPlayer = MapboxVoiceInstructionsPlayer(context, voiceLanguage)
 +      } catch (e: Exception) {
-+        Log.e("MapboxNavigationView", "Erro ao inicializar radares no estilo", e)
++        Log.w("MapboxNavigationView", "Voice instructions não disponíveis: ${e.message}")
++        voiceInstructionsPlayer = null
 +      }
-     }
  
-     // initialize view interactions
-     binding.stop.setOnClickListener {
-       val event = Arguments.createMap()
-       event.putString("message", "Navigation Cancel")
+-    // load map style
+-    binding.mapView.mapboxMap.loadStyle(NavigationStyles.NAVIGATION_DAY_STYLE) {
+-      // Ensure that the route line related layers are present before the route arrow
+-      routeLineView.initializeLayers(it)
+-    }
++      // load map style
++      binding.mapView.mapboxMap.loadStyle(NavigationStyles.NAVIGATION_DAY_STYLE) { style ->
++        // Ensure that the route line related layers are present before the route arrow
++        routeLineView.initializeLayers(style)
++        // Callouts padrão do SDK: bolha com duração/ETA na rota (doc: route-callout)
++        val viewAnnotationManager: ViewAnnotationManager = binding.mapView.viewAnnotationManager
++        val defaultCalloutAdapter = DefaultRouteCalloutAdapter(context)
++        routeLineView.setCalloutAdapter(viewAnnotationManager, defaultCalloutAdapter)
++
++        // Carregar imagens de radar e registrar listener
++        try {
++          loadRadarImages(style)
++          registerImageMissingListener(style)
++          // Atualizar radares se já houver algum definido
++          if (radars.isNotEmpty()) {
++            updateRadarsOnMap()
++          }
++        } catch (e: Exception) {
++          Log.e("MapboxNavigationView", "Erro ao inicializar radares no estilo", e)
++        }
++        // Compass: posição abaixo dos controles (recenter/overview/sound), canto inferior direito
++        try {
++          val density = pixelDensity.toFloat()
++          binding.mapView.compass.updateSettings {
++            position = Gravity.BOTTOM or Gravity.END
++            marginRight = 16f * density
++            marginBottom = 96f * density
++            marginTop = 4f * density
++            marginLeft = 4f * density
++          }
++        } catch (e: Exception) {
++          Log.d("MapboxNavigationView", "Compass position: ${e.message}")
++        }
++      }
+ 
+-    // initialize view interactions
+-    binding.stop.setOnClickListener {
+-      val event = Arguments.createMap()
+-      event.putString("message", "Navigation Cancel")
 -      context
 -        .getJSModule(RCTEventEmitter::class.java)
 -        .receiveEvent(id, "onCancelNavigation", event)
-+      context.getJSModule(RCTEventEmitter::class.java).receiveEvent(id, "onCancelNavigation", event)
-     }
+-    }
++      // initialize view interactions
++      binding.stop.setOnClickListener {
++        val event = Arguments.createMap()
++        event.putString("message", "Navigation Cancel")
++        context.getJSModule(RCTEventEmitter::class.java)
++                .receiveEvent(id, "onCancelNavigation", event)
++      }
  
-     binding.recenter.setOnClickListener {
-       navigationCamera.requestNavigationCameraToFollowing()
+-    binding.recenter.setOnClickListener {
+-      navigationCamera.requestNavigationCameraToFollowing()
 -      binding.routeOverview.showTextAndExtend(BUTTON_ANIMATION_DURATION)
-+       binding.routeOverview.showTextAndExtend(BUTTON_ANIMATION_DURATION)
-     }
-     binding.routeOverview.setOnClickListener {
-       navigationCamera.requestNavigationCameraToOverview()
-@@ -607,26 +781,45 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
-       binding.soundButton.unmute()
-       voiceInstructionsPlayer?.volume(SpeechVolume(1f))
-     }
+-    }
+-    binding.routeOverview.setOnClickListener {
+-      navigationCamera.requestNavigationCameraToOverview()
+-      binding.recenter.showTextAndExtend(BUTTON_ANIMATION_DURATION)
+-    }
+-    binding.soundButton.setOnClickListener {
+-      // mute/unmute voice instructions
+-      isVoiceInstructionsMuted = !isVoiceInstructionsMuted
+-    }
++      binding.recenter.setOnClickListener {
++        navigationCamera.requestNavigationCameraToFollowing()
++        binding.routeOverview.showTextAndExtend(BUTTON_ANIMATION_DURATION)
++      }
++      binding.routeOverview.setOnClickListener {
++        navigationCamera.requestNavigationCameraToOverview()
++        binding.recenter.showTextAndExtend(BUTTON_ANIMATION_DURATION)
++      }
++      binding.soundButton.setOnClickListener {
++        // mute/unmute voice instructions
++        isVoiceInstructionsMuted = !isVoiceInstructionsMuted
++      }
+ 
+-    // Check initial muted or not
+-    if (this.isVoiceInstructionsMuted) {
+-      binding.soundButton.mute()
+-      voiceInstructionsPlayer?.volume(SpeechVolume(0f))
+-    } else {
+-      binding.soundButton.unmute()
+-      voiceInstructionsPlayer?.volume(SpeechVolume(1f))
++      // Check initial muted or not
++      if (this.isVoiceInstructionsMuted) {
++        binding.soundButton.mute()
++        voiceInstructionsPlayer?.volume(SpeechVolume(0f))
++      } else {
++        binding.soundButton.unmute()
++        voiceInstructionsPlayer?.volume(SpeechVolume(1f))
++      }
 +    } catch (e: Exception) {
 +      navigationInitialized = false
 +      Log.e("MapboxNavigationView", "Erro ao inicializar navegação", e)
 +      sendErrorToReact("Erro ao iniciar navegação: ${e.message}")
-+    }
+     }
    }
  
    private fun onDestroy() {
@@ -1042,7 +1099,7 @@ index 41a3ba0..ba44e32 100644
        puckBearingEnabled = true
        enabled = true
      }
-@@ -634,20 +827,21 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -634,20 +789,21 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
      startRoute()
    }
  
@@ -1075,7 +1132,7 @@ index 41a3ba0..ba44e32 100644
  
    private fun onArrival(routeProgress: RouteProgress) {
      val leg = routeProgress.currentLegProgress
-@@ -656,9 +850,7 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -656,9 +812,7 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
        event.putInt("index", leg.legIndex)
        event.putDouble("latitude", leg.legDestination?.location?.latitude() ?: 0.0)
        event.putDouble("longitude", leg.legDestination?.location?.longitude() ?: 0.0)
@@ -1086,7 +1143,7 @@ index 41a3ba0..ba44e32 100644
      }
    }
  
-@@ -669,8 +861,8 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -669,8 +823,8 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
  
    private val measureAndLayout = Runnable {
      measure(
@@ -1097,7 +1154,7 @@ index 41a3ba0..ba44e32 100644
      )
      layout(left, top, right, bottom)
    }
-@@ -687,53 +879,87 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -687,53 +841,92 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
      names.add(destinationTitle)
  
      mapboxNavigation?.requestRoutes(
@@ -1139,7 +1196,9 @@ index 41a3ba0..ba44e32 100644
 +                    .voiceInstructions(true)
 +                    .voiceUnits(distanceUnit)
 +                    .alternatives(true) // Solicitar rotas alternativas
-+                    .annotationsList(listOf(DirectionsCriteria.ANNOTATION_MAXSPEED)) // Necessário para speedLimitInfo
++                    .annotationsList(
++                            listOf(DirectionsCriteria.ANNOTATION_MAXSPEED)
++                    ) // Necessário para speedLimitInfo
 +                    .build(),
 +            object : NavigationRouterCallback {
 +              override fun onCanceled(
@@ -1160,12 +1219,12 @@ index 41a3ba0..ba44e32 100644
 +                // Armazenar rotas alternativas (até 3 melhores)
 +                alternativeRoutes = routes.take(3)
 +                currentRouteIndex = 0
-+                
++
 +                // Mostrar rotas alternativas no mapa antes de iniciar navegação
 +                if (alternativeRoutes.size > 1) {
 +                  showAlternativeRoutes(alternativeRoutes)
 +                }
-+                
++
 +                setRouteAndStartNavigation(routes)
 +              }
 +            }
@@ -1216,7 +1275,10 @@ index 41a3ba0..ba44e32 100644
 +    this.destination?.let { coordinatesList.add(it) }
 +
 +    if (coordinatesList.size < 2) {
-+      Log.e("MapboxNavigationView", "startRoute: origem e destino são obrigatórios (pontos=${coordinatesList.size})")
++      Log.e(
++              "MapboxNavigationView",
++              "startRoute: origem e destino são obrigatórios (pontos=${coordinatesList.size})"
++      )
 +      sendErrorToReact("Origem e destino são obrigatórios")
 +      return
 +    }
@@ -1224,7 +1286,7 @@ index 41a3ba0..ba44e32 100644
      // register event listeners
      mapboxNavigation?.registerRoutesObserver(routesObserver)
      mapboxNavigation?.registerArrivalObserver(arrivalObserver)
-@@ -741,12 +967,6 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -741,12 +934,6 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
      mapboxNavigation?.registerLocationObserver(locationObserver)
      mapboxNavigation?.registerVoiceInstructionsObserver(voiceInstructionsObserver)
  
@@ -1237,7 +1299,7 @@ index 41a3ba0..ba44e32 100644
      findRoute(coordinatesList)
    }
  
-@@ -763,17 +983,26 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -763,17 +950,16 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
  
      // hide UI elements
      binding.soundButton.visibility = View.INVISIBLE
@@ -1246,16 +1308,6 @@ index 41a3ba0..ba44e32 100644
      binding.routeOverview.visibility = View.INVISIBLE
      binding.tripProgressCard.visibility = View.INVISIBLE
 +    binding.speedLimitView.visibility = View.INVISIBLE
-+
-+    // remover listener de toque em rotas alternativas
-+    if (alternativeRouteTapListenerRegistered) {
-+      try {
-+        binding.mapView.gestures.removeOnMapClickListener(alternativeRouteTapListener)
-+      } catch (_: Exception) {
-+        // ignore
-+      }
-+      alternativeRouteTapListenerRegistered = false
-+    }
    }
  
    private fun sendErrorToReact(error: String?) {
@@ -1268,7 +1320,7 @@ index 41a3ba0..ba44e32 100644
    }
  
    fun onDropViewInstance() {
-@@ -782,10 +1011,12 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -782,10 +968,12 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
  
    fun setStartOrigin(origin: Point?) {
      this.origin = origin
@@ -1281,7 +1333,7 @@ index 41a3ba0..ba44e32 100644
    }
  
    fun setDestinationTitle(title: String) {
-@@ -802,7 +1033,7 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -802,7 +990,7 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
  
    fun setDirectionUnit(unit: String) {
      this.distanceUnit = unit
@@ -1290,7 +1342,7 @@ index 41a3ba0..ba44e32 100644
    }
  
    fun setLocal(language: String) {
-@@ -820,4 +1051,918 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -820,4 +1008,729 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
    fun setShowCancelButton(show: Boolean) {
      binding.stop.visibility = if (show) View.VISIBLE else View.INVISIBLE
    }
@@ -1310,14 +1362,14 @@ index 41a3ba0..ba44e32 100644
 +    try {
 +      this.radars = radars
 +      Log.d("MapboxNavigationView", "📍 ${radars.size} radares definidos")
-+      
++
 +      // Filtrar radares se houver rota ativa
 +      if (currentRoute != null) {
 +        filterRadarsNearRoute()
 +      } else {
 +        filteredRadars = radars
 +      }
-+      
++
 +      updateRadarAnnotations()
 +    } catch (e: Exception) {
 +      Log.e("MapboxNavigationView", "Erro ao definir radares", e)
@@ -1358,108 +1410,26 @@ index 41a3ba0..ba44e32 100644
 +
 +  private fun updateCameraPadding() {
 +    try {
-+      val followingBase = baseFollowingPadding ?: viewportDataSource.followingPadding
-+      val overviewBase = baseOverviewPadding ?: viewportDataSource.overviewPadding
++      val style = getCurrentStyle() ?: return
 +
-+      val following = EdgeInsets(
-+              followingBase.top,
-+              followingBase.left,
-+              followingBase.bottom + additionalBottomPadding,
-+              followingBase.right
-+      )
-+      val overview = EdgeInsets(
-+              overviewBase.top,
-+              overviewBase.left,
-+              overviewBase.bottom + additionalBottomPadding,
-+              overviewBase.right
-+      )
++      // Atualizar padding da câmera baseado no additionalBottomPadding
++      val currentPadding = viewportDataSource.followingPadding
++      val newBottomPadding = currentPadding.bottom + additionalBottomPadding
 +
-+      viewportDataSource.followingPadding = following
-+      viewportDataSource.overviewPadding = overview
++      val newPadding =
++              EdgeInsets(
++                      currentPadding.top,
++                      currentPadding.left,
++                      newBottomPadding,
++                      currentPadding.right
++              )
++
++      viewportDataSource.followingPadding = newPadding
 +      viewportDataSource.evaluate()
-+      
-+      Log.d(
-+              "MapboxNavigationView",
-+              "✅ Camera padding atualizado (extraBottom=$additionalBottomPadding)"
-+      )
++
++      Log.d("MapboxNavigationView", "✅ Camera padding atualizado: bottom=$newBottomPadding")
 +    } catch (e: Exception) {
 +      Log.e("MapboxNavigationView", "Erro ao atualizar camera padding", e)
-+    }
-+  }
-+
-+  private fun decodeRouteLineString(routeGeometry: String): LineString? {
-+    val trimmed = routeGeometry.trim()
-+    if (trimmed.isBlank()) return null
-+
-+    // 1) GeoJSON
-+    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
-+      try {
-+        return LineString.fromJson(trimmed)
-+      } catch (_: Exception) {
-+        // fallback
-+      }
-+    }
-+
-+    // 2) Encoded polyline (precisão 6 é padrão no Directions)
-+    try {
-+      return LineString.fromPolyline(trimmed, 6)
-+    } catch (_: Exception) {
-+      // try precision 5
-+    }
-+    return try {
-+      LineString.fromPolyline(trimmed, 5)
-+    } catch (_: Exception) {
-+      null
-+    }
-+  }
-+
-+  private fun findClosestAlternativeRouteIndex(clickedPoint: Point): Int? {
-+    if (alternativeRoutes.size <= 1) return null
-+
-+    var bestIndex: Int? = null
-+    var bestDistance = Double.MAX_VALUE
-+
-+    alternativeRoutes.forEachIndexed { index, route ->
-+      val geom = route.directionsRoute.geometry() ?: return@forEachIndexed
-+      val line = decodeRouteLineString(geom) ?: return@forEachIndexed
-+      val pts = line.coordinates()
-+      if (pts.isEmpty()) return@forEachIndexed
-+      val dist = calculateMinDistanceToRoute(clickedPoint, pts)
-+      if (dist < bestDistance) {
-+        bestDistance = dist
-+        bestIndex = index
-+      }
-+    }
-+
-+    // Só considera clique se estiver "perto" da linha da rota
-+    return if (bestIndex != null && bestDistance <= 80.0) bestIndex else null
-+  }
-+
-+  private fun tintTripProgressViewColors() {
-+    try {
-+      val yellow = Color.parseColor("#FBBF24")
-+      val white = Color.WHITE
-+
-+      fun walk(v: View) {
-+        when (v) {
-+          is TextView -> {
-+            v.setTextColor(yellow)
-+            v.setHintTextColor(yellow)
-+          }
-+          is ImageView -> {
-+            v.setColorFilter(white)
-+          }
-+          is ViewGroup -> {
-+            for (i in 0 until v.childCount) {
-+              walk(v.getChildAt(i))
-+            }
-+          }
-+        }
-+      }
-+
-+      walk(binding.tripProgressView)
-+    } catch (e: Exception) {
-+      Log.w("MapboxNavigationView", "Não foi possível estilizar TripProgressView: ${e.message}")
 +    }
 +  }
 +
@@ -1477,34 +1447,51 @@ index 41a3ba0..ba44e32 100644
 +
 +  private fun loadRadarImages(style: com.mapbox.maps.Style) {
 +    try {
-+      val imageNames = listOf(
-+        "placa0", "placa20", "placa30", "placa40", "placa50",
-+        "placa60", "placa70", "placa80", "placa90", "placa100",
-+        "placa110", "placa120", "placa130", "placa140", "placa150", "placa160", "placa"
-+      )
++      val imageNames =
++              listOf(
++                      "placa0",
++                      "placa20",
++                      "placa30",
++                      "placa40",
++                      "placa50",
++                      "placa60",
++                      "placa70",
++                      "placa80",
++                      "placa90",
++                      "placa100",
++                      "placa110",
++                      "placa120",
++                      "placa130",
++                      "placa140",
++                      "placa150",
++                      "placa160",
++                      "placa"
++              )
 +
 +      imageNames.forEach { imageName ->
 +        try {
 +          val resourceName = "assets_images_$imageName"
-+          val resourceId = context.resources.getIdentifier(resourceName, "drawable", context.packageName)
-+          
++          val resourceId =
++                  context.resources.getIdentifier(resourceName, "drawable", context.packageName)
++
 +          if (resourceId == 0) {
 +            Log.w("MapboxNavigationView", "⚠️ Recurso não encontrado: $resourceName")
 +            return@forEach
 +          }
-+          
++
 +          val bitmap = BitmapFactory.decodeResource(context.resources, resourceId)
 +          if (bitmap == null) {
 +            Log.w("MapboxNavigationView", "⚠️ Bitmap null para $resourceName")
 +            return@forEach
 +          }
-+          
-+          val imageExists = try {
-+            style.getStyleImage(imageName) != null
-+          } catch (e: Exception) {
-+            false
-+          }
-+          
++
++          val imageExists =
++                  try {
++                    style.getStyleImage(imageName) != null
++                  } catch (e: Exception) {
++                    false
++                  }
++
 +          if (!imageExists) {
 +            style.addImage(imageName, bitmap)
 +            Log.d("MapboxNavigationView", "✅ Imagem $imageName carregada")
@@ -1522,24 +1509,26 @@ index 41a3ba0..ba44e32 100644
 +    if (imageMissingListenerRegistered) {
 +      return
 +    }
-+    
++
 +    try {
 +      binding.mapView.mapboxMap.subscribeStyleImageMissing { eventData ->
 +        val missingId = eventData.imageId
 +        val currentStyle = binding.mapView.mapboxMap.style ?: return@subscribeStyleImageMissing
-+        
++
 +        try {
 +          val resourceName = "assets_images_$missingId"
-+          val resourceId = context.resources.getIdentifier(resourceName, "drawable", context.packageName)
++          val resourceId =
++                  context.resources.getIdentifier(resourceName, "drawable", context.packageName)
 +          if (resourceId != 0) {
 +            val bitmap = BitmapFactory.decodeResource(context.resources, resourceId)
 +            if (bitmap != null) {
-+              val imageExists = try {
-+                currentStyle.getStyleImage(missingId) != null
-+              } catch (e: Exception) {
-+                false
-+              }
-+              
++              val imageExists =
++                      try {
++                        currentStyle.getStyleImage(missingId) != null
++                      } catch (e: Exception) {
++                        false
++                      }
++
 +              if (!imageExists) {
 +                currentStyle.addImage(missingId, bitmap)
 +                Log.d("MapboxNavigationView", "✅ Imagem faltante $missingId carregada via listener")
@@ -1550,7 +1539,7 @@ index 41a3ba0..ba44e32 100644
 +          Log.e("MapboxNavigationView", "Erro ao processar imagem faltante $missingId", e)
 +        }
 +      }
-+      
++
 +      imageMissingListenerRegistered = true
 +      Log.d("MapboxNavigationView", "✅ Listener de imagens faltantes registrado")
 +    } catch (e: Exception) {
@@ -1558,16 +1547,13 @@ index 41a3ba0..ba44e32 100644
 +    }
 +  }
 +
-+  /**
-+   * Filtra radares próximos à rota atual
-+   * Usa distância perpendicular máxima de 100 metros
-+   */
++  /** Filtra radares próximos à rota atual Usa distância perpendicular máxima de 100 metros */
 +  private fun filterRadarsNearRoute() {
 +    if (currentRoute == null || radars.isEmpty()) {
 +      filteredRadars = radars
 +      return
 +    }
-+    
++
 +    try {
 +      // Extrair coordenadas da rota usando directionsRoute
 +      val directionsRoute = currentRoute?.directionsRoute
@@ -1576,7 +1562,7 @@ index 41a3ba0..ba44e32 100644
 +        filteredRadars = radars
 +        return
 +      }
-+      
++
 +      // Obter geometria da rota
 +      val routeGeometry = directionsRoute.geometry()
 +      if (routeGeometry == null) {
@@ -1584,39 +1570,52 @@ index 41a3ba0..ba44e32 100644
 +        filteredRadars = radars
 +        return
 +      }
-+      
-+      // Converter geometria para LineString (geojson OU polyline)
++
++      // Converter geometria para LineString usando toString() e fromJson()
++      // A geometria do DirectionsRoute pode ser convertida para JSON string
 +      try {
-+        val lineString = decodeRouteLineString(routeGeometry)
++        val geoJsonString = routeGeometry.toString()
++        val lineString = LineString.fromJson(geoJsonString)
 +        if (lineString == null) {
-+          Log.w("MapboxNavigationView", "⚠️ Não foi possível decodificar geometria da rota")
++          Log.w(
++                  "MapboxNavigationView",
++                  "⚠️ Não foi possível converter routeGeometry para LineString"
++          )
 +          filteredRadars = radars
 +          return
 +        }
-+        
++
 +        val routeCoordinates = lineString.coordinates()
-+        
++
 +        if (routeCoordinates.isEmpty()) {
-+          Log.w("MapboxNavigationView", "⚠️ routeCoordinates está vazio, mostrando todos os radares")
++          Log.w(
++                  "MapboxNavigationView",
++                  "⚠️ routeCoordinates está vazio, mostrando todos os radares"
++          )
 +          filteredRadars = radars
 +          return
 +        }
-+        
++
 +        // Converter coordenadas para lista de Points
-+        val routePoints = routeCoordinates.map { coord: Point ->
-+          Point.fromLngLat(coord.longitude(), coord.latitude())
-+        }
-+      
++        val routePoints =
++                routeCoordinates.map { coord: Point ->
++                  Point.fromLngLat(coord.longitude(), coord.latitude())
++                }
++
 +        // Filtrar radares próximos à rota (distância perpendicular < 100m)
 +        val maxDistanceMeters = 100.0
-+        filteredRadars = radars.filter { radar ->
-+          val radarPoint = Point.fromLngLat(radar.longitude, radar.latitude)
-+          val minDistance = calculateMinDistanceToRoute(radarPoint, routePoints)
-+          minDistance <= maxDistanceMeters
-+        }
-+        
-+        Log.d("MapboxNavigationView", "🔍 Filtrados ${filteredRadars.size} de ${radars.size} radares próximos à rota")
-+        
++        filteredRadars =
++                radars.filter { radar ->
++                  val radarPoint = Point.fromLngLat(radar.longitude, radar.latitude)
++                  val minDistance = calculateMinDistanceToRoute(radarPoint, routePoints)
++                  minDistance <= maxDistanceMeters
++                }
++
++        Log.d(
++                "MapboxNavigationView",
++                "🔍 Filtrados ${filteredRadars.size} de ${radars.size} radares próximos à rota"
++        )
++
 +        // Atualizar radares no mapa após filtrar
 +        updateRadarsOnMap()
 +      } catch (e: Exception) {
@@ -1630,41 +1629,41 @@ index 41a3ba0..ba44e32 100644
 +      updateRadarsOnMap()
 +    }
 +  }
-+  
-+  /**
-+   * Calcula a distância mínima perpendicular de um ponto até a rota
-+   * Retorna distância em metros
-+   */
++
++  /** Calcula a distância mínima perpendicular de um ponto até a rota Retorna distância em metros */
 +  private fun calculateMinDistanceToRoute(point: Point, routePoints: List<Point>): Double {
 +    if (routePoints.size < 2) {
 +      return Double.MAX_VALUE
 +    }
-+    
++
 +    var minDistance = Double.MAX_VALUE
-+    
++
 +    // Verificar distância perpendicular para cada segmento da rota
 +    for (i in 0 until routePoints.size - 1) {
 +      val segmentStart = routePoints[i]
 +      val segmentEnd = routePoints[i + 1]
-+      
++
 +      val distance = calculatePerpendicularDistance(point, segmentStart, segmentEnd)
 +      if (distance < minDistance) {
 +        minDistance = distance
 +      }
 +    }
-+    
++
 +    return minDistance
 +  }
-+  
++
 +  /**
-+   * Calcula distância perpendicular de um ponto até um segmento de linha
-+   * Usa fórmula de distância ponto-linha
-+   * Retorna distância em metros usando fórmula de Haversine
++   * Calcula distância perpendicular de um ponto até um segmento de linha Usa fórmula de distância
++   * ponto-linha Retorna distância em metros usando fórmula de Haversine
 +   */
-+  private fun calculatePerpendicularDistance(point: Point, lineStart: Point, lineEnd: Point): Double {
++  private fun calculatePerpendicularDistance(
++          point: Point,
++          lineStart: Point,
++          lineEnd: Point
++  ): Double {
 +    // Calcular distância usando fórmula de Haversine
 +    val R = 6371000.0 // Raio da Terra em metros
-+    
++
 +    // Converter para radianos
 +    val lat1 = Math.toRadians(point.latitude())
 +    val lon1 = Math.toRadians(point.longitude())
@@ -1672,78 +1671,86 @@ index 41a3ba0..ba44e32 100644
 +    val lon2 = Math.toRadians(lineStart.longitude())
 +    val lat3 = Math.toRadians(lineEnd.latitude())
 +    val lon3 = Math.toRadians(lineEnd.longitude())
-+    
++
 +    // Calcular vetor do segmento
 +    val dLat = lat3 - lat2
 +    val dLon = lon3 - lon2
-+    
++
 +    // Calcular produto escalar para encontrar ponto mais próximo no segmento
-+    val t = if (dLat * dLat + dLon * dLon > 0) {
-+      val dot = (lat1 - lat2) * dLat + (lon1 - lon2) * dLon
-+      val lenSq = dLat * dLat + dLon * dLon
-+      (dot / lenSq).coerceIn(0.0, 1.0)
-+    } else {
-+      0.0
-+    }
-+    
++    val t =
++            if (dLat * dLat + dLon * dLon > 0) {
++              val dot = (lat1 - lat2) * dLat + (lon1 - lon2) * dLon
++              val lenSq = dLat * dLat + dLon * dLon
++              (dot / lenSq).coerceIn(0.0, 1.0)
++            } else {
++              0.0
++            }
++
 +    // Ponto mais próximo no segmento
 +    val closestLat = lat2 + t * dLat
 +    val closestLon = lon2 + t * dLon
-+    
++
 +    // Calcular distância Haversine entre ponto e ponto mais próximo
 +    val dLat2 = lat1 - closestLat
 +    val dLon2 = lon1 - closestLon
-+    
-+    val a = Math.sin(dLat2 / 2) * Math.sin(dLat2 / 2) +
-+            Math.cos(lat1) * Math.cos(closestLat) *
-+            Math.sin(dLon2 / 2) * Math.sin(dLon2 / 2)
++
++    val a =
++            Math.sin(dLat2 / 2) * Math.sin(dLat2 / 2) +
++                    Math.cos(lat1) *
++                            Math.cos(closestLat) *
++                            Math.sin(dLon2 / 2) *
++                            Math.sin(dLon2 / 2)
 +    val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-+    
++
 +    return R * c
 +  }
 +
 +  private fun updateRadarsOnMap() {
 +    val style = getCurrentStyle() ?: return
-+    
++
 +    // Usar radares filtrados se houver rota, senão usar todos
 +    val radarsToDisplay = if (currentRoute != null) filteredRadars else radars
-+    
++
 +    if (radarsToDisplay.isEmpty()) {
 +      return
 +    }
-+    
++
 +    try {
-+      val features = radarsToDisplay.map { radar: RadarPoint ->
-+        val speedLimit = radar.speedLimit ?: 0.0
-+        val speeds = listOf(20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160)
-+        val closestSpeed = if (speedLimit > 0) {
-+          speeds.minByOrNull { kotlin.math.abs(it - speedLimit) } ?: 0
-+        } else {
-+          0
-+        }
-+        val iconImage = if (closestSpeed > 0) "placa$closestSpeed" else "placa0"
-+        val isNearby = nearbyRadarIds.contains(radar.id)
-+        
-+        Feature.fromGeometry(
-+          Point.fromLngLat(radar.longitude, radar.latitude),
-+          JsonObject().apply {
-+            addProperty("id", radar.id)
-+            addProperty("speedLimit", radar.speedLimit?.toString() ?: "")
-+            addProperty("iconImage", iconImage)
-+            addProperty("isNearby", java.lang.Boolean.valueOf(isNearby))
-+          }
-+        )
-+      }
-+      
++      val features =
++              radarsToDisplay.map { radar: RadarPoint ->
++                val speedLimit = radar.speedLimit ?: 0.0
++                val speeds =
++                        listOf(20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160)
++                val closestSpeed =
++                        if (speedLimit > 0) {
++                          speeds.minByOrNull { kotlin.math.abs(it - speedLimit) } ?: 0
++                        } else {
++                          0
++                        }
++                val iconImage = if (closestSpeed > 0) "placa$closestSpeed" else "placa0"
++                val isNearby = nearbyRadarIds.contains(radar.id)
++
++                Feature.fromGeometry(
++                        Point.fromLngLat(radar.longitude, radar.latitude),
++                        JsonObject().apply {
++                          addProperty("id", radar.id)
++                          addProperty("speedLimit", radar.speedLimit?.toString() ?: "")
++                          addProperty("iconImage", iconImage)
++                          addProperty("isNearby", java.lang.Boolean.valueOf(isNearby))
++                        }
++                )
++              }
++
 +      val featureCollection = FeatureCollection.fromFeatures(features.toList())
 +      val geoJsonString = featureCollection.toJson()
-+      val sourceJson = """
++      val sourceJson =
++              """
 +        {
 +          "type": "geojson",
 +          "data": $geoJsonString
 +        }
 +      """.trimIndent()
-+      
++
 +      val sourceValueResult = com.mapbox.bindgen.Value.fromJson(sourceJson)
 +      when (val value = sourceValueResult.value) {
 +        null -> {
@@ -1754,26 +1761,30 @@ index 41a3ba0..ba44e32 100644
 +            style.removeStyleSource("radars-source")
 +          }
 +          style.addStyleSource("radars-source", value)
-+          Log.d("MapboxNavigationView", "✅ GeoJSON source atualizado: ${radarsToDisplay.size} radares (${if (currentRoute != null) "filtrados" else "todos"})")
-+          
++          Log.d(
++                  "MapboxNavigationView",
++                  "✅ GeoJSON source atualizado: ${radarsToDisplay.size} radares (${if (currentRoute != null) "filtrados" else "todos"})"
++          )
++
 +          // Garantir que as imagens estão carregadas antes de criar o layer
 +          loadRadarImages(style)
-+          
++
 +          // Remover layer existente se houver
 +          if (style.styleLayerExists("radars-layer-symbol")) {
 +            style.removeStyleLayer("radars-layer-symbol")
 +          }
-+          
++
 +          // Criar SymbolLayer para exibir as imagens dos radares
 +          try {
-+            val layerJson = """
++            val layerJson =
++                    """
 +              {
 +                "id": "radars-layer-symbol",
 +                "type": "symbol",
 +                "source": "radars-source",
 +                "layout": {
 +                  "icon-image": ["get", "iconImage"],
-+                  "icon-size": 0.15,
++                  "icon-size": 0.2,
 +                  "icon-allow-overlap": true,
 +                  "icon-ignore-placement": true,
 +                  "icon-anchor": "bottom",
@@ -1782,15 +1793,21 @@ index 41a3ba0..ba44e32 100644
 +                "paint": {}
 +              }
 +            """.trimIndent()
-+            
++
 +            val layerValueResult = com.mapbox.bindgen.Value.fromJson(layerJson)
 +            when (val layerValue = layerValueResult.value) {
 +              null -> {
-+                Log.e("MapboxNavigationView", "❌ Erro ao criar SymbolLayer: ${layerValueResult.error}")
++                Log.e(
++                        "MapboxNavigationView",
++                        "❌ Erro ao criar SymbolLayer: ${layerValueResult.error}"
++                )
 +              }
 +              else -> {
 +                style.addStyleLayer(layerValue, null)
-+                Log.d("MapboxNavigationView", "✅ SymbolLayer adicionado com sucesso para ${radarsToDisplay.size} radares")
++                Log.d(
++                        "MapboxNavigationView",
++                        "✅ SymbolLayer adicionado com sucesso para ${radarsToDisplay.size} radares"
++                )
 +              }
 +            }
 +          } catch (e: Exception) {
@@ -1808,42 +1825,46 @@ index 41a3ba0..ba44e32 100644
 +    if (!style.styleSourceExists("radars-source")) {
 +      return
 +    }
-+    
++
 +    try {
 +      // Usar radares filtrados se houver rota
 +      val radarsToDisplay = if (currentRoute != null) filteredRadars else radars
-+      
-+      val features = radarsToDisplay.map { radar: RadarPoint ->
-+        val speedLimit = radar.speedLimit ?: 0.0
-+        val speeds = listOf(20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160)
-+        val closestSpeed = if (speedLimit > 0) {
-+          speeds.minByOrNull { kotlin.math.abs(it - speedLimit) } ?: 0
-+        } else {
-+          0
-+        }
-+        val iconImage = if (closestSpeed > 0) "placa$closestSpeed" else "placa0"
-+        val isNearby = nearbyRadarIds.contains(radar.id)
-+        
-+        Feature.fromGeometry(
-+          Point.fromLngLat(radar.longitude, radar.latitude),
-+          JsonObject().apply {
-+            addProperty("id", radar.id)
-+            addProperty("speedLimit", radar.speedLimit?.toString() ?: "")
-+            addProperty("iconImage", iconImage)
-+            addProperty("isNearby", java.lang.Boolean.valueOf(isNearby))
-+          }
-+        )
-+      }
-+      
++
++      val features =
++              radarsToDisplay.map { radar: RadarPoint ->
++                val speedLimit = radar.speedLimit ?: 0.0
++                val speeds =
++                        listOf(20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160)
++                val closestSpeed =
++                        if (speedLimit > 0) {
++                          speeds.minByOrNull { kotlin.math.abs(it - speedLimit) } ?: 0
++                        } else {
++                          0
++                        }
++                val iconImage = if (closestSpeed > 0) "placa$closestSpeed" else "placa0"
++                val isNearby = nearbyRadarIds.contains(radar.id)
++
++                Feature.fromGeometry(
++                        Point.fromLngLat(radar.longitude, radar.latitude),
++                        JsonObject().apply {
++                          addProperty("id", radar.id)
++                          addProperty("speedLimit", radar.speedLimit?.toString() ?: "")
++                          addProperty("iconImage", iconImage)
++                          addProperty("isNearby", java.lang.Boolean.valueOf(isNearby))
++                        }
++                )
++              }
++
 +      val featureCollection = FeatureCollection.fromFeatures(features.toList())
 +      val geoJsonString = featureCollection.toJson()
-+      val sourceJson = """
++      val sourceJson =
++              """
 +        {
 +          "type": "geojson",
 +          "data": $geoJsonString
 +        }
 +      """.trimIndent()
-+      
++
 +      val sourceValueResult = com.mapbox.bindgen.Value.fromJson(sourceJson)
 +      when (val value = sourceValueResult.value) {
 +        null -> {
@@ -1852,249 +1873,107 @@ index 41a3ba0..ba44e32 100644
 +        else -> {
 +          style.removeStyleSource("radars-source")
 +          style.addStyleSource("radars-source", value)
-+          Log.d("MapboxNavigationView", "✅ GeoJSON source atualizado com isNearby: ${nearbyRadarIds.size} radares próximos")
++          Log.d(
++                  "MapboxNavigationView",
++                  "✅ GeoJSON source atualizado com isNearby: ${nearbyRadarIds.size} radares próximos"
++          )
 +        }
 +      }
 +    } catch (e: Exception) {
 +      Log.e("MapboxNavigationView", "Erro ao atualizar nearbyRadarsInSource", e)
 +    }
 +  }
-+  
-+  /**
-+   * Adiciona callouts (anotações) na rota durante navegação
-+   * Mostra informações como distância até próximo ponto importante
-+   */
-+  private fun addRouteCallouts(route: NavigationRoute) {
-+    val style = getCurrentStyle() ?: return
-+    
-+    try {
-+      val directionsRoute = route.directionsRoute
-+      val routeGeometry = directionsRoute.geometry() ?: return
-+      
-+      // Extrair coordenadas da geometria (geojson OU polyline)
-+      val routeCoordinates = try {
-+        val lineString = decodeRouteLineString(routeGeometry)
-+        lineString?.coordinates() ?: emptyList()
-+      } catch (e: Exception) {
-+        Log.e("MapboxNavigationView", "Geometria não é LineString, tentando alternativas", e)
-+        emptyList()
-+      }
-+      
-+      if (routeCoordinates.isEmpty()) {
-+        Log.w("MapboxNavigationView", "Nenhuma coordenada para callouts")
-+        return
-+      }
-+      
-+      // Obter distância total da rota
-+      val totalDistance = directionsRoute.distance() ?: 0.0
-+      
-+      // Criar features para callouts em pontos importantes da rota
-+      // (ex: a cada 10% da rota ou em waypoints)
-+      val calloutFeatures = mutableListOf<Feature>()
-+      val step = maxOf(1, routeCoordinates.size / 10) // ~10 callouts por rota
-+      
-+      for (i in routeCoordinates.indices step step) {
-+        val coord: Point = routeCoordinates[i]
-+        val point = Point.fromLngLat(coord.longitude(), coord.latitude())
-+        
-+        // Calcular distância aproximada (índice * distância média)
-+        val progress = i.toDouble() / routeCoordinates.size.toDouble()
-+        val remainingProgress = 1.0 - progress
-+        val distanceKm = (totalDistance / 1000.0) * remainingProgress // Distância restante
-+        
-+        val calloutText = if (distanceKm < 1.0) {
-+          "${(distanceKm * 1000.0).toInt()}m"
-+        } else {
-+          String.format("%.1f", distanceKm) + "km"
-+        }
-+        
-+        val feature = Feature.fromGeometry(
-+          point,
-+          JsonObject().apply {
-+            addProperty("text", calloutText)
-+            addProperty("progress", java.lang.Double.valueOf(progress))
-+          }
-+        )
-+        calloutFeatures.add(feature)
-+      }
-+      
-+      if (calloutFeatures.isEmpty()) {
-+        return
-+      }
-+      
-+      val featureCollection = FeatureCollection.fromFeatures(calloutFeatures)
-+      val calloutsGeoJsonString = featureCollection.toJson()
-+      val sourceJson = """
-+        {
-+          "type": "geojson",
-+          "data": $calloutsGeoJsonString
-+        }
-+      """.trimIndent()
-+      
-+      val sourceValueResult = com.mapbox.bindgen.Value.fromJson(sourceJson)
-+      when (val value = sourceValueResult.value) {
-+        null -> {
-+          Log.e("MapboxNavigationView", "Erro ao criar source de callouts: ${sourceValueResult.error}")
-+        }
-+        else -> {
-+          // Remover source e layer existentes
-+          if (style.styleSourceExists("route-callouts-source")) {
-+            style.removeStyleSource("route-callouts-source")
-+          }
-+          if (style.styleLayerExists("route-callouts-layer")) {
-+            style.removeStyleLayer("route-callouts-layer")
-+          }
-+          
-+          style.addStyleSource("route-callouts-source", value)
 +
-+          // Camada de fundo (bolha) para garantir visibilidade
-+          val circleLayerJson = """
-+            {
-+              "id": "route-callouts-circle-layer",
-+              "type": "circle",
-+              "source": "route-callouts-source",
-+              "paint": {
-+                "circle-color": "#111827",
-+                "circle-radius": 16,
-+                "circle-stroke-color": "#60A5FA",
-+                "circle-stroke-width": 2,
-+                "circle-opacity": 0.95
-+              }
-+            }
-+          """.trimIndent()
-+          val circleLayerValueResult = com.mapbox.bindgen.Value.fromJson(circleLayerJson)
-+          circleLayerValueResult.value?.let { circleLayerValue ->
-+            if (style.styleLayerExists("route-callouts-circle-layer")) {
-+              style.removeStyleLayer("route-callouts-circle-layer")
-+            }
-+            style.addStyleLayer(circleLayerValue, null)
-+          }
-+          
-+          // Criar SymbolLayer para callouts com texto (acima da linha da rota)
-+          val calloutLayerJson = """
-+            {
-+              "id": "route-callouts-layer",
-+              "type": "symbol",
-+              "source": "route-callouts-source",
-+              "layout": {
-+                "text-field": ["get", "text"],
-+                "text-size": 14,
-+                "text-anchor": "center",
-+                "text-allow-overlap": true,
-+                "text-ignore-placement": true,
-+                "text-offset": [0, 0],
-+                "text-pitch-alignment": "viewport"
-+              },
-+              "paint": {
-+                "text-color": "#ffffff",
-+                "text-halo-color": "#111827",
-+                "text-halo-width": 0.5,
-+                "text-halo-blur": 0.0
-+              }
-+            }
-+          """.trimIndent()
-+          
-+          val calloutLayerValueResult = com.mapbox.bindgen.Value.fromJson(calloutLayerJson)
-+          when (val calloutLayerValue = calloutLayerValueResult.value) {
-+            null -> {
-+              Log.e("MapboxNavigationView", "Erro ao criar callout layer: ${calloutLayerValueResult.error}")
-+            }
-+            else -> {
-+              // Adicionar layer no topo para callouts ficarem visíveis sobre a rota
-+              style.addStyleLayer(calloutLayerValue, null)
-+              Log.d("MapboxNavigationView", "✅ Callouts adicionados na rota: ${calloutFeatures.size} pontos")
-+            }
-+          }
-+        }
-+      }
-+    } catch (e: Exception) {
-+      Log.e("MapboxNavigationView", "Erro ao adicionar callouts na rota", e)
-+    }
-+  }
-+  
-+  /**
-+   * Mostra rotas alternativas no mapa com callouts e informações
-+   */
++  /** Mostra rotas alternativas no mapa com callouts e informações */
 +  private fun showAlternativeRoutes(routes: List<NavigationRoute>) {
 +    val style = getCurrentStyle() ?: return
-+    
++
 +    try {
 +      // Criar features para cada rota alternativa com informações
 +      val alternativeRouteFeatures = mutableListOf<Feature>()
-+      
++
 +      routes.forEachIndexed { index, route ->
 +        val directionsRoute = route.directionsRoute
 +        val routeGeometry = directionsRoute.geometry() ?: return@forEachIndexed
-+        
-+        // Converter geometria para LineString (geojson OU polyline)
-+        val lineString = decodeRouteLineString(routeGeometry)
++
++        // Converter geometria para LineString
++        val routeGeoJsonString = routeGeometry.toString()
++        val lineString = LineString.fromJson(routeGeoJsonString)
 +        if (lineString == null) return@forEachIndexed
-+        
++
 +        val routeCoordinates = lineString.coordinates()
 +        if (routeCoordinates.isEmpty()) return@forEachIndexed
-+        
++
 +        // Obter informações da rota
 +        val totalDistance = directionsRoute.distance() ?: 0.0
 +        val totalDuration = directionsRoute.duration() ?: 0.0
-+        
++
 +        // Criar callout no ponto médio da rota
 +        val midPointIndex = routeCoordinates.size / 2
 +        val midCoord: Point = routeCoordinates[midPointIndex]
 +        val midPoint = Point.fromLngLat(midCoord.longitude(), midCoord.latitude())
-+        
++
 +        // Formatar informações
 +        val distanceKm = totalDistance / 1000.0
 +        val durationMinutes = (totalDuration / 60).toInt()
-+        
-+        val distanceText = if (distanceKm < 1.0) {
-+          "${totalDistance.toInt()}m"
-+        } else {
-+          String.format("%.1f", distanceKm) + "km"
-+        }
-+        
-+        val timeText = when {
-+          durationMinutes < 60 -> "${durationMinutes}min"
-+          else -> "${durationMinutes / 60}h ${durationMinutes % 60}min"
-+        }
-+        
-+        val routeLabel = when (index) {
-+          0 -> "Rota 1 (Recomendada)"
-+          1 -> "Rota 2"
-+          2 -> "Rota 3"
-+          else -> "Rota ${index + 1}"
-+        }
-+        
-+        val feature = Feature.fromGeometry(
-+          midPoint,
-+          JsonObject().apply {
-+            addProperty("routeIndex", index.toString())
-+            addProperty("distance", distanceText)
-+            addProperty("time", timeText)
-+            addProperty("label", routeLabel)
-+            addProperty("distanceKm", java.lang.Double.valueOf(distanceKm))
-+            addProperty("durationMinutes", java.lang.Integer.valueOf(durationMinutes))
-+          }
-+        )
++
++        val distanceText =
++                if (distanceKm < 1.0) {
++                  "${totalDistance.toInt()}m"
++                } else {
++                  String.format("%.1f", distanceKm) + "km"
++                }
++
++        val timeText =
++                when {
++                  durationMinutes < 60 -> "${durationMinutes}min"
++                  else -> "${durationMinutes / 60}h ${durationMinutes % 60}min"
++                }
++
++        val routeLabel =
++                when (index) {
++                  0 -> "Rota 1 (Recomendada)"
++                  1 -> "Rota 2"
++                  2 -> "Rota 3"
++                  else -> "Rota ${index + 1}"
++                }
++
++        val feature =
++                Feature.fromGeometry(
++                        midPoint,
++                        JsonObject().apply {
++                          addProperty("routeIndex", index.toString())
++                          addProperty("distance", distanceText)
++                          addProperty("time", timeText)
++                          addProperty("label", routeLabel)
++                          addProperty("distanceKm", java.lang.Double.valueOf(distanceKm))
++                          addProperty("durationMinutes", java.lang.Integer.valueOf(durationMinutes))
++                        }
++                )
 +        alternativeRouteFeatures.add(feature)
 +      }
-+      
++
 +      if (alternativeRouteFeatures.isEmpty()) {
 +        return
 +      }
-+      
++
 +      val featureCollection = FeatureCollection.fromFeatures(alternativeRouteFeatures.toList())
 +      val geoJsonString = featureCollection.toJson()
-+      val sourceJson = """
++      val sourceJson =
++              """
 +        {
 +          "type": "geojson",
 +          "data": $geoJsonString
 +        }
 +      """.trimIndent()
-+      
++
 +      val sourceValueResult = com.mapbox.bindgen.Value.fromJson(sourceJson)
 +      when (val value = sourceValueResult.value) {
 +        null -> {
-+          Log.e("MapboxNavigationView", "Erro ao criar source de rotas alternativas: ${sourceValueResult.error}")
++          Log.e(
++                  "MapboxNavigationView",
++                  "Erro ao criar source de rotas alternativas: ${sourceValueResult.error}"
++          )
 +        }
 +        else -> {
 +          // Remover source e layer existentes
@@ -2104,35 +1983,13 @@ index 41a3ba0..ba44e32 100644
 +          if (style.styleLayerExists("alternative-routes-callouts-layer")) {
 +            style.removeStyleLayer("alternative-routes-callouts-layer")
 +          }
-+          
++
 +          // Adicionar source
 +          style.addStyleSource("alternative-routes-callouts-source", value)
 +
-+          // Camada de fundo (bolha) para callouts das rotas alternativas
-+          val circleLayerJson = """
-+            {
-+              "id": "alternative-routes-callouts-circle-layer",
-+              "type": "circle",
-+              "source": "alternative-routes-callouts-source",
-+              "paint": {
-+                "circle-color": "#111827",
-+                "circle-radius": 22,
-+                "circle-stroke-color": "#60A5FA",
-+                "circle-stroke-width": 2,
-+                "circle-opacity": 0.92
-+              }
-+            }
-+          """.trimIndent()
-+          val circleLayerValueResult = com.mapbox.bindgen.Value.fromJson(circleLayerJson)
-+          circleLayerValueResult.value?.let { circleLayerValue ->
-+            if (style.styleLayerExists("alternative-routes-callouts-circle-layer")) {
-+              style.removeStyleLayer("alternative-routes-callouts-circle-layer")
-+            }
-+            style.addStyleLayer(circleLayerValue, null)
-+          }
-+          
 +          // Criar SymbolLayer para callouts das rotas alternativas
-+          val layerJson = """
++          val layerJson =
++                  """
 +            {
 +              "id": "alternative-routes-callouts-layer",
 +              "type": "symbol",
@@ -2146,21 +2003,27 @@ index 41a3ba0..ba44e32 100644
 +                "text-ignore-placement": true
 +              },
 +              "paint": {
-+                "text-color": "#ffffff",
-+                "text-halo-color": "#111827",
-+                "text-halo-width": 0.5
++                "text-color": "#60A5FA",
++                "text-halo-color": "#1F2937",
++                "text-halo-width": 2
 +              }
 +            }
 +          """.trimIndent()
-+          
++
 +          val layerValueResult = com.mapbox.bindgen.Value.fromJson(layerJson)
 +          when (val layerValue = layerValueResult.value) {
 +            null -> {
-+              Log.e("MapboxNavigationView", "Erro ao criar layer de rotas alternativas: ${layerValueResult.error}")
++              Log.e(
++                      "MapboxNavigationView",
++                      "Erro ao criar layer de rotas alternativas: ${layerValueResult.error}"
++              )
 +            }
 +            else -> {
 +              style.addStyleLayer(layerValue, null)
-+              Log.d("MapboxNavigationView", "✅ Rotas alternativas exibidas: ${alternativeRouteFeatures.size} rotas")
++              Log.d(
++                      "MapboxNavigationView",
++                      "✅ Rotas alternativas exibidas: ${alternativeRouteFeatures.size} rotas"
++              )
 +            }
 +          }
 +        }
@@ -2492,27 +2355,26 @@ index 0000000..e6b25bf
 +)
 \ No newline at end of file
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/res/layout/navigation_view.xml b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/res/layout/navigation_view.xml
-index c00affd..f6d1912 100644
+index c00affd..fe8d75d 100644
 --- a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/res/layout/navigation_view.xml
 +++ b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/res/layout/navigation_view.xml
-@@ -13,42 +13,99 @@
+@@ -13,42 +13,123 @@
      app:layout_constraintStart_toStartOf="parent"
      app:layout_constraintTop_toTopOf="parent" />
  
-+  <!-- Trip Progress: fixo na parte de baixo, fundo escuro -->
++  <!-- Trip Progress: barra inferior, fundo branco, duas linhas (tempo + distância — ETA), largura total com padding -->
    <androidx.cardview.widget.CardView
      android:id="@+id/tripProgressCard"
      android:layout_width="0dp"
      android:layout_height="wrap_content"
-+    android:layout_marginStart="12dp"
-+    android:layout_marginEnd="12dp"
-+    android:layout_marginBottom="12dp"
++    android:layout_marginStart="16dp"
++    android:layout_marginEnd="16dp"
++    android:layout_marginBottom="16dp"
      android:visibility="invisible"
--    app:cardElevation="8dp"
++    app:cardBackgroundColor="#FFFFFF"
++    app:cardCornerRadius="12dp"
+     app:cardElevation="8dp"
 -    app:cardUseCompatPadding="false"
-+    app:cardBackgroundColor="#000000"
-+    app:cardCornerRadius="16dp"
-+    app:cardElevation="10dp"
 +    app:cardUseCompatPadding="true"
      app:layout_constraintBottom_toBottomOf="parent"
      app:layout_constraintEnd_toEndOf="parent"
@@ -2524,12 +2386,7 @@ index c00affd..f6d1912 100644
        android:layout_width="match_parent"
 -      android:layout_margin="8dp"
 -      android:layout_height="wrap_content" />
-+      android:layout_height="wrap_content"
-+      android:orientation="horizontal"
-+      android:padding="14dp"
-+      android:gravity="center_vertical"
-+      android:background="#000000">
- 
+-
 -    <ImageView
 -      android:id="@+id/stop"
 -      android:layout_width="41dp"
@@ -2538,39 +2395,69 @@ index c00affd..f6d1912 100644
 -      android:layout_marginEnd="12dp"
 -      app:srcCompat="@android:drawable/ic_delete"
 -      android:contentDescription="@string/delete_icon"/>
++      android:layout_height="wrap_content"
++      android:orientation="horizontal"
++      android:paddingStart="20dp"
++      android:paddingEnd="12dp"
++      android:paddingTop="16dp"
++      android:paddingBottom="16dp"
++      android:gravity="center_vertical"
++      android:background="#FFFFFF">
++
 +      <LinearLayout
 +        android:layout_width="0dp"
 +        android:layout_height="wrap_content"
 +        android:layout_weight="1"
 +        android:orientation="vertical"
-+        android:background="#000000">
++        android:gravity="center_vertical">
 +
-+        <com.mapbox.navigation.ui.components.tripprogress.view.MapboxTripProgressView
-+          android:id="@+id/tripProgressView"
-+          android:layout_width="match_parent"
++        <LinearLayout
++          android:layout_width="wrap_content"
 +          android:layout_height="wrap_content"
-+          android:background="#000000" />
++          android:orientation="horizontal"
++          android:gravity="center_vertical"
++          android:baselineAligned="false">
++
++          <TextView
++            android:id="@+id/tripProgressTimeValue"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:text="--"
++            android:textSize="28sp"
++            android:textStyle="bold"
++            android:textColor="#1F2937"
++            android:letterSpacing="0" />
++
++          <TextView
++            android:id="@+id/tripProgressTimeUnit"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:text=" min"
++            android:textSize="16sp"
++            android:textColor="#4B5563"
++            android:layout_marginStart="2dp" />
++        </LinearLayout>
 +
 +        <TextView
-+          android:id="@+id/tripProgressDetails"
++          android:id="@+id/tripProgressDistanceEta"
 +          android:layout_width="wrap_content"
 +          android:layout_height="wrap_content"
 +          android:layout_marginTop="4dp"
-+          android:textColor="#FBBF24"
-+          android:textSize="11sp"
-+          android:text="--" />
++          android:text="--"
++          android:textSize="14sp"
++          android:textColor="#6B7280" />
 +      </LinearLayout>
 +
 +      <ImageView
 +        android:id="@+id/stop"
 +        android:layout_width="48dp"
 +        android:layout_height="48dp"
-+        android:layout_marginStart="12dp"
++        android:layout_marginStart="8dp"
 +        android:background="?attr/selectableItemBackgroundBorderless"
 +        android:padding="8dp"
 +        android:src="@android:drawable/ic_menu_close_clear_cancel"
 +        android:contentDescription="@string/delete_icon"
-+        android:tint="#FFFFFF" />
++        android:tint="#374151" />
 +    </LinearLayout>
    </androidx.cardview.widget.CardView>
  
@@ -2613,7 +2500,7 @@ index c00affd..f6d1912 100644
  
    <com.mapbox.navigation.ui.components.voice.view.MapboxSoundButton
      android:id="@+id/soundButton"
-@@ -58,7 +115,7 @@
+@@ -58,7 +139,7 @@
      android:layout_marginEnd="16dp"
      android:visibility="invisible"
      app:layout_constraintEnd_toEndOf="parent"
