@@ -1,3 +1,4 @@
+
 /**
  * Script de sincronização automática da ANTT
  * Verifica se o JSON foi atualizado e baixa apenas se houver mudanças

@@ -4,6 +4,32 @@ O backend ficou neste repositório (RadarREact). O servidor já está configurad
 
 ---
 
+## Se o admin não consegue adicionar, mover ou deletar radares (404)
+
+Se no painel admin as ações **Adicionar**, **Mover** ou **Deletar** falham com erro tipo **404** ou "Erro ao criar radar: 404", o servidor está rodando **código antigo** (sem as rotas `POST /radars/report`, `PATCH /radars/:id`, `DELETE /radars/:id`).
+
+**O que fazer no servidor:**
+
+1. Atualizar o código e **recompilar**:
+   ```bash
+   cd ~/RadarREact   # ou a pasta do clone
+   git pull origin main
+   cd backend
+   npm install
+   npm run build     # obrigatório: gera o JS com as novas rotas
+   pm2 restart radar-backend   # ou o nome do seu processo
+   ```
+2. Conferir se o processo subiu: `pm2 logs radar-backend` (ou o nome que você usa).
+3. Testar a API direto no servidor:
+   ```bash
+   curl -X POST http://localhost:3000/radars/report \
+     -H "Content-Type: application/json" \
+     -d '{"latitude":-23.55,"longitude":-46.63}'
+   ```
+   Se retornar JSON com `radar`, a rota está ativa. Se retornar 404, o build/restart não foi aplicado.
+
+---
+
 ## ⚠️ Situação atual: backend ainda não está no Git
 
 Se no servidor `backend/` não tem `package.json` e `git ls-files backend/` no seu PC está vazio, **o código do backend ainda não foi commitado** neste repositório. A pasta `backend/` no repo só tem `.env` (que é ignorado) ou está vazia.
@@ -208,4 +234,53 @@ Quando o `backend/` já tiver `package.json` e o código no repositório:
    cd backend
    npm install
    pm2 restart radar-backend
-   ``` O servidor continua com o mesmo backend, só que atualizado a partir deste repositório.
+   ```
+
+---
+
+## Servidor não puxa o backend (git pull não traz package.json)
+
+Rode no servidor, **na ordem**:
+
+**1. Conferir de onde está puxando e se está atualizado**
+```bash
+cd ~/apps/radar
+git remote -v
+git fetch origin
+git log -1 --oneline HEAD
+git log -1 --oneline origin/main
+```
+Se `HEAD` e `origin/main` forem commits diferentes, o servidor está atrás. Avance para o passo 2.
+
+**2. Atualizar de verdade (sobrescrever com o que está no GitHub)**
+```bash
+cd ~/apps/radar
+git fetch origin
+git reset --hard origin/main
+```
+Isso descarta qualquer alteração local e deixa o servidor **igual** ao `main` do GitHub.
+
+**3. Ver se o backend veio**
+```bash
+ls -la ~/apps/radar/backend/
+```
+Deve aparecer `package.json` e `src/` (ou o que você commitou). Se não aparecer, o repositório no GitHub ainda não tem esse código (confira no GitHub na pasta `backend/` se existe `package.json`).
+
+**4. Se existir `backend/.git` no servidor (repositório dentro do backend)**  
+O Git do `~/apps/radar` não atualiza o conteúdo de `backend/` nesse caso. Remova o `.git` de dentro do backend e repita o reset:
+```bash
+rm -rf ~/apps/radar/backend/.git
+cd ~/apps/radar
+git checkout origin/main -- backend/
+```
+Depois confira de novo com `ls ~/apps/radar/backend/`.
+
+**5. Garantir o `.env` e subir o backend**
+```bash
+cd ~/apps/radar/backend
+# Se não tiver .env, crie (não vem do Git)
+ls -la .env
+npm install
+npm run build
+pm2 restart radar-backend
+```

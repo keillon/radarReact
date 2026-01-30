@@ -506,6 +506,69 @@ export async function radarRoutes(fastify: FastifyInstance) {
     }
   });
 
+  // POST /radars/report — alias para criar radar (usado pelo app e admin)
+  fastify.post("/radars/report", async (request, reply) => {
+    const body = request.body as {
+      latitude: number;
+      longitude: number;
+      tipoRadar?: string;
+      velocidadeLeve?: number;
+      reportedBy?: string;
+    };
+
+    if (!body.latitude || !body.longitude) {
+      return reply
+        .code(400)
+        .send({ error: "Latitude and longitude are required" });
+    }
+
+    if (body.velocidadeLeve !== undefined && (body.velocidadeLeve < 0 || body.velocidadeLeve > 200)) {
+      return reply.code(400).send({ error: "Velocidade deve estar entre 0 e 200 km/h" });
+    }
+
+    try {
+      const radar = await prisma.radar.create({
+        data: {
+          latitude: body.latitude,
+          longitude: body.longitude,
+          confirms: 0,
+          denies: 0,
+          lastConfirmedAt: new Date(),
+          source: "user",
+          tipoRadar: body.tipoRadar || "reportado",
+          velocidadeLeve: body.velocidadeLeve ?? null,
+        },
+      });
+
+      try {
+        const lastSyncFile = path.join(process.cwd(), "radarsFiles", ".last_sync_antt.json");
+        let lastSyncInfo: any = { lastModified: null, etag: null, contentHash: null, lastSyncDate: new Date().toISOString(), totalRadars: 0 };
+        if (fs.existsSync(lastSyncFile)) {
+          try {
+            lastSyncInfo = JSON.parse(fs.readFileSync(lastSyncFile, "utf-8"));
+            lastSyncInfo.lastSyncDate = new Date().toISOString();
+          } catch (_) {}
+        }
+        const dir = path.dirname(lastSyncFile);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(lastSyncFile, JSON.stringify(lastSyncInfo, null, 2), "utf-8");
+      } catch (_) {}
+
+      return {
+        radar: {
+          id: radar.id,
+          latitude: radar.latitude,
+          longitude: radar.longitude,
+          velocidadeLeve: radar.velocidadeLeve,
+          tipoRadar: radar.tipoRadar,
+        },
+      };
+    } catch (error: any) {
+      console.error("Erro ao reportar radar:", error);
+      return reply.code(500).send({ error: "Erro ao reportar radar", details: error.message });
+    }
+  });
+
   fastify.post("/radars", async (request, reply) => {
     const body = request.body as {
       latitude: number;
@@ -609,6 +672,68 @@ export async function radarRoutes(fastify: FastifyInstance) {
       return reply
         .code(500)
         .send({ error: "Erro ao criar radar", details: error.message });
+    }
+  });
+
+  // PATCH /radars/:id — atualizar radar (admin/editor: mover, limite, inativar)
+  fastify.patch("/radars/:id", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const body = request.body as {
+      latitude?: number;
+      longitude?: number;
+      velocidadeLeve?: number;
+      situacao?: string;
+    };
+
+    try {
+      const existing = await prisma.radar.findUnique({ where: { id } });
+      if (!existing) {
+        return reply.code(404).send({ error: "Radar not found" });
+      }
+
+      const data: Record<string, unknown> = {};
+      if (body.latitude != null) data.latitude = body.latitude;
+      if (body.longitude != null) data.longitude = body.longitude;
+      if (body.velocidadeLeve != null) data.velocidadeLeve = body.velocidadeLeve;
+      if (body.situacao != null) data.situacao = body.situacao;
+
+      const radar = await prisma.radar.update({
+        where: { id },
+        data: data as any,
+      });
+
+      return {
+        id: radar.id,
+        latitude: radar.latitude,
+        longitude: radar.longitude,
+        velocidadeLeve: radar.velocidadeLeve,
+        situacao: radar.situacao,
+      };
+    } catch (error: any) {
+      fastify.log.error(error);
+      return reply
+        .code(500)
+        .send({ error: "Erro ao atualizar radar", details: error.message });
+    }
+  });
+
+  // DELETE /radars/:id — deletar radar (admin/editor)
+  fastify.delete("/radars/:id", async (request, reply) => {
+    const { id } = request.params as { id: string };
+
+    try {
+      const existing = await prisma.radar.findUnique({ where: { id } });
+      if (!existing) {
+        return reply.code(404).send({ error: "Radar not found" });
+      }
+
+      await prisma.radar.delete({ where: { id } });
+      return reply.code(204).send();
+    } catch (error: any) {
+      fastify.log.error(error);
+      return reply
+        .code(500)
+        .send({ error: "Erro ao deletar radar", details: error.message });
     }
   });
 

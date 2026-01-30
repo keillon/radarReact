@@ -1,5 +1,20 @@
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://72.60.247.18:3000";
 
+async function handleResponse<T>(res: Response, errorMsg: string): Promise<T> {
+  const text = await res.text();
+  if (!res.ok) {
+    let details = "";
+    try {
+      const json = JSON.parse(text);
+      details = json.error || json.message || text.slice(0, 200);
+    } catch {
+      details = text.slice(0, 200);
+    }
+    throw new Error(`${errorMsg}: ${res.status}${details ? ` — ${details}` : ""}`);
+  }
+  return text ? JSON.parse(text) : ({} as T);
+}
+
 export interface Radar {
   id: string;
   latitude: number;
@@ -33,8 +48,10 @@ export async function getRadarsNearLocation(
   const res = await fetch(
     `${API_BASE_URL}/radars?lat=${lat}&lon=${lon}&radius=${radius}`
   );
-  if (!res.ok) throw new Error(`Erro ${res.status}`);
-  const data = await res.json();
+  const data = await handleResponse<{ radars?: ApiRadarResponse[] }>(
+    res,
+    `Erro ao carregar radares`
+  );
   return (data.radars || []).map(mapApi);
 }
 
@@ -55,8 +72,10 @@ export async function reportRadar(params: {
       reportedBy: "admin",
     }),
   });
-  if (!res.ok) throw new Error(`Erro ao criar radar: ${res.status}`);
-  const data = await res.json();
+  const data = await handleResponse<{ radar?: ApiRadarResponse } & ApiRadarResponse>(
+    res,
+    "Erro ao criar radar"
+  );
   return mapApi(data.radar || data);
 }
 
@@ -80,9 +99,17 @@ export async function updateRadar(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+  if (res.status === 404) return null;
   if (!res.ok) {
-    if (res.status === 404) return null;
-    throw new Error(`Erro ao atualizar: ${res.status}`);
+    const text = await res.text();
+    let details = "";
+    try {
+      const json = JSON.parse(text);
+      details = json.error || json.message || text.slice(0, 150);
+    } catch {
+      details = text.slice(0, 150);
+    }
+    throw new Error(`Erro ao atualizar: ${res.status}${details ? ` — ${details}` : ""}`);
   }
   const data = await res.json();
   return mapApi(data.radar || data);
@@ -91,6 +118,16 @@ export async function updateRadar(
 export async function deleteRadar(id: string): Promise<boolean> {
   const res = await fetch(`${API_BASE_URL}/radars/${id}`, { method: "DELETE" });
   if (res.status === 404) return false;
-  if (!res.ok) throw new Error(`Erro ao deletar: ${res.status}`);
+  if (!res.ok) {
+    const text = await res.text();
+    let details = "";
+    try {
+      const json = JSON.parse(text);
+      details = json.error || json.message || text.slice(0, 150);
+    } catch {
+      details = text.slice(0, 150);
+    }
+    throw new Error(`Erro ao deletar: ${res.status}${details ? ` — ${details}` : ""}`);
+  }
   return true;
 }

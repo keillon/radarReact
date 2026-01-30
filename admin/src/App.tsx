@@ -424,6 +424,9 @@ export default function App() {
           <p style={{ marginTop: 16, fontSize: 13, color: "#9ca3af" }}>
             {radars.length} radar(es) na região (raio {LOAD_RADIUS / 1000} km).
           </p>
+          <p style={{ marginTop: 8, fontSize: 11, color: "#9ca3af", wordBreak: "break-all" }}>
+            API: {import.meta.env.VITE_API_URL || "http://72.60.247.18:3000"}
+          </p>
         </aside>
       </div>
     </div>
