@@ -50,7 +50,7 @@ index 7d28df3..3656ea3 100644
    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
    implementation 'androidx.cardview:cardview:1.0.0'
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
-index 41a3ba0..87b1bb3 100644
+index 41a3ba0..3da002a 100644
 --- a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
 +++ b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
 @@ -3,24 +3,30 @@ package com.mapboxnavigation
@@ -457,7 +457,7 @@ index 41a3ba0..87b1bb3 100644
     */
    private val routeArrowView: MapboxRouteArrowView by lazy {
      MapboxRouteArrowView(routeArrowOptions)
-@@ -323,54 +336,81 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -323,54 +336,92 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
    /**
     * Gets notified with location updates.
     *
@@ -544,8 +544,7 @@ index 41a3ba0..87b1bb3 100644
 +              context.getJSModule(RCTEventEmitter::class.java)
 +                      .receiveEvent(id, "onLocationChange", event)
 +
-+              // Speed Limit: conforme doc oficial
-+              // https://docs.mapbox.com/android/navigation/guides/ui-components/speed-limit/
++              // Speed: sempre visível — limite da via (SpeedInfoView) ou velocidade atual (TextView)
 +              val opts = distanceFormatterOptions
 +              if (opts != null) {
 +                try {
@@ -557,11 +556,23 @@ index 41a3ba0..87b1bb3 100644
 +                  if (value != null) {
 +                    binding.speedLimitView.render(value)
 +                    binding.speedLimitView.visibility = View.VISIBLE
++                    binding.speedCurrentOnly.visibility = View.GONE
 +                  } else {
 +                    binding.speedLimitView.visibility = View.GONE
++                    val speedMps = locationMatcherResult.enhancedLocation.speed?.toDouble() ?: 0.0
++                    val speedStr =
++                            if (distanceUnit == DirectionsCriteria.IMPERIAL) {
++                              val mph = speedMps * 2.23694
++                              String.format(locale, "%.0f mph", mph)
++                            } else {
++                              val kmh = speedMps * 3.6
++                              String.format(locale, "%.0f km/h", kmh)
++                            }
++                    binding.speedCurrentOnly.text = speedStr
++                    binding.speedCurrentOnly.visibility = View.VISIBLE
 +                  }
 +                } catch (e: Exception) {
-+                  Log.w("MapboxNavigationView", "Speed limit update: ${e.message}")
++                  Log.w("MapboxNavigationView", "Speed update: ${e.message}")
 +                }
 +              }
 +            }
@@ -584,7 +595,7 @@ index 41a3ba0..87b1bb3 100644
      // update the camera position to account for the progressed fragment of the route
      if (routeProgress.fractionTraveled.toDouble() != 0.0) {
        viewportDataSource.onRouteProgressChanged(routeProgress)
-@@ -387,48 +427,108 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -387,48 +438,108 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
      // update top banner with maneuver instructions
      val maneuvers = maneuverApi.getManeuvers(routeProgress)
      maneuvers.fold(
@@ -727,7 +738,7 @@ index 41a3ba0..87b1bb3 100644
    }
  
    /**
-@@ -436,14 +536,23 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -436,14 +547,23 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
     *
     * A change can mean:
     * - routes get changed with [MapboxNavigation.setNavigationRoutes]
@@ -754,7 +765,7 @@ index 41a3ba0..87b1bb3 100644
        ) { value ->
          binding.mapView.mapboxMap.style?.apply {
            routeLineView.renderRouteDrawData(this, value)
-@@ -454,14 +563,16 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -454,14 +574,16 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
        viewportDataSource.onRouteChanged(routeUpdateResult.navigationRoutes.first())
        viewportDataSource.evaluate()
      } else {
@@ -775,7 +786,7 @@ index 41a3ba0..87b1bb3 100644
          }
          routeArrowView.render(style, routeArrowApi.clearArrows())
        }
-@@ -477,156 +588,200 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -477,156 +599,200 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
    }
  
    private fun onCreate() {
@@ -981,7 +992,7 @@ index 41a3ba0..87b1bb3 100644
 +          binding.mapView.compass.updateSettings {
 +            position = Gravity.BOTTOM or Gravity.END
 +            marginRight = 16f * density
-+            marginBottom = 96f * density
++            marginBottom = 180f * density
 +            marginTop = 4f * density
 +            marginLeft = 4f * density
 +          }
@@ -1099,7 +1110,7 @@ index 41a3ba0..87b1bb3 100644
        puckBearingEnabled = true
        enabled = true
      }
-@@ -634,20 +789,21 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -634,20 +800,21 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
      startRoute()
    }
  
@@ -1132,7 +1143,7 @@ index 41a3ba0..87b1bb3 100644
  
    private fun onArrival(routeProgress: RouteProgress) {
      val leg = routeProgress.currentLegProgress
-@@ -656,9 +812,7 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -656,9 +823,7 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
        event.putInt("index", leg.legIndex)
        event.putDouble("latitude", leg.legDestination?.location?.latitude() ?: 0.0)
        event.putDouble("longitude", leg.legDestination?.location?.longitude() ?: 0.0)
@@ -1143,7 +1154,7 @@ index 41a3ba0..87b1bb3 100644
      }
    }
  
-@@ -669,8 +823,8 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -669,8 +834,8 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
  
    private val measureAndLayout = Runnable {
      measure(
@@ -1154,7 +1165,7 @@ index 41a3ba0..87b1bb3 100644
      )
      layout(left, top, right, bottom)
    }
-@@ -687,53 +841,92 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -687,53 +852,92 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
      names.add(destinationTitle)
  
      mapboxNavigation?.requestRoutes(
@@ -1286,7 +1297,7 @@ index 41a3ba0..87b1bb3 100644
      // register event listeners
      mapboxNavigation?.registerRoutesObserver(routesObserver)
      mapboxNavigation?.registerArrivalObserver(arrivalObserver)
-@@ -741,12 +934,6 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -741,12 +945,6 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
      mapboxNavigation?.registerLocationObserver(locationObserver)
      mapboxNavigation?.registerVoiceInstructionsObserver(voiceInstructionsObserver)
  
@@ -1299,7 +1310,7 @@ index 41a3ba0..87b1bb3 100644
      findRoute(coordinatesList)
    }
  
-@@ -763,17 +950,16 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -763,17 +961,17 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
  
      // hide UI elements
      binding.soundButton.visibility = View.INVISIBLE
@@ -1308,6 +1319,7 @@ index 41a3ba0..87b1bb3 100644
      binding.routeOverview.visibility = View.INVISIBLE
      binding.tripProgressCard.visibility = View.INVISIBLE
 +    binding.speedLimitView.visibility = View.INVISIBLE
++    binding.speedCurrentOnly.visibility = View.GONE
    }
  
    private fun sendErrorToReact(error: String?) {
@@ -1320,7 +1332,7 @@ index 41a3ba0..87b1bb3 100644
    }
  
    fun onDropViewInstance() {
-@@ -782,10 +968,12 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -782,10 +980,12 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
  
    fun setStartOrigin(origin: Point?) {
      this.origin = origin
@@ -1333,7 +1345,7 @@ index 41a3ba0..87b1bb3 100644
    }
  
    fun setDestinationTitle(title: String) {
-@@ -802,7 +990,7 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -802,7 +1002,7 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
  
    fun setDirectionUnit(unit: String) {
      this.distanceUnit = unit
@@ -1342,7 +1354,7 @@ index 41a3ba0..87b1bb3 100644
    }
  
    fun setLocal(language: String) {
-@@ -820,4 +1008,729 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -820,4 +1020,730 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
    fun setShowCancelButton(show: Boolean) {
      binding.stop.visibility = if (show) View.VISIBLE else View.INVISIBLE
    }
@@ -1450,6 +1462,7 @@ index 41a3ba0..87b1bb3 100644
 +      val imageNames =
 +              listOf(
 +                      "placa0",
++                      "placa10",
 +                      "placa20",
 +                      "placa30",
 +                      "placa40",
@@ -1834,7 +1847,7 @@ index 41a3ba0..87b1bb3 100644
 +              radarsToDisplay.map { radar: RadarPoint ->
 +                val speedLimit = radar.speedLimit ?: 0.0
 +                val speeds =
-+                        listOf(20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160)
++                        listOf(10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160)
 +                val closestSpeed =
 +                        if (speedLimit > 0) {
 +                          speeds.minByOrNull { kotlin.math.abs(it - speedLimit) } ?: 0
@@ -2355,10 +2368,24 @@ index 0000000..e6b25bf
 +)
 \ No newline at end of file
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/res/layout/navigation_view.xml b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/res/layout/navigation_view.xml
-index c00affd..fe8d75d 100644
+index c00affd..d3fde26 100644
 --- a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/res/layout/navigation_view.xml
 +++ b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/res/layout/navigation_view.xml
-@@ -13,42 +13,123 @@
+@@ -2,53 +2,156 @@
+ <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+   xmlns:app="http://schemas.android.com/apk/res-auto"
+   android:layout_width="match_parent"
+-  android:layout_height="match_parent">
++  android:layout_height="match_parent"
++  android:background="#E5E7EB">
+ 
+   <com.mapbox.maps.MapView
+     android:id="@+id/mapView"
+     android:layout_width="0dp"
+     android:layout_height="0dp"
++    android:background="#E5E7EB"
+     app:layout_constraintBottom_toBottomOf="parent"
+     app:layout_constraintEnd_toEndOf="parent"
      app:layout_constraintStart_toStartOf="parent"
      app:layout_constraintTop_toTopOf="parent" />
  
@@ -2463,16 +2490,36 @@ index c00affd..fe8d75d 100644
  
 -  <com.mapbox.navigation.ui.components.maneuver.view.MapboxManeuverView
 -    android:id="@+id/maneuverView"
-+  <!-- Speed Limit (radar): acima do Trip Progress -->
-+  <com.mapbox.navigation.ui.components.speedlimit.view.MapboxSpeedInfoView
-+    android:id="@+id/speedLimitView"
++  <!-- Speed: sempre visível (limite da via ou velocidade atual) -->
++  <FrameLayout
 +    android:layout_width="wrap_content"
 +    android:layout_height="wrap_content"
 +    android:layout_marginStart="16dp"
 +    android:layout_marginBottom="8dp"
-+    android:visibility="invisible"
 +    app:layout_constraintStart_toStartOf="parent"
-+    app:layout_constraintBottom_toTopOf="@id/tripProgressCard" />
++    app:layout_constraintBottom_toTopOf="@id/tripProgressCard">
++
++    <com.mapbox.navigation.ui.components.speedlimit.view.MapboxSpeedInfoView
++      android:id="@+id/speedLimitView"
++      android:layout_width="wrap_content"
++      android:layout_height="wrap_content"
++      android:visibility="invisible" />
++
++    <TextView
++      android:id="@+id/speedCurrentOnly"
++      android:layout_width="wrap_content"
++      android:layout_height="wrap_content"
++      android:visibility="gone"
++      android:paddingStart="12dp"
++      android:paddingEnd="12dp"
++      android:paddingTop="8dp"
++      android:paddingBottom="8dp"
++      android:background="#1F2937"
++      android:textColor="#FFFFFF"
++      android:textSize="18sp"
++      android:textStyle="bold"
++      android:text="0 km/h" />
++  </FrameLayout>
 +
 +  <!-- ManeuverView: apenas instrução (Overview three), sem km e tempo -->
 +  <androidx.cardview.widget.CardView
@@ -2500,7 +2547,7 @@ index c00affd..fe8d75d 100644
  
    <com.mapbox.navigation.ui.components.voice.view.MapboxSoundButton
      android:id="@+id/soundButton"
-@@ -58,7 +139,7 @@
+@@ -58,7 +161,7 @@
      android:layout_marginEnd="16dp"
      android:visibility="invisible"
      app:layout_constraintEnd_toEndOf="parent"

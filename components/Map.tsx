@@ -130,7 +130,7 @@ export default function Map({
 
     // Mapear para as velocidades disponíveis (20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160)
     const speeds = [
-      20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160,
+      10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160,
     ];
 
     // Encontrar a velocidade mais próxima disponível
@@ -144,6 +144,7 @@ export default function Map({
   // Objeto com todas as imagens das placas
   const placaImages = {
     placa0: require("../assets/images/placa0.png"),
+    placa10: require("../assets/images/placa10.png"),
     placa20: require("../assets/images/placa20.png"),
     placa30: require("../assets/images/placa30.png"),
     placa40: require("../assets/images/placa40.png"),
@@ -159,7 +160,7 @@ export default function Map({
     placa140: require("../assets/images/placa140.png"),
     placa150: require("../assets/images/placa150.png"),
     placa160: require("../assets/images/placa160.png"),
-    placa: require("../assets/images/placa.png"), // Fallback
+    placa: require("../assets/images/placa0.png"), // Fallback (placa.png não existe)
   };
 
   // Criar GeoJSON para radares com nome da imagem e propriedade de proximidade
