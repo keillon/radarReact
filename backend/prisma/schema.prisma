@@ -1,0 +1,102 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Radar {
+  id              String   @id @default(uuid())
+  latitude        Float
+  longitude       Float
+  confirms        Int      @default(0)
+  denies          Int      @default(0)
+  lastConfirmedAt DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  // Metadados do radar
+  source                   String? // "antt" | "der-sp" | "gps-data-team" | "curitiba" | "user"
+  rodovia                  String? // Ex: "BR-381"
+  uf                       String? // Estado
+  municipio                String? // Cidade
+  km                       Float? // Quilômetro da rodovia
+  tipoRadar                String? // "Controlador" | "Redutor" | "móvel"
+  velocidadeLeve           Int? // Velocidade permitida para veículos leves (km/h)
+  velocidadePesado         Int? // Velocidade permitida para veículos pesados (km/h)
+  velocidadeOriginalLeve   Int? // Velocidade original do CSV/fonte (para preservar quando houver votação)
+  velocidadeOriginalPesado Int? // Velocidade original do CSV/fonte (para preservar quando houver votação)
+  sentido                  String? // "Crescente" | "Decrescente"
+  situacao                 String? // "Ativo" | "Inativo"
+  concessionaria           String? // Nome da concessionária
+  license                  String? // Licença dos dados (ex: "CC-BY 4.0")
+  attribution              String? // Atribuição/credito da fonte
+
+  @@index([latitude, longitude])
+  @@map("radars")
+}
+
+model DeviceToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  platform  String? // "ios" | "android"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("device_tokens")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String // Hash da senha
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+model UserRadarAction {
+  id        String   @id @default(uuid())
+  userId    String // ID único do usuário/dispositivo
+  radarId   String // ID do radar
+  action    String // "confirm" | "deny"
+  createdAt DateTime @default(now())
+
+  @@unique([userId, radarId, action]) // Um usuário só pode confirmar ou negar uma vez por radar
+  @@index([radarId])
+  @@index([userId])
+  @@map("user_radar_actions")
+}
+
+model UserRadarSpeedVote {
+  id               String   @id @default(uuid())
+  userId           String // ID único do usuário/dispositivo
+  radarId          String // ID do radar
+  velocidadeLeve   Int? // Velocidade votada para veículos leves (km/h)
+  velocidadePesado Int? // Velocidade votada para veículos pesados (km/h)
+  createdAt        DateTime @default(now())
+
+  @@unique([userId, radarId]) // Um usuário só pode votar uma vez por radar
+  @@index([radarId])
+  @@index([userId])
+  @@map("user_radar_speed_votes")
+}
+
+model UserPosition {
+  id        String   @id @default(uuid())
+  userId    String   // ID único do usuário/dispositivo
+  latitude  Float
+  longitude Float
+  bearing   Float?   // Direção em graus (0-360)
+  speed     Float?   // Velocidade em km/h
+  accuracy  Float?   // Precisão do GPS em metros
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@unique([userId]) // Um usuário tem apenas uma posição ativa
+  @@index([latitude, longitude]) // Índice para busca por proximidade
+  @@index([updatedAt]) // Índice para limpeza de posições antigas
+  @@map("user_positions")
+}

@@ -1,9 +1,7 @@
-# Não commitar: ambiente e dependências
-.env
-.env.local
 node_modules/
 dist/
+.env
+*.log
 
-# Prisma
-*.db
-*.db-journal
+# CSVs grandes (GitHub limita 100 MB por arquivo) — manter só no servidor
+radarsFiles/
