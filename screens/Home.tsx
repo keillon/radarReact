@@ -119,7 +119,72 @@ const calculateDistanceToRoute = (
   return minDistance;
 };
 
-// Função para calcular distância ao longo da rota (distância do usuário até o radar ao longo do caminho)
+// --- Lógica robusta estilo Waze: distância ao longo da rota com projeção contínua ---
+
+/** Distâncias cumulativas desde o início da rota (em metros). cumulative[0]=0, cumulative[i]=soma dos segmentos 0..i-1 */
+function getCumulativeDistances(routePoints: LatLng[]): number[] {
+  const cum: number[] = [0];
+  for (let i = 1; i < routePoints.length; i++) {
+    cum[i] =
+      cum[i - 1] +
+      calculateDistance(
+        routePoints[i - 1].latitude,
+        routePoints[i - 1].longitude,
+        routePoints[i].latitude,
+        routePoints[i].longitude,
+      );
+  }
+  return cum;
+}
+
+/**
+ * Projeta um ponto na rota e retorna a distância cumulativa (em metros) até essa projeção.
+ * Usa projeção no segmento mais próximo (não só vértices).
+ */
+function projectPointOntoRoute(
+  point: LatLng,
+  routePoints: LatLng[],
+  cumulative: number[],
+): number {
+  if (routePoints.length < 2 || cumulative.length !== routePoints.length) {
+    return 0;
+  }
+  let bestCumulative = 0;
+  let bestDist = Infinity;
+  for (let i = 0; i < routePoints.length - 1; i++) {
+    const segStart = routePoints[i];
+    const segEnd = routePoints[i + 1];
+    const segLen =
+      cumulative[i + 1] - cumulative[i] || 1e-9;
+    const A = point.latitude - segStart.latitude;
+    const B = point.longitude - segStart.longitude;
+    const C = segEnd.latitude - segStart.latitude;
+    const D = segEnd.longitude - segStart.longitude;
+    const dot = A * C + B * D;
+    const lenSq = C * C + D * D;
+    let t = lenSq > 0 ? dot / lenSq : 0;
+    t = Math.max(0, Math.min(1, t));
+    const projLat = segStart.latitude + t * C;
+    const projLon = segStart.longitude + t * D;
+    const dist = calculateDistance(
+      point.latitude,
+      point.longitude,
+      projLat,
+      projLon,
+    );
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestCumulative = cumulative[i] + t * segLen;
+    }
+  }
+  return bestCumulative;
+}
+
+/**
+ * Distância ao longo da rota do usuário até o radar (em metros).
+ * Positiva = radar à frente; negativa ou zero = já passou.
+ * Estilo Waze: projeção contínua + cumulativas.
+ */
 const calculateDistanceAlongRoute = (
   userLocation: LatLng,
   radarLocation: LatLng,
@@ -128,90 +193,22 @@ const calculateDistanceAlongRoute = (
   if (routePoints.length < 2) {
     return { distance: Infinity, hasPassed: false };
   }
+  const cumulative = getCumulativeDistances(routePoints);
+  const userCum = projectPointOntoRoute(userLocation, routePoints, cumulative);
+  const radarCum = projectPointOntoRoute(radarLocation, routePoints, cumulative);
+  const distanceAlongRoute = radarCum - userCum;
+  // Histerese 5m: marcar "passou" quando < 5m para evitar flicker por ruído do GPS
+  const hasPassed = distanceAlongRoute < 5;
+  return {
+    distance: hasPassed ? 0 : Math.max(0, distanceAlongRoute),
+    hasPassed,
+  };
+};
 
-  // Encontrar o índice do ponto mais próximo do usuário na rota
-  let userIndex = 0;
-  let minUserDistance = Infinity;
-  for (let i = 0; i < routePoints.length; i++) {
-    const dist = calculateDistance(
-      userLocation.latitude,
-      userLocation.longitude,
-      routePoints[i].latitude,
-      routePoints[i].longitude,
-    );
-    if (dist < minUserDistance) {
-      minUserDistance = dist;
-      userIndex = i;
-    }
-  }
-
-  // Encontrar o índice do ponto mais próximo do radar na rota
-  let radarIndex = 0;
-  let minRadarDistance = Infinity;
-  for (let i = 0; i < routePoints.length; i++) {
-    const dist = calculateDistance(
-      radarLocation.latitude,
-      radarLocation.longitude,
-      routePoints[i].latitude,
-      routePoints[i].longitude,
-    );
-    if (dist < minRadarDistance) {
-      minRadarDistance = dist;
-      radarIndex = i;
-    }
-  }
-
-  // Se o usuário já passou do radar (índice do usuário > índice do radar), retornar 0
-  const hasPassed =
-    userIndex > radarIndex ||
-    (userIndex === radarIndex && minUserDistance > minRadarDistance + 10);
-
-  if (hasPassed) {
-    return { distance: 0, hasPassed: true };
-  }
-
-  // Calcular distância ao longo da rota do usuário até o radar
-  let distanceAlongRoute = 0;
-
-  // Distância do usuário até o próximo ponto na rota
-  if (userIndex < routePoints.length - 1) {
-    distanceAlongRoute += calculateDistance(
-      userLocation.latitude,
-      userLocation.longitude,
-      routePoints[userIndex + 1].latitude,
-      routePoints[userIndex + 1].longitude,
-    );
-  }
-
-  // Distância ao longo dos segmentos entre userIndex e radarIndex
-  for (let i = userIndex + 1; i < radarIndex; i++) {
-    distanceAlongRoute += calculateDistance(
-      routePoints[i].latitude,
-      routePoints[i].longitude,
-      routePoints[i + 1].latitude,
-      routePoints[i + 1].longitude,
-    );
-  }
-
-  // Distância do último ponto até o radar
-  if (radarIndex > 0 && userIndex < radarIndex) {
-    distanceAlongRoute += calculateDistance(
-      routePoints[radarIndex - 1].latitude,
-      routePoints[radarIndex - 1].longitude,
-      radarLocation.latitude,
-      radarLocation.longitude,
-    );
-  } else if (userIndex === radarIndex - 1) {
-    // Se estão em segmentos adjacentes, calcular diretamente
-    distanceAlongRoute = calculateDistance(
-      userLocation.latitude,
-      userLocation.longitude,
-      radarLocation.latitude,
-      radarLocation.longitude,
-    );
-  }
-
-  return { distance: Math.max(0, distanceAlongRoute), hasPassed: false };
+/** Arredonda distância para múltiplo de 10m (ex.: 287 -> 290, 283 -> 280), mínimo 0. */
+const roundDistanceTo10 = (meters: number): number => {
+  if (meters <= 0) return 0;
+  return Math.round(meters / 10) * 10;
 };
 
 // Função para filtrar radares próximos à rota
@@ -497,6 +494,12 @@ export default function Home() {
       // Aguardar um pouco para garantir que tudo está pronto antes de mostrar a navegação
       // Isso evita que o componente apareça se montando
       await new Promise<void>((resolve) => setTimeout(() => resolve(), 500));
+
+      // Limpar estado de radares para nova navegação (cada viagem começa "limpa")
+      passedRadarIds.current.clear();
+      alertedRadarIds.current.clear();
+      lastCalculatedDistance.current = 0;
+      radarZeroTimeRef2.current = null;
 
       // Iniciar navegação com o SDK
       setIsNavigating(true);
@@ -1069,59 +1072,44 @@ export default function Home() {
                       let minDistance = Infinity;
 
                       filteredRadars.forEach((radar) => {
-                        // Verificar se já passou deste radar - se sim, ignorar
                         if (passedRadarIds.current.has(radar.id)) {
                           return;
                         }
 
-                        // Calcular distância até a rota (distância perpendicular)
+                        const radarPoint: LatLng = {
+                          latitude: radar.latitude,
+                          longitude: radar.longitude,
+                        };
                         const routeDistance = calculateDistanceToRoute(
-                          {
-                            latitude: radar.latitude,
-                            longitude: radar.longitude,
-                          },
+                          radarPoint,
                           routePoints,
                         );
-
-                        // Verificar se está próximo da rota (distância perpendicular < 100m)
-                        const isNearRoute =
-                          routeDistance < 100 || routeDistance === Infinity;
-
-                        if (!isNearRoute) {
-                          return; // Radar não está na rota
+                        if (routeDistance > 100) {
+                          return;
                         }
 
-                        // Calcular distância ao longo da rota (não distância direta!)
                         const routeDistanceResult = calculateDistanceAlongRoute(
                           checkLocation,
-                          {
-                            latitude: radar.latitude,
-                            longitude: radar.longitude,
-                          },
+                          radarPoint,
                           routePoints,
                         );
 
-                        // Se já passou do radar, marcar como passado e não calcular mais
                         if (routeDistanceResult.hasPassed) {
                           passedRadarIds.current.add(radar.id);
-                          console.log(
-                            `✅ Radar ${radar.id} já foi passado, marcando como passado`,
-                          );
                           return;
                         }
 
                         const distanceAlongRoute = routeDistanceResult.distance;
+                        if (distanceAlongRoute < 0 || distanceAlongRoute >= 500) {
+                          return;
+                        }
 
-                        // Só considerar radares a menos de 500m ao longo da rota
-                        if (
-                          distanceAlongRoute < minDistance &&
-                          distanceAlongRoute < 500
-                        ) {
+                        if (distanceAlongRoute < minDistance) {
                           minDistance = distanceAlongRoute;
                           nearest = {
                             radar,
-                            distance: Math.round(distanceAlongRoute), // Distância ao longo da rota
-                            routeDistance: Math.round(routeDistance), // Distância perpendicular para validação
+                            distance: roundDistanceTo10(distanceAlongRoute),
+                            routeDistance: Math.round(routeDistance),
                           };
                         }
                       });
@@ -1140,11 +1128,9 @@ export default function Home() {
                           `📊 Modal será ${nearestDistance <= 200 ? "exibido" : "oculto"} (distância: ${nearestDistance}m)`,
                         );
 
-                        // Evitar atualizações muito frequentes se a distância não mudou muito (tolerância de 3m)
+                        // Atualizar só quando a distância (em blocos de 10m) mudar
                         if (
-                          Math.abs(
-                            nearestDistance - lastCalculatedDistance.current,
-                          ) < 3 &&
+                          nearestDistance === lastCalculatedDistance.current &&
                           lastCalculatedDistance.current > 0
                         ) {
                           return;
@@ -1166,11 +1152,10 @@ export default function Home() {
                         // Isso é feito automaticamente quando setRadars é chamado novamente
                         // Por enquanto, apenas marcar como próximo para o filtro funcionar
 
-                        // Mostrar modal se estiver entre 300m e 0m ao longo da rota
+                        // Mostrar modal se estiver entre 300m e 0m ao longo da rota (distância em blocos de 10m)
                         if (nearestDistance <= 300) {
-                          // Se chegou a 0 metros ou muito próximo (menos de 5m), iniciar contagem de 3 segundos
-                          if (nearestDistance <= 0 || nearestDistance < 5) {
-                            // Marcar radar como passado
+                          // Chegou no radar (0m ou último passo 10m): marcar passado e manter modal 3s
+                          if (nearestDistance < 10) {
                             passedRadarIds.current.add(nearestRadarObj.id);
 
                             if (radarZeroTimeRef2.current === null) {
@@ -1309,11 +1294,13 @@ export default function Home() {
                   clearTimeout(locationUpdateDebounce.current);
                 }
 
-                // Agendar verificação com debounce
+                // Rodar uma vez imediatamente para atualização rápida do modal
+                checkRadarDistance();
+                // Agendar próximas verificações com debounce 500ms (contagem mais suave, menos pulos)
                 locationUpdateDebounce.current = setTimeout(
                   checkRadarDistance,
-                  1000,
-                ); // Debounce de 1 segundo para cálculos de distância
+                  500,
+                );
               } catch (error) {
                 console.error("Erro no callback onLocationChange:", error);
               }
@@ -1333,12 +1320,28 @@ export default function Home() {
             }}
             onArrive={() => {
               Alert.alert("Chegada", "Você chegou ao destino!");
+              if (locationUpdateDebounce.current) {
+                clearTimeout(locationUpdateDebounce.current);
+                locationUpdateDebounce.current = null;
+              }
+              passedRadarIds.current.clear();
+              alertedRadarIds.current.clear();
+              setNearestRadar(null);
+              setNearbyRadarIds(new Set());
               setIsNavigating(false);
               setIsPreparingNavigation(false);
               setRouteData(null);
               setRoute(null);
             }}
             onCancelNavigation={() => {
+              if (locationUpdateDebounce.current) {
+                clearTimeout(locationUpdateDebounce.current);
+                locationUpdateDebounce.current = null;
+              }
+              passedRadarIds.current.clear();
+              alertedRadarIds.current.clear();
+              setNearestRadar(null);
+              setNearbyRadarIds(new Set());
               setIsNavigating(false);
               setIsPreparingNavigation(false);
               setRouteData(null);
@@ -1445,9 +1448,9 @@ export default function Home() {
                     : "Radar Próximo"}
               </Text>
               <Text style={styles.radarAlertDistance}>
-                {nearestRadar.distance <= 0 || nearestRadar.distance < 5
+                {nearestRadar.distance < 10
                   ? "0m"
-                  : `${Math.round(nearestRadar.distance)}m`}
+                  : `${nearestRadar.distance}m`}
                 {nearestRadar.radar.speedLimit && (
                   <Text style={styles.radarAlertSpeed}>
                     {" • "}
@@ -1505,7 +1508,7 @@ const styles = StyleSheet.create({
   radarAlertDistance: {
     fontSize: 26,
     fontWeight: "bold",
-    color: "#FFFF00",
+    color: "#ffff",
   },
   radarAlertSpeed: {
     fontSize: 46,
