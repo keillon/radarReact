@@ -1,0 +1,9 @@
+# Não commitar: ambiente e dependências
+.env
+.env.local
+node_modules/
+dist/
+
+# Prisma
+*.db
+*.db-journal
