@@ -222,6 +222,7 @@ export default function Map({
         pitchEnabled={interactive}
         rotateEnabled={interactive}
         compassEnabled={interactive}
+        compassPosition={{ bottom: 420, right: 20 }}
         scaleBarEnabled={false}
       >
         <Camera

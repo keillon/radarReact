@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
+  Image,
   PermissionsAndroid,
   Platform,
   StyleSheet,
@@ -821,12 +822,7 @@ export default function Home() {
         <View style={styles.mapContainer}>
           {/* Renderizar MapboxNavigation primeiro (base) */}
           <MapboxNavigation
-            style={[
-              StyleSheet.absoluteFill,
-              nearestRadar && {
-                bottom: Platform.OS === "ios" ? 180 : 240, // Ajusta a área visível do mapa para cima quando o modal aparece
-              },
-            ]}
+            style={StyleSheet.absoluteFill}
             startOrigin={{
               latitude: origin.latitude,
               longitude: origin.longitude,
@@ -1374,7 +1370,9 @@ export default function Home() {
             {isReportingRadar ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
-              <Text style={styles.reportRadarButtonText}>⚠️</Text>
+              <Text style={styles.reportRadarButtonText}>
+                <Image source={require("../assets/images/radar.png")} style={styles.reportRadarButtonImage} />
+              </Text>
             )}
           </TouchableOpacity>
         </View>
@@ -1471,7 +1469,8 @@ const styles = StyleSheet.create({
   },
   radarAlertContainer: {
     position: "absolute",
-    bottom: Platform.OS === "ios" ? 60 : 120,
+    // Acima do trip progress: quando o radar aparece a câmera sobe e o trip progress fica embaixo
+    bottom: Platform.OS === "ios" ? 300 : 140,
     left: 16,
     right: 16,
     zIndex: 1000,
@@ -1596,9 +1595,9 @@ const styles = StyleSheet.create({
   },
   reportRadarButton: {
     position: "absolute",
-    bottom: Platform.OS === "ios" ? 100 : 230,
+    bottom: Platform.OS === "ios" ? 100 : 250,
     right: 20,
-    backgroundColor: "#3b82f6",
+    backgroundColor: "#fff",
     width: 60,
     height: 60,
     borderRadius: 30,
@@ -1610,6 +1609,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     zIndex: 1000,
+  },
+  reportRadarButtonImage: {
+    width: 42,
+    height: 42,
   },
   reportRadarButtonText: {
     fontSize: 28,
