@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "@fastify/cors": "^8.4.0",
-    "@fastify/websocket": "^11.2.0",
+    "@fastify/websocket": "^10.0.1",
     "@prisma/client": "^5.7.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.10",
