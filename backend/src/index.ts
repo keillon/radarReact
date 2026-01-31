@@ -27,16 +27,16 @@ async function start() {
   await fastify.register(websocket);
 
   // Rota WebSocket para atualizações de radares em tempo real
-  fastify.get("/ws", { websocket: true }, (connection, req) => {
+  fastify.get("/ws", { websocket: true }, (connection: any, req) => {
     activeConnections.add(connection);
     fastify.log.info({ url: req.url }, "WebSocket client connected");
 
-    connection.socket.on("close", () => {
+    connection.on("close", () => {
       activeConnections.delete(connection);
       fastify.log.info("WebSocket client disconnected");
     });
 
-    connection.socket.on("error", (error) => {
+    connection.on("error", (error: Error) => {
       fastify.log.error({ error }, "WebSocket error");
       activeConnections.delete(connection);
     });
@@ -45,7 +45,7 @@ async function start() {
   // Função helper para broadcast para todos os clientes conectados
   fastify.decorate("wsBroadcast", (event: string, data: any) => {
     const message = JSON.stringify({ event, data });
-    activeConnections.forEach((conn) => {
+    activeConnections.forEach((conn: any) => {
       try {
         if (conn.readyState === 1) { // OPEN
           conn.send(message);
