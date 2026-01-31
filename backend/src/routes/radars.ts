@@ -278,6 +278,60 @@ export async function radarRoutes(fastify: FastifyInstance) {
     }
   });
 
+  // Endpoint para buscar radares recentes (usado durante navegação para sincronização)
+  fastify.get("/radars/recent", async (request, reply) => {
+    const query = request.query as {
+      since?: string; // Timestamp ISO para buscar radares desde uma data
+    };
+
+    try {
+      const whereClause: any = {
+        ativo: true, // Apenas radares ativos
+      };
+
+      // Se fornecido 'since', buscar apenas radares criados/atualizados após essa data
+      if (query.since) {
+        const sinceDate = new Date(query.since);
+        if (!isNaN(sinceDate.getTime())) {
+          whereClause.OR = [
+            { createdAt: { gte: sinceDate } },
+            { lastConfirmedAt: { gte: sinceDate } },
+          ];
+        }
+      } else {
+        // Se não fornecido 'since', buscar radares das últimas 24 horas
+        const yesterday = new Date();
+        yesterday.setHours(yesterday.getHours() - 24);
+        whereClause.OR = [
+          { createdAt: { gte: yesterday } },
+          { lastConfirmedAt: { gte: yesterday } },
+        ];
+      }
+
+      const recentRadars = await prisma.radar.findMany({
+        where: whereClause,
+        orderBy: {
+          createdAt: "desc",
+        },
+        take: 500, // Limitar a 500 radares mais recentes
+      });
+
+      fastify.log.info(`📊 ${recentRadars.length} radares recentes encontrados`);
+
+      return {
+        radars: recentRadars,
+        count: recentRadars.length,
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error: any) {
+      fastify.log.error("Erro ao buscar radares recentes:", error);
+      return reply.code(500).send({
+        error: "Erro ao buscar radares recentes",
+        details: error.message,
+      });
+    }
+  });
+
   fastify.get("/radars", async (request, reply) => {
     const query = request.query as {
       route?: string;
