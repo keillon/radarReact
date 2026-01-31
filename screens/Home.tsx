@@ -1064,12 +1064,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
             distanceUnit="metric"
             language="pt-BR"
             // @ts-ignore - radars prop exists in MapboxNavigationProps
-            radars={useMemo(() => filteredRadars.map((r) => ({
-              id: r.id,
-              latitude: r.latitude,
-              longitude: r.longitude,
-              speedLimit: r.speedLimit,
-            })), [filteredRadars])}
+            radars={mapboxRadars}
             // @ts-ignore - nearbyRadarIds prop exists in MapboxNavigationProps
             nearbyRadarIds={Array.from(nearbyRadarIds)}
             // @ts-ignore - bottomPadding prop exists in MapboxNavigationProps
