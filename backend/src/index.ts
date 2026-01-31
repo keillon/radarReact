@@ -47,8 +47,8 @@ async function start() {
     const message = JSON.stringify({ event, data });
     activeConnections.forEach((conn) => {
       try {
-        if (conn.socket.readyState === 1) { // OPEN
-          conn.socket.send(message);
+        if (conn.readyState === 1) { // OPEN
+          conn.send(message);
         }
       } catch (error) {
         fastify.log.error({ error }, "Error sending WebSocket message");
