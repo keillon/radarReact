@@ -30,10 +30,12 @@ async function start() {
   const host = "0.0.0.0";
 
   try {
-    // Usar ready() para garantir que o servidor HTTP esteja pronto antes de anexar Socket.IO
-    await fastify.ready();
-    
-    // Criar Socket.IO após o ready() - o servidor HTTP já está disponível
+    // Iniciar o servidor HTTP primeiro
+    await fastify.listen({ port, host });
+    console.log(`Server listening on ${host}:${port}`);
+
+    // Criar Socket.IO após o listen - o servidor HTTP já está rodando
+    // O Socket.IO precisa ser anexado ao servidor HTTP que já está ativo
     const io = new SocketIOServer(fastify.server, {
       cors: { 
         origin: true,
@@ -51,11 +53,7 @@ async function start() {
         fastify.log.info({ id: socket.id }, "Client disconnected");
       });
     });
-    console.log("Socket.IO configured for real-time radar alerts");
-
-    // Agora iniciar o servidor HTTP (Socket.IO já está anexado)
-    await fastify.listen({ port, host });
-    console.log(`Server listening on ${host}:${port}`);
+    console.log("Socket.IO attached for real-time radar alerts");
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);
