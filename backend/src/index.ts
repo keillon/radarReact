@@ -1,53 +1,34 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import socketio from "fastify-socket.io";
 import { Server as SocketIOServer } from "socket.io";
-import { createServer, IncomingMessage, ServerResponse } from "http";
 import { radarRoutes } from "./routes/radars";
 import { notificationRoutes } from "./routes/notifications";
 import { adminRoutes } from "./routes/admin";
 import { authRoutes } from "./routes/auth";
 import { userRoutes } from "./routes/users";
 
-// Criar servidor HTTP primeiro
-const httpServer = createServer();
-
-// Criar Socket.IO ANTES do Fastify - ele precisa interceptar as requisições primeiro
-const io = new SocketIOServer(httpServer, {
-  cors: { 
-    origin: true,
-    credentials: true 
-  },
-  transports: ['websocket', 'polling'],
-  allowEIO3: true,
-  path: '/socket.io/',
-});
-
-// Criar Fastify com serverFactory que passa requisições não-Socket.IO para o Fastify
-const fastify = Fastify({ 
-  logger: true, 
-  serverFactory: (handler) => {
-    // Handler wrapper: se não for Socket.IO, passa para o Fastify
-    httpServer.on('request', (req: IncomingMessage, res: ServerResponse) => {
-      // Se a requisição é para Socket.IO, deixar o Socket.IO processar (não chamar handler)
-      if (req.url && req.url.startsWith('/socket.io/')) {
-        return; // Socket.IO vai processar
-      }
-      // Caso contrário, passar para o Fastify
-      handler(req, res);
-    });
-    return httpServer;
-  }
-});
+const fastify = Fastify({ logger: true });
 
 declare module "fastify" {
   interface FastifyInstance {
-    io?: SocketIOServer;
+    io: SocketIOServer;
   }
 }
 
 async function start() {
   await fastify.register(cors, {
     origin: true,
+  });
+
+  // Registrar Socket.IO plugin ANTES das rotas
+  await fastify.register(socketio, {
+    cors: {
+      origin: true,
+      credentials: true,
+    },
+    transports: ['websocket', 'polling'],
+    allowEIO3: true,
   });
 
   await fastify.register(authRoutes);
@@ -60,10 +41,11 @@ async function start() {
   const host = "0.0.0.0";
 
   try {
-    // Socket.IO já foi criado acima e anexado ao httpServer
-    fastify.io = io;
+    // Aguardar o Fastify estar pronto (incluindo o plugin Socket.IO)
+    await fastify.ready();
     
-    io.on("connection", (socket) => {
+    // Configurar eventos do Socket.IO após o plugin estar registrado
+    fastify.io.on("connection", (socket: any) => {
       fastify.log.info({ id: socket.id }, "Client connected (radar alerts)");
       socket.on("disconnect", () => {
         fastify.log.info({ id: socket.id }, "Client disconnected");
@@ -71,7 +53,7 @@ async function start() {
     });
     console.log("Socket.IO configured for real-time radar alerts");
 
-    // Iniciar o servidor HTTP (Socket.IO já está anexado e interceptará requisições /socket.io/)
+    // Iniciar o servidor HTTP
     await fastify.listen({ port, host });
     console.log(`Server listening on ${host}:${port}`);
   } catch (err) {
