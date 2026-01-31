@@ -810,6 +810,12 @@ export async function radarRoutes(fastify: FastifyInstance) {
       }
 
       await prisma.radar.delete({ where: { id } });
+      
+      // Broadcast via WebSocket quando deletar
+      fastify.wsBroadcast("radar:delete", {
+        id: id,
+      });
+
       return reply.code(204).send();
     } catch (error: any) {
       fastify.log.error(error);

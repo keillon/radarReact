@@ -1,29 +1,6 @@
-import React, { Suspense, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { ActivityIndicator, LogBox, StyleSheet, Text, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-
-function lazyScreen(loader: () => { default: React.ComponentType<any> }) {
-  return React.lazy(() => {
-    try {
-      const m = loader();
-      if (m && m.default) return Promise.resolve(m);
-      return Promise.resolve({ default: () => <Text>Módulo sem default</Text> });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      return Promise.resolve({
-        default: () => (
-          <View style={styles.fallback}>
-            <Text style={styles.errorText}>Erro ao carregar tela</Text>
-            <Text style={styles.errorSubtext}>{msg}</Text>
-          </View>
-        ),
-      });
-    }
-  });
-}
-
-const Home = lazyScreen(() => require("./screens/Home"));
-const RadarEditorScreen = lazyScreen(() => require("./screens/RadarEditorScreen"));
 
 LogBox.ignoreLogs([
   "new NativeEventEmitter",
@@ -41,18 +18,68 @@ function Fallback() {
   );
 }
 
+function ErrorScreen({ message }: { message: string }) {
+  return (
+    <View style={styles.fallback}>
+      <Text style={styles.errorText}>Erro ao carregar tela</Text>
+      <Text style={styles.errorSubtext}>{message}</Text>
+    </View>
+  );
+}
+
 export default function App() {
   const [showEditor, setShowEditor] = useState(false);
+  const [HomeComponent, setHomeComponent] = useState<React.ComponentType<any> | null>(null);
+  const [EditorComponent, setEditorComponent] = useState<React.ComponentType<any> | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
+  // Carregar telas só após o mount para evitar "Requiring unknown module 'undefined'" no startup
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const homeMod = require("./screens/Home");
+        const homeDefault = homeMod?.default;
+        if (!cancelled && homeDefault) setHomeComponent(() => homeDefault);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (!cancelled) setLoadError(msg);
+      }
+      try {
+        const editorMod = require("./screens/RadarEditorScreen");
+        const editorDefault = editorMod?.default;
+        if (!cancelled && editorDefault) setEditorComponent(() => editorDefault);
+      } catch (_) {
+        // Editor opcional; não sobrescreve erro da Home
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  if (loadError) {
+    return (
+      <SafeAreaProvider>
+        <ErrorScreen message={loadError} />
+      </SafeAreaProvider>
+    );
+  }
+
+  if (!HomeComponent) {
+    return (
+      <SafeAreaProvider>
+        <Fallback />
+      </SafeAreaProvider>
+    );
+  }
+
+  const Editor = EditorComponent;
   return (
     <SafeAreaProvider>
-      <Suspense fallback={<Fallback />}>
-        {showEditor ? (
-          <RadarEditorScreen onClose={() => setShowEditor(false)} />
-        ) : (
-          <Home onOpenEditor={() => setShowEditor(true)} />
-        )}
-      </Suspense>
+      {showEditor && Editor ? (
+        <Editor onClose={() => setShowEditor(false)} />
+      ) : (
+        <HomeComponent onOpenEditor={() => setShowEditor(true)} />
+      )}
     </SafeAreaProvider>
   );
 }

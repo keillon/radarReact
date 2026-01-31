@@ -50,7 +50,7 @@ index 7d28df3..95dfa12 100644
    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
    implementation 'androidx.cardview:cardview:1.0.0'
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
-index 41a3ba0..84c0438 100644
+index 41a3ba0..c792913 100644
 --- a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
 +++ b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
 @@ -3,25 +3,35 @@ package com.mapboxnavigation
@@ -1425,7 +1425,7 @@ index 41a3ba0..84c0438 100644
    }
  
    fun setLocal(language: String) {
-@@ -820,4 +1042,763 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -820,4 +1042,759 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
    fun setShowCancelButton(show: Boolean) {
      binding.stop.visibility = if (show) View.VISIBLE else View.INVISIBLE
    }
@@ -1894,11 +1894,7 @@ index 41a3ba0..84c0438 100644
 +              else -> {
 +                // Adicionar layer acima da rota para garantir visibilidade
 +                val layerPosition = if (style.styleLayerExists(TOP_LEVEL_ROUTE_LINE_LAYER_ID)) {
-+                  LayerPosition(
-+                          above = TOP_LEVEL_ROUTE_LINE_LAYER_ID,
-+                          below = null,
-+                          at = null
-+                  )
++                  LayerPosition(TOP_LEVEL_ROUTE_LINE_LAYER_ID, null, null)
 +                } else {
 +                  null
 +                }

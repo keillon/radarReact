@@ -958,6 +958,21 @@ export default function Home({ onOpenEditor }: HomeProps) {
                 console.log(`📊 filteredRadars atualizado após update: ${updated.length} radares`);
                 return updated;
               });
+            } else if (eventName === "radar:delete") {
+              const radarId = payload.id;
+              console.log(`📡 WebSocket: Radar deletado/inativado:`, radarId);
+              
+              // Remover de ambos os estados
+              setRadars((prev) => {
+                const updated = prev.filter((r) => r.id !== radarId);
+                console.log(`🗑️ Radar removido de radars: ${updated.length} radares restantes`);
+                return updated;
+              });
+              setFilteredRadars((prev) => {
+                const updated = prev.filter((r) => r.id !== radarId);
+                console.log(`🗑️ Radar removido de filteredRadars: ${updated.length} radares restantes`);
+                return updated;
+              });
             } else if (eventName === "connected") {
               console.log("✅ WebSocket conectado:", payload.message);
             }
