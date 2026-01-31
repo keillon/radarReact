@@ -1,4 +1,4 @@
-import React, { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -1064,13 +1064,12 @@ export default function Home({ onOpenEditor }: HomeProps) {
             distanceUnit="metric"
             language="pt-BR"
             // @ts-ignore - radars prop exists in MapboxNavigationProps
-            radars={filteredRadars.map((r) => ({
+            radars={useMemo(() => filteredRadars.map((r) => ({
               id: r.id,
               latitude: r.latitude,
               longitude: r.longitude,
               speedLimit: r.speedLimit,
-            }))}
-            key={`radars-${filteredRadars.length}`}
+            })), [filteredRadars])}
             // @ts-ignore - nearbyRadarIds prop exists in MapboxNavigationProps
             nearbyRadarIds={Array.from(nearbyRadarIds)}
             // @ts-ignore - bottomPadding prop exists in MapboxNavigationProps
