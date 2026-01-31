@@ -624,9 +624,18 @@ export async function radarRoutes(fastify: FastifyInstance) {
         },
       });
 
+      if (fastify.io) {
+        fastify.io.emit("radar:new", {
+          id: radar.id,
+          latitude: radar.latitude,
+          longitude: radar.longitude,
+          velocidadeLeve: radar.velocidadeLeve,
+          tipoRadar: radar.tipoRadar,
+          situacao: radar.situacao,
+        });
+      }
+
       // Atualizar data de sincronização quando um radar móvel é reportado
-      // Isso fará o sistema de polling detectar o novo radar e atualizar o mapa em tempo real
-      // Isso fará o modal aparecer para outros usuários
       try {
         const lastSyncFile = path.join(
           process.cwd(),

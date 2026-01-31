@@ -314,6 +314,8 @@ export default function Home({ onOpenEditor }: HomeProps) {
   const lastCalculatedDistance = useRef<number>(0);
   const radarZeroTimeRef2 = useRef<number | null>(null); // Timestamp quando chegou a 0 metros
   const modalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isNavigatingRef = useRef(false);
+  const routeDataRef = useRef<RouteResponse | null>(null);
 
   useEffect(() => {
     initMapbox();
@@ -838,10 +840,12 @@ export default function Home({ onOpenEditor }: HomeProps) {
     }
   }, [isNavigating, MapboxNavComponent]);
 
-  // WebSocket (Socket.IO): alertas de radar em tempo real durante navegação (carregamento dinâmico para evitar "undefined" no bundle)
-  useEffect(() => {
-    if (!isNavigating) return;
+  // Manter refs atualizados para o handler do Socket.IO (evitar closure obsoleta durante navegação)
+  isNavigatingRef.current = isNavigating;
+  routeDataRef.current = routeData;
 
+  // WebSocket (Socket.IO): radares em tempo real para todos (mapa e navegação), inclusive durante navegação
+  useEffect(() => {
     let socket: any = null;
     try {
       const socketIO = require("socket.io-client");
@@ -849,24 +853,28 @@ export default function Home({ onOpenEditor }: HomeProps) {
       if (typeof ioFn === "function") {
         socket = ioFn(API_BASE_URL, { transports: ["websocket", "polling"] });
       }
+      if (!socket) return;
+
       socket.on("radar:new", (payload: { id: string; latitude: number; longitude: number; velocidadeLeve?: number | null; tipoRadar?: string; situacao?: string | null }) => {
-          const radar: Radar = {
-            id: payload.id,
-            latitude: payload.latitude,
-            longitude: payload.longitude,
-            speedLimit: payload.velocidadeLeve ?? undefined,
-            type: payload.tipoRadar ?? "unknown",
-            situacao: payload.situacao ?? undefined,
-          };
-          setRadars((prev) => (prev.some((r) => r.id === radar.id) ? prev : [...prev, radar]));
-          if (routeData?.route?.geometry?.coordinates) {
-            const routePoints = routeData.route.geometry.coordinates.map((c: number[]) => ({ latitude: c[1], longitude: c[0] }));
-            const near = filterRadarsNearRoute([radar], routePoints, 100);
-            if (near.length > 0) {
-              setFilteredRadars((prev) => (prev.some((r) => r.id === radar.id) ? prev : [...prev, radar]));
-            }
+        const radar: Radar = {
+          id: payload.id,
+          latitude: payload.latitude,
+          longitude: payload.longitude,
+          speedLimit: payload.velocidadeLeve ?? undefined,
+          type: payload.tipoRadar ?? "unknown",
+          situacao: payload.situacao ?? undefined,
+        };
+        setRadars((prev) => (prev.some((r) => r.id === radar.id) ? prev : [...prev, radar]));
+        const nav = isNavigatingRef.current;
+        const rd = routeDataRef.current;
+        if (nav && rd?.route?.geometry?.coordinates) {
+          const routePoints = rd.route.geometry.coordinates.map((c: number[]) => ({ latitude: c[1], longitude: c[0] }));
+          const near = filterRadarsNearRoute([radar], routePoints, 100);
+          if (near.length > 0) {
+            setFilteredRadars((prev) => (prev.some((r) => r.id === radar.id) ? prev : [...prev, radar]));
           }
-        });
+        }
+      });
       socket.on("radar:update", (payload: { id: string; latitude: number; longitude: number; velocidadeLeve?: number | null; tipoRadar?: string; situacao?: string | null }) => {
         const radar: Radar = {
           id: payload.id,
@@ -885,7 +893,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
     return () => {
       if (socket) socket.disconnect();
     };
-  }, [isNavigating, routeData]);
+  }, []);
 
   return (
     <View style={styles.container}>
@@ -1700,24 +1708,24 @@ const styles = StyleSheet.create({
   radarAlertTitle: {
     fontSize: 18,
     fontWeight: "600",
-    color: "#fff",
+    color: "#000",
     marginBottom: 2,
     opacity: 0.9,
   },
   radarAlertDistance: {
     fontSize: 26,
     fontWeight: "bold",
-    color: "#ffff",
+    color: "#000",
   },
   radarAlertSpeed: {
     fontSize: 46,
     fontWeight: "500",
-    color: "rgba(255, 255, 255, 0.85)",
+    color: "#000",
   },
   radarCount: {
     marginTop: 8,
     fontSize: 12,
-    color: "#6b7280",
+    color: "#000",
     textAlign: "center",
   },
   stopButton: {
@@ -1859,6 +1867,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 16,
     marginBottom: 12,
+    color: "#000",
   },
   reportModalTypeRow: {
     flexDirection: "row",
