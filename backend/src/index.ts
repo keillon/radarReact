@@ -30,20 +30,28 @@ async function start() {
   const host = "0.0.0.0";
 
   try {
-    await fastify.listen({ port, host });
-    console.log(`Server listening on ${host}:${port}`);
-
+    // Criar Socket.IO ANTES do listen para que as rotas sejam registradas corretamente
     const io = new SocketIOServer(fastify.server, {
-      cors: { origin: true },
+      cors: { 
+        origin: true,
+        credentials: true 
+      },
+      transports: ['websocket', 'polling'],
+      allowEIO3: true,
     });
     fastify.io = io;
+    
     io.on("connection", (socket) => {
       fastify.log.info({ id: socket.id }, "Client connected (radar alerts)");
       socket.on("disconnect", () => {
         fastify.log.info({ id: socket.id }, "Client disconnected");
       });
     });
-    console.log("Socket.IO attached for real-time radar alerts");
+    console.log("Socket.IO configured for real-time radar alerts");
+
+    // Agora iniciar o servidor HTTP (Socket.IO já está anexado)
+    await fastify.listen({ port, host });
+    console.log(`Server listening on ${host}:${port}`);
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);
