@@ -52,8 +52,9 @@ export const getRadarsNearLocation = async (
   longitude: number,
   radius: number = 1000, // em metros, padrão 1000m
 ): Promise<Radar[]> => {
+  const url = `${API_BASE_URL}/radars?lat=${latitude}&lon=${longitude}&radius=${radius}`;
+  
   try {
-    const url = `${API_BASE_URL}/radars?lat=${latitude}&lon=${longitude}&radius=${radius}`;
     console.log(`🔍 Buscando radares em: ${url}`);
 
     const response = await fetch(url, {
@@ -69,9 +70,15 @@ export const getRadarsNearLocation = async (
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`❌ Erro HTTP ${response.status}: ${errorText}`);
+      let errorData;
+      try {
+        errorData = JSON.parse(errorText);
+      } catch {
+        errorData = { error: errorText };
+      }
+      console.error(`❌ Erro HTTP ${response.status}:`, errorData);
       throw new Error(
-        `Erro ao buscar radares: ${response.status} ${response.statusText}`,
+        errorData.error || errorData.details || `Erro ao buscar radares: ${response.status} ${response.statusText}`,
       );
     }
 
@@ -94,7 +101,7 @@ export const getRadarsNearLocation = async (
       "Erro ao buscar radares por localização:",
       JSON.stringify(errorDetails, null, 2),
     );
-    throw new Error(`Erro ao buscar radares: ${errorDetails.message}`);
+    throw error; // Re-throw o erro original para manter a stack trace
   }
 };
 
