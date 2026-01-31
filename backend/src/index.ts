@@ -12,7 +12,6 @@ import { userRoutes } from "./routes/users";
 const httpServer = createServer();
 
 // Criar Socket.IO e anexar ao servidor HTTP ANTES de qualquer coisa
-// O Socket.IO vai adicionar seus próprios listeners ao servidor HTTP
 const io = new SocketIOServer(httpServer, {
   cors: {
     origin: true,
@@ -23,14 +22,25 @@ const io = new SocketIOServer(httpServer, {
   path: '/socket.io/',
 });
 
-// Criar Fastify com serverFactory usando o mesmo servidor HTTP
-// O Socket.IO já está anexado e seus listeners serão chamados primeiro
+// Criar Fastify com serverFactory que filtra requisições Socket.IO
 const fastify = Fastify({ 
   logger: true,
   serverFactory: (handler) => {
-    // Adicionar handler do Fastify ao servidor HTTP
-    // O Socket.IO já está anexado e vai interceptar /socket.io/ primeiro
-    httpServer.on('request', handler);
+    // Criar um wrapper que só chama o handler do Fastify para requisições NÃO-Socket.IO
+    const wrappedHandler = (req: IncomingMessage, res: ServerResponse) => {
+      // Se for requisição Socket.IO, não chamar o handler do Fastify
+      // Deixar o Socket.IO processar
+      if (req.url && req.url.startsWith('/socket.io/')) {
+        return; // Socket.IO vai processar esta requisição
+      }
+      // Caso contrário, chamar o handler do Fastify
+      handler(req, res);
+    };
+    
+    // Adicionar o handler wrapper ao servidor HTTP
+    // O Socket.IO já está anexado e seus listeners serão chamados primeiro
+    httpServer.on('request', wrappedHandler);
+    
     return httpServer;
   }
 });
