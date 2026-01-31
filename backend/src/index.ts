@@ -23,10 +23,25 @@ async function start() {
     origin: true,
   });
 
-  // Registrar WebSocket plugin
+  // Registrar WebSocket plugin ANTES de outras rotas
   await fastify.register(websocket);
 
-  // Rota WebSocket para atualizações de radares em tempo real
+  // Função helper para broadcast para todos os clientes conectados (decorar antes de usar)
+  fastify.decorate("wsBroadcast", (event: string, data: any) => {
+    const message = JSON.stringify({ event, data });
+    activeConnections.forEach((conn: any) => {
+      try {
+        if (conn.readyState === 1) { // OPEN
+          conn.send(message);
+        }
+      } catch (error) {
+        fastify.log.error({ error }, "Error sending WebSocket message");
+        activeConnections.delete(conn);
+      }
+    });
+  });
+
+  // Rota WebSocket para atualizações de radares em tempo real (registrar ANTES de outras rotas)
   fastify.get("/ws", { websocket: true }, (connection: any, req) => {
     activeConnections.add(connection);
     fastify.log.info({ url: req.url }, "WebSocket client connected");
@@ -39,21 +54,6 @@ async function start() {
     connection.on("error", (error: Error) => {
       fastify.log.error({ error }, "WebSocket error");
       activeConnections.delete(connection);
-    });
-  });
-
-  // Função helper para broadcast para todos os clientes conectados
-  fastify.decorate("wsBroadcast", (event: string, data: any) => {
-    const message = JSON.stringify({ event, data });
-    activeConnections.forEach((conn: any) => {
-      try {
-        if (conn.readyState === 1) { // OPEN
-          conn.send(message);
-        }
-      } catch (error) {
-        fastify.log.error({ error }, "Error sending WebSocket message");
-        activeConnections.delete(conn);
-      }
     });
   });
 
