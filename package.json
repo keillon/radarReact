@@ -15,7 +15,7 @@
     "android:bundle": "react-native bundle --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package || echo \"AVISO: patches falharam. Para corrigir: apague node_modules e rode npm install de novo.\""
   },
   "dependencies": {
     "@pawan-pk/react-native-mapbox-navigation": "^0.5.2",

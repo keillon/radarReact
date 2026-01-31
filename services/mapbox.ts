@@ -1,9 +1,9 @@
-import MapboxGL from "@rnmapbox/maps";
-
 export const MAPBOX_TOKEN =
   "pk.eyJ1Ijoia2VpbGxvbiIsImEiOiJjbWpld2g0dnkwN3FyM2txMTY4aGN3aTlvIn0.CwcSIMVWiMyt_z9tRwi6WQ";
 
+// Carregar @rnmapbox/maps só quando initMapbox() for chamado (evita "Requiring unknown module 'undefined'" no startup)
 export const initMapbox = () => {
+  const MapboxGL = require("@rnmapbox/maps").default;
   MapboxGL.setAccessToken(MAPBOX_TOKEN);
 };
 

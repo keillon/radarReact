@@ -1,5 +1,4 @@
-import MapboxNavigation from "@pawan-pk/react-native-mapbox-navigation";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -16,7 +15,6 @@ import {
 } from "react-native";
 import Geolocation from "react-native-geolocation-service";
 
-import Map from "../components/Map";
 import SearchContainer from "../components/SearchContainer";
 import {
   API_BASE_URL,
@@ -26,7 +24,6 @@ import {
   Radar,
   reportRadar,
 } from "../services/api";
-import { io } from "socket.io-client";
 import {
   geocodeAddress,
   getRoute,
@@ -34,15 +31,35 @@ import {
   LatLng,
   RouteResponse,
 } from "../services/mapbox";
-// Importar TTS com tratamento de erro
-let Tts: any = null;
-try {
-  const TtsModule = require("react-native-tts");
-  // react-native-tts exporta uma instância diretamente
-  Tts = TtsModule.default || TtsModule;
-} catch (error) {
-  console.warn("react-native-tts não está disponível:", error);
+// TTS: carregar só no primeiro uso para evitar "Requiring unknown module 'undefined'" no startup
+let TtsCache: any = undefined; // undefined = ainda não tentou; null = tentou e falhou
+function getTts(): any {
+  if (TtsCache !== undefined) return TtsCache;
+  try {
+    const TtsModule = require("react-native-tts");
+    TtsCache = TtsModule.default || TtsModule;
+  } catch (error) {
+    console.warn("react-native-tts não está disponível:", error);
+    TtsCache = null;
+  }
+  return TtsCache;
 }
+
+// Map carregado sob demanda para evitar "Requiring unknown module 'undefined'" no startup (@rnmapbox/maps)
+const MapComponent = React.lazy(() => {
+  try {
+    const m = require("../components/Map");
+    return Promise.resolve(m.default ? m : { default: () => null });
+  } catch (e) {
+    return Promise.resolve({
+      default: () => (
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+          <Text>Erro ao carregar mapa</Text>
+        </View>
+      ),
+    });
+  }
+});
 
 // Função para calcular distância entre dois pontos (Haversine)
 const calculateDistance = (
@@ -271,6 +288,8 @@ export default function Home({ onOpenEditor }: HomeProps) {
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportSpeedLimit, setReportSpeedLimit] = useState("");
   const [reportRadarType, setReportRadarType] = useState<"reportado" | "fixo" | "móvel">("reportado");
+  const [MapboxNavComponent, setMapboxNavComponent] = useState<React.ComponentType<any> | null>(null);
+  const [mapboxNavError, setMapboxNavError] = useState<string | null>(null);
   const lastSyncTimeRef = useRef<number>(Date.now());
 
   const REPORT_RADAR_TYPES: { value: "reportado" | "fixo" | "móvel"; label: string }[] = [
@@ -300,9 +319,9 @@ export default function Home({ onOpenEditor }: HomeProps) {
     initMapbox();
     requestLocationPermission();
 
-    // Configurar TTS se disponível (aguardar inicialização do módulo nativo)
+    // Configurar TTS se disponível (aguardar inicialização do módulo nativo) — carregado sob demanda
+    const Tts = getTts();
     if (Tts) {
-      // Verificar se o módulo nativo está pronto antes de configurar
       if (Tts.getInitStatus && typeof Tts.getInitStatus === "function") {
         Tts.getInitStatus()
           .then((status: boolean) => {
@@ -317,7 +336,6 @@ export default function Home({ onOpenEditor }: HomeProps) {
             }
           })
           .catch(() => {
-            // Se getInitStatus falhar, tentar configurar mesmo assim
             if (Tts.setDefaultLanguage) {
               try {
                 Tts.setDefaultLanguage("pt-BR");
@@ -329,7 +347,6 @@ export default function Home({ onOpenEditor }: HomeProps) {
             }
           });
       } else if (Tts.setDefaultLanguage) {
-        // Se getInitStatus não existir, tentar configurar diretamente
         try {
           Tts.setDefaultLanguage("pt-BR");
           Tts.setDefaultRate(0.5);
@@ -341,6 +358,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
     }
 
     return () => {
+      const Tts = getTts();
       if (Tts && Tts.stop) {
         try {
           Tts.stop();
@@ -806,13 +824,31 @@ export default function Home({ onOpenEditor }: HomeProps) {
     };
   }, [isNavigating, syncRecentRadars]);
 
-  // WebSocket (Socket.IO): alertas de radar em tempo real durante navegação
+  // Carregar MapboxNavigation só quando entrar em navegação (evita "Requiring unknown module 'undefined'" no bundle)
+  useEffect(() => {
+    if (!isNavigating || MapboxNavComponent) return;
+    try {
+      const M = require("@pawan-pk/react-native-mapbox-navigation").default;
+      setMapboxNavComponent(() => M);
+      setMapboxNavError(null);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setMapboxNavError(msg);
+      console.warn("MapboxNavigation não disponível:", e);
+    }
+  }, [isNavigating, MapboxNavComponent]);
+
+  // WebSocket (Socket.IO): alertas de radar em tempo real durante navegação (carregamento dinâmico para evitar "undefined" no bundle)
   useEffect(() => {
     if (!isNavigating) return;
 
-    let socket: ReturnType<typeof io> | null = null;
+    let socket: any = null;
     try {
-      socket = io(API_BASE_URL, { transports: ["websocket", "polling"] });
+      const socketIO = require("socket.io-client");
+      const ioFn = socketIO.io ?? socketIO.default?.io ?? socketIO.default;
+      if (typeof ioFn === "function") {
+        socket = ioFn(API_BASE_URL, { transports: ["websocket", "polling"] });
+      }
       socket.on("radar:new", (payload: { id: string; latitude: number; longitude: number; velocidadeLeve?: number | null; tipoRadar?: string; situacao?: string | null }) => {
           const radar: Radar = {
             id: payload.id,
@@ -902,8 +938,14 @@ export default function Home({ onOpenEditor }: HomeProps) {
 
       {isNavigating && origin && destination && !isPreparingNavigation ? (
         <View style={styles.mapContainer}>
-          {/* Renderizar MapboxNavigation primeiro (base) */}
-          <MapboxNavigation
+          {mapboxNavError ? (
+            <View style={styles.loadingOverlay}>
+              <Text style={styles.loadingText}>Erro ao carregar navegação</Text>
+              <Text style={styles.loadingSubtext}>{mapboxNavError}</Text>
+            </View>
+          ) : MapboxNavComponent ? (
+          <>
+          <MapboxNavComponent
             style={StyleSheet.absoluteFill}
             startOrigin={{
               latitude: origin.latitude,
@@ -1331,6 +1373,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
                             message += `. Limite de velocidade ${speedLimit} quilômetros por hora`;
                           }
 
+                          const Tts = getTts();
                           if (Tts && typeof Tts.speak === "function") {
                             try {
                               Tts.speak(message);
@@ -1457,16 +1500,25 @@ export default function Home({ onOpenEditor }: HomeProps) {
               </Text>
             )}
           </TouchableOpacity>
+          </>
+          ) : (
+            <View style={styles.loadingOverlay}>
+              <ActivityIndicator size="large" color="#3b82f6" />
+              <Text style={styles.loadingText}>Carregando navegação...</Text>
+            </View>
+          )}
         </View>
       ) : (
         <View style={styles.mapContainer} pointerEvents="box-none">
-          <Map
-            radars={radars}
-            route={route}
-            isNavigating={false}
-            currentLocation={currentLocation}
-            nearbyRadarIds={nearbyRadarIds}
-          />
+          <Suspense fallback={<View style={[styles.mapContainer, { justifyContent: "center", alignItems: "center" }]}><ActivityIndicator size="large" color="#3b82f6" /></View>}>
+            <MapComponent
+              radars={radars}
+              route={route}
+              isNavigating={false}
+              currentLocation={currentLocation}
+              nearbyRadarIds={nearbyRadarIds}
+            />
+          </Suspense>
         </View>
       )}
 

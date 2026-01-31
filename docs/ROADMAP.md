@@ -13,3 +13,4 @@
 ## Notas
 
 - **patch-package**: rode sempre na **raiz do projeto** (`RadarREact/`), não dentro de `android/`. Exemplo: `npx patch-package @pawan-pk/react-native-mapbox-navigation`. Ou use `npm run apply-patch` na raiz.
+- **Se os patches falharem no `npm install`**: os patches em `patches/` foram reduzidos para só alterar código-fonte (sem pastas `build/`). Se ainda assim falharem, apague `node_modules` e instale de novo: **Windows** `rmdir /s /q node_modules` e depois `npm install`; **Git Bash/Linux** `rm -rf node_modules && npm install`. Assim os pacotes vêm limpos do npm e os patches devem aplicar.
