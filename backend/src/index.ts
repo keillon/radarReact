@@ -30,7 +30,10 @@ async function start() {
   const host = "0.0.0.0";
 
   try {
-    // Criar Socket.IO ANTES do listen para que as rotas sejam registradas corretamente
+    // Usar ready() para garantir que o servidor HTTP esteja pronto antes de anexar Socket.IO
+    await fastify.ready();
+    
+    // Criar Socket.IO após o ready() - o servidor HTTP já está disponível
     const io = new SocketIOServer(fastify.server, {
       cors: { 
         origin: true,
@@ -38,6 +41,7 @@ async function start() {
       },
       transports: ['websocket', 'polling'],
       allowEIO3: true,
+      path: '/socket.io/',
     });
     fastify.io = io;
     
