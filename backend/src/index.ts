@@ -30,16 +30,10 @@ async function start() {
   await fastify.register(adminRoutes);
   await fastify.register(userRoutes);
 
-  const port = Number(process.env.PORT) || 3000;
-  const host = "0.0.0.0";
-
-  try {
-    // Aguardar o Fastify estar pronto (todas as rotas registradas)
-    await fastify.ready();
-
-    // AGORA criar Socket.IO e anexar ao servidor HTTP do Fastify
-    // Isso garante que o Socket.IO seja criado DEPOIS que o Fastify está pronto
-    // mas ANTES de iniciar o servidor
+  // Hook para criar Socket.IO quando o Fastify estiver pronto
+  // mas ANTES de iniciar o servidor
+  fastify.addHook('onReady', async () => {
+    // Criar Socket.IO e anexar ao servidor HTTP do Fastify
     io = new SocketIOServer(fastify.server, {
       cors: {
         origin: true,
@@ -61,6 +55,14 @@ async function start() {
       });
     });
     console.log("Socket.IO configured for real-time radar alerts");
+  });
+
+  const port = Number(process.env.PORT) || 3000;
+  const host = "0.0.0.0";
+
+  try {
+    // Aguardar o Fastify estar pronto (todas as rotas registradas e hooks executados)
+    await fastify.ready();
 
     // Iniciar o servidor HTTP
     // O Socket.IO está anexado ao servidor do Fastify e vai interceptar /socket.io/
