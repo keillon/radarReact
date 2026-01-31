@@ -104,7 +104,7 @@ export default function SearchContainer({
           <Text style={styles.label}>Destino</Text>
           <TextInput
             style={styles.input}
-            placeholder="Digite o endereço de destino"
+            placeholder="Vai para onde?"
             placeholderTextColor="#9ca3af"
             value={destinationText}
             onChangeText={onDestinationChange}
@@ -156,14 +156,14 @@ export default function SearchContainer({
       )}
 
       {/* Contador de radares */}
-      {radarsCount > 0 && (
+      {/* {radarsCount > 0 && (
         <View style={styles.radarCountContainer}>
           <Text style={styles.radarCountText}>
             📍 {radarsCount} {radarsCount === 1 ? "radar" : "radares"} próximo
             {radarsCount === 1 ? "" : "s"}
           </Text>
         </View>
-      )}
+      )} */}
     </View>
   );
 }

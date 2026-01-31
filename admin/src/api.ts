@@ -21,6 +21,7 @@ export interface Radar {
   longitude: number;
   speedLimit?: number;
   type?: string;
+  situacao?: string | null;
 }
 
 interface ApiRadarResponse {
@@ -29,6 +30,7 @@ interface ApiRadarResponse {
   longitude: number;
   velocidadeLeve?: number | null;
   tipoRadar?: string;
+  situacao?: string | null;
   [key: string]: unknown;
 }
 
@@ -38,6 +40,7 @@ const mapApi = (r: ApiRadarResponse): Radar => ({
   longitude: r.longitude,
   speedLimit: r.velocidadeLeve ?? undefined,
   type: r.tipoRadar ?? "unknown",
+  situacao: r.situacao ?? undefined,
 });
 
 export async function getRadarsNearLocation(

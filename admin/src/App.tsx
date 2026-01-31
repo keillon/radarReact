@@ -21,7 +21,14 @@ export default function App() {
   const [saving, setSaving] = useState(false);
   const [speedLimit, setSpeedLimit] = useState("");
   const [pendingAdd, setPendingAdd] = useState<{ lat: number; lng: number } | null>(null);
+  const [radarType, setRadarType] = useState<"reportado" | "fixo" | "móvel">("reportado");
   const [error, setError] = useState<string | null>(null);
+
+  const RADAR_TYPES = [
+    { value: "reportado" as const, label: "Reportado" },
+    { value: "fixo" as const, label: "Fixo" },
+    { value: "móvel" as const, label: "Móvel" },
+  ];
 
   const loadRadars = useCallback(async () => {
     setLoading(true);
@@ -56,6 +63,7 @@ export default function App() {
     if (mode === "add") {
       setPendingAdd({ lat, lng });
       setSpeedLimit("");
+      setRadarType("reportado");
       setSelected(null);
       return;
     }
@@ -87,11 +95,12 @@ export default function App() {
         latitude: pendingAdd.lat,
         longitude: pendingAdd.lng,
         speedLimit: speedLimit ? parseInt(speedLimit, 10) : undefined,
-        type: "reportado",
+        type: radarType,
       });
       setRadars((prev) => [...prev, radar]);
       setPendingAdd(null);
       setSpeedLimit("");
+      setRadarType("reportado");
       setMode("view");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao adicionar radar");
@@ -139,14 +148,34 @@ export default function App() {
   const handleInactivate = async () => {
     if (!selected) return;
     setSaving(true);
-    const updated = await updateRadar(selected.id, { situacao: "inativo" });
+    setError(null);
+    const updated = await updateRadar(selected.id, { situacao: "Inativo" });
     setSaving(false);
     if (updated) {
-      setRadars((prev) => prev.filter((r) => r.id !== selected.id));
-      setSelected(null);
+      setRadars((prev) =>
+        prev.map((r) => (r.id === selected.id ? { ...r, ...updated, situacao: "Inativo" } : r))
+      );
+      setSelected(updated);
       setMode("view");
     } else {
       setError("Servidor não suporta inativar (PATCH situacao)");
+    }
+  };
+
+  const handleActivate = async () => {
+    if (!selected) return;
+    setSaving(true);
+    setError(null);
+    const updated = await updateRadar(selected.id, { situacao: "Ativo" });
+    setSaving(false);
+    if (updated) {
+      setRadars((prev) =>
+        prev.map((r) => (r.id === selected.id ? { ...r, ...updated, situacao: "Ativo" } : r))
+      );
+      setSelected(updated);
+      setMode("view");
+    } else {
+      setError("Servidor não suporta ativar (PATCH situacao)");
     }
   };
 
@@ -199,6 +228,104 @@ export default function App() {
           </button>
         </div>
       </header>
+
+      {/* Banner quando em modo adicionar ou mover */}
+      {mode === "add" && (
+        <div style={{ background: "#3b82f6", color: "#fff", padding: "12px 20px", textAlign: "center", fontWeight: 600, fontSize: 15 }}>
+          Clique em um ponto do mapa para posicionar o novo radar
+        </div>
+      )}
+      {mode === "move" && selected && (
+        <div style={{ background: "#3b82f6", color: "#fff", padding: "12px 20px", textAlign: "center", fontWeight: 600, fontSize: 15 }}>
+          Clique no mapa na nova posição do radar
+        </div>
+      )}
+
+      {/* Modal: Reportar radar (velocidade + tipo) */}
+      {pendingAdd && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+          }}
+          onClick={() => {
+            setPendingAdd(null);
+            setMode("view");
+          }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 12,
+              padding: 24,
+              width: "90%",
+              maxWidth: 400,
+              boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ margin: "0 0 16px", fontSize: 18 }}>Reportar radar</h3>
+            <p style={{ margin: "0 0 16px", fontSize: 13, color: "#6b7280" }}>
+              {pendingAdd.lat.toFixed(5)}, {pendingAdd.lng.toFixed(5)}
+            </p>
+            <label style={{ display: "block", marginBottom: 4, fontSize: 13, fontWeight: 500 }}>Velocidade (km/h) — opcional</label>
+            <input
+              type="number"
+              placeholder="Ex: 60"
+              value={speedLimit}
+              onChange={(e) => setSpeedLimit(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "10px 12px",
+                border: "1px solid #d1d5db",
+                borderRadius: 8,
+                marginBottom: 12,
+                boxSizing: "border-box",
+              }}
+            />
+            <label style={{ display: "block", marginBottom: 4, fontSize: 13, fontWeight: 500 }}>Tipo de radar</label>
+            <select
+              value={radarType}
+              onChange={(e) => setRadarType(e.target.value as "reportado" | "fixo" | "móvel")}
+              style={{
+                width: "100%",
+                padding: "10px 12px",
+                border: "1px solid #d1d5db",
+                borderRadius: 8,
+                marginBottom: 20,
+                boxSizing: "border-box",
+                background: "#fff",
+              }}
+            >
+              {RADAR_TYPES.map((t) => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
+            </select>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => { setPendingAdd(null); setMode("view"); }}
+                style={{ flex: 1, padding: 12, background: "#e5e7eb", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveNewRadar}
+                disabled={saving}
+                style={{ flex: 1, padding: 12, background: "#3b82f6", color: "#fff", border: "none", borderRadius: 8, cursor: saving ? "not-allowed" : "pointer", fontWeight: 600 }}
+              >
+                {saving ? "Salvando…" : "Salvar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
         <div style={{ flex: 1, position: "relative" }}>
@@ -253,79 +380,31 @@ export default function App() {
             </div>
           )}
 
-          {mode === "add" && (
-            <p style={{ color: "#6b7280", fontSize: 14, margin: "0 0 12px" }}>
-              Clique no mapa para colocar um novo radar.
+          {mode === "add" && !pendingAdd && (
+            <p style={{ color: "#1e40af", fontSize: 14, margin: "0 0 12px", fontWeight: 600 }}>
+              → Clique em qualquer lugar do mapa (área sem radar) para posicionar o novo radar.
             </p>
           )}
           {mode === "move" && selected && (
-            <p style={{ color: "#6b7280", fontSize: 14, margin: "0 0 12px" }}>
-              Clique no mapa na nova posição do radar.
+            <p style={{ color: "#1e40af", fontSize: 14, margin: "0 0 12px", fontWeight: 600 }}>
+              → Clique no mapa na nova posição do radar.
             </p>
           )}
 
           {pendingAdd && (
-            <div style={{ marginBottom: 16 }}>
-              <h3 style={{ margin: "0 0 8px", fontSize: 16 }}>Novo radar</h3>
-              <p style={{ margin: "0 0 8px", fontSize: 13, color: "#6b7280" }}>
-                {pendingAdd.lat.toFixed(5)}, {pendingAdd.lng.toFixed(5)}
-              </p>
-              <input
-                type="number"
-                placeholder="Limite (km/h) — opcional"
-                value={speedLimit}
-                onChange={(e) => setSpeedLimit(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "10px 12px",
-                  border: "1px solid #d1d5db",
-                  borderRadius: 8,
-                  marginBottom: 8,
-                  boxSizing: "border-box",
-                }}
-              />
-              <div style={{ display: "flex", gap: 8 }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPendingAdd(null);
-                    setMode("view");
-                  }}
-                  style={{
-                    flex: 1,
-                    padding: 10,
-                    background: "#e5e7eb",
-                    border: "none",
-                    borderRadius: 8,
-                    cursor: "pointer",
-                  }}
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveNewRadar}
-                  disabled={saving}
-                  style={{
-                    flex: 1,
-                    padding: 10,
-                    background: "#3b82f6",
-                    color: "#fff",
-                    border: "none",
-                    borderRadius: 8,
-                    cursor: saving ? "not-allowed" : "pointer",
-                    fontWeight: 600,
-                  }}
-                >
-                  {saving ? "Salvando…" : "Salvar"}
-                </button>
-              </div>
-            </div>
+            <p style={{ color: "#6b7280", fontSize: 13 }}>
+              Coordenadas: {pendingAdd.lat.toFixed(5)}, {pendingAdd.lng.toFixed(5)} — preencha no modal e salve.
+            </p>
           )}
 
           {selected && !pendingAdd && (
             <div>
               <h3 style={{ margin: "0 0 8px", fontSize: 16 }}>Radar selecionado</h3>
+              {(selected.situacao === "Inativo" || selected.situacao === "inativo") && (
+                <p style={{ margin: "0 0 8px", fontSize: 12, color: "#6b7280", fontWeight: 600 }}>
+                  Inativo
+                </p>
+              )}
               <p style={{ margin: "0 0 8px", fontSize: 13, color: "#6b7280" }}>
                 {selected.latitude.toFixed(5)}, {selected.longitude.toFixed(5)}
                 {selected.speedLimit != null && ` • ${selected.speedLimit} km/h`}
@@ -404,6 +483,24 @@ export default function App() {
                 >
                   Inativar
                 </button>
+                {(selected.situacao === "Inativo" || selected.situacao === "inativo") && (
+                  <button
+                    type="button"
+                    onClick={handleActivate}
+                    disabled={saving}
+                    style={{
+                      padding: 10,
+                      background: "#10b981",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: 8,
+                      cursor: saving ? "not-allowed" : "pointer",
+                      fontWeight: 600,
+                    }}
+                  >
+                    Ativar
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setSelected(null)}

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef } from "react";
 import mapboxgl from "mapbox-gl";
 import type { Radar } from "./api";
 
@@ -27,6 +27,8 @@ export default function Map({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
+  const onMapClickRef = useRef(onMapClick);
+  onMapClickRef.current = onMapClick;
 
   // Init map
   useEffect(() => {
@@ -41,7 +43,7 @@ export default function Map({
     mapRef.current = map;
 
     map.on("click", (e) => {
-      onMapClick(e.lngLat.lat, e.lngLat.lng);
+      onMapClickRef.current(e.lngLat.lat, e.lngLat.lng);
     });
 
     return () => {
@@ -67,17 +69,19 @@ export default function Map({
     markersRef.current = [];
 
     radars.forEach((radar) => {
+      const isInactive = radar.situacao === "Inativo" || radar.situacao === "inativo";
       const el = document.createElement("div");
       el.className = "radar-marker";
       el.style.cssText = `
         width: 28px; height: 28px;
-        background: ${selectedId === radar.id ? "#2563eb" : "#3b82f6"};
+        background: ${isInactive ? "#9ca3af" : selectedId === radar.id ? "#2563eb" : "#3b82f6"};
         border: 2px solid #fff;
         border-radius: 50%;
         cursor: pointer;
         box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        opacity: ${isInactive ? 0.8 : 1};
       `;
-      el.title = `Radar ${radar.id} ${radar.speedLimit ? radar.speedLimit + " km/h" : ""}`;
+      el.title = `Radar ${radar.id} ${radar.speedLimit ? radar.speedLimit + " km/h" : ""}${isInactive ? " (Inativo)" : ""}`;
 
       const marker = new mapboxgl.Marker({ element: el })
         .setLngLat([radar.longitude, radar.latitude])

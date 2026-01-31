@@ -1,4 +1,4 @@
-const API_BASE_URL = "http://72.60.247.18:3000";
+export const API_BASE_URL = "http://72.60.247.18:3000";
 
 export interface Radar {
   id: string;
@@ -6,6 +6,7 @@ export interface Radar {
   longitude: number;
   speedLimit?: number;
   type?: string;
+  situacao?: string | null;
 }
 
 export interface RoutePoint {
@@ -41,6 +42,7 @@ const mapApiRadarToRadar = (apiRadar: ApiRadarResponse): Radar => {
     longitude: apiRadar.longitude,
     speedLimit: apiRadar.velocidadeLeve || undefined,
     type: apiRadar.tipoRadar || "unknown",
+    situacao: apiRadar.situacao ?? undefined,
   };
 };
 

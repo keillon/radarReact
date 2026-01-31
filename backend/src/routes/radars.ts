@@ -554,6 +554,17 @@ export async function radarRoutes(fastify: FastifyInstance) {
         fs.writeFileSync(lastSyncFile, JSON.stringify(lastSyncInfo, null, 2), "utf-8");
       } catch (_) {}
 
+      if (fastify.io) {
+        fastify.io.emit("radar:new", {
+          id: radar.id,
+          latitude: radar.latitude,
+          longitude: radar.longitude,
+          velocidadeLeve: radar.velocidadeLeve,
+          tipoRadar: radar.tipoRadar,
+          situacao: radar.situacao,
+        });
+      }
+
       return {
         radar: {
           id: radar.id,
@@ -701,6 +712,17 @@ export async function radarRoutes(fastify: FastifyInstance) {
         where: { id },
         data: data as any,
       });
+
+      if (fastify.io) {
+        fastify.io.emit("radar:update", {
+          id: radar.id,
+          latitude: radar.latitude,
+          longitude: radar.longitude,
+          velocidadeLeve: radar.velocidadeLeve,
+          tipoRadar: radar.tipoRadar,
+          situacao: radar.situacao,
+        });
+      }
 
       return {
         id: radar.id,

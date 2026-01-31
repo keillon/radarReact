@@ -235,6 +235,14 @@ export default function Map({
             onMapPress({ latitude: lat, longitude: lng });
           }
         }}
+        onLongPress={(event) => {
+          const geometry = event?.geometry as { coordinates?: number[] } | undefined;
+          const coords = geometry?.coordinates;
+          if (onMapPress && Array.isArray(coords) && coords.length >= 2) {
+            const [lng, lat] = coords;
+            onMapPress({ latitude: lat, longitude: lng });
+          }
+        }}
       >
         <Camera
           ref={cameraRef}

@@ -5,10 +5,12 @@ import {
   Alert,
   Animated,
   Image,
+  Modal,
   PermissionsAndroid,
   Platform,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -17,12 +19,14 @@ import Geolocation from "react-native-geolocation-service";
 import Map from "../components/Map";
 import SearchContainer from "../components/SearchContainer";
 import {
+  API_BASE_URL,
   getRadarsNearLocation,
   getRadarsNearRoute,
   getRecentRadars,
   Radar,
   reportRadar,
 } from "../services/api";
+import { io } from "socket.io-client";
 import {
   geocodeAddress,
   getRoute,
@@ -264,7 +268,16 @@ export default function Home({ onOpenEditor }: HomeProps) {
   const [filteredRadars, setFilteredRadars] = useState<Radar[]>([]);
   const [nearbyRadarIds, setNearbyRadarIds] = useState<Set<string>>(new Set()); // IDs dos radares próximos para animação
   const [isReportingRadar, setIsReportingRadar] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportSpeedLimit, setReportSpeedLimit] = useState("");
+  const [reportRadarType, setReportRadarType] = useState<"reportado" | "fixo" | "móvel">("reportado");
   const lastSyncTimeRef = useRef<number>(Date.now());
+
+  const REPORT_RADAR_TYPES: { value: "reportado" | "fixo" | "móvel"; label: string }[] = [
+    { value: "reportado", label: "Reportado" },
+    { value: "fixo", label: "Fixo" },
+    { value: "móvel", label: "Móvel" },
+  ];
   const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const locationWatchRef = useRef<any>(null);
@@ -631,19 +644,25 @@ export default function Home({ onOpenEditor }: HomeProps) {
     setDestination(coords);
   };
 
-  // Função para reportar radar na localização atual
-  const handleReportRadar = async () => {
+  // Reportar radar na localização atual (modal: velocidade + tipo).
+  // Futuro: mesma lógica pode ser usada para reportar acidentes, trânsito, etc. (estilo Waze) — por ora só radar.
+  const handleReportRadar = async (opts?: { speedLimit?: number; type?: "reportado" | "fixo" | "móvel" }) => {
     if (!currentLocation) {
       Alert.alert("Erro", "Não foi possível obter sua localização atual");
       return;
     }
 
+    const speedLimit = opts?.speedLimit ?? (reportSpeedLimit ? parseInt(reportSpeedLimit, 10) : undefined);
+    const type = opts?.type ?? reportRadarType;
+
     setIsReportingRadar(true);
+    setShowReportModal(false);
     try {
       const newRadar = await reportRadar({
         latitude: currentLocation.latitude,
         longitude: currentLocation.longitude,
-        type: "reportado",
+        speedLimit: speedLimit && !isNaN(speedLimit) ? speedLimit : undefined,
+        type,
       });
 
       // Verificar se é um radar temporário (salvo localmente)
@@ -678,6 +697,8 @@ export default function Home({ onOpenEditor }: HomeProps) {
           "Radar reportado com sucesso! Outros usuários verão em breve.",
         );
       }
+      setReportSpeedLimit("");
+      setReportRadarType("reportado");
     } catch (error: any) {
       console.error("Erro ao reportar radar:", error);
 
@@ -784,6 +805,51 @@ export default function Home({ onOpenEditor }: HomeProps) {
       }
     };
   }, [isNavigating, syncRecentRadars]);
+
+  // WebSocket (Socket.IO): alertas de radar em tempo real durante navegação
+  useEffect(() => {
+    if (!isNavigating) return;
+
+    let socket: ReturnType<typeof io> | null = null;
+    try {
+      socket = io(API_BASE_URL, { transports: ["websocket", "polling"] });
+      socket.on("radar:new", (payload: { id: string; latitude: number; longitude: number; velocidadeLeve?: number | null; tipoRadar?: string; situacao?: string | null }) => {
+          const radar: Radar = {
+            id: payload.id,
+            latitude: payload.latitude,
+            longitude: payload.longitude,
+            speedLimit: payload.velocidadeLeve ?? undefined,
+            type: payload.tipoRadar ?? "unknown",
+            situacao: payload.situacao ?? undefined,
+          };
+          setRadars((prev) => (prev.some((r) => r.id === radar.id) ? prev : [...prev, radar]));
+          if (routeData?.route?.geometry?.coordinates) {
+            const routePoints = routeData.route.geometry.coordinates.map((c: number[]) => ({ latitude: c[1], longitude: c[0] }));
+            const near = filterRadarsNearRoute([radar], routePoints, 100);
+            if (near.length > 0) {
+              setFilteredRadars((prev) => (prev.some((r) => r.id === radar.id) ? prev : [...prev, radar]));
+            }
+          }
+        });
+      socket.on("radar:update", (payload: { id: string; latitude: number; longitude: number; velocidadeLeve?: number | null; tipoRadar?: string; situacao?: string | null }) => {
+        const radar: Radar = {
+          id: payload.id,
+          latitude: payload.latitude,
+          longitude: payload.longitude,
+          speedLimit: payload.velocidadeLeve ?? undefined,
+          type: payload.tipoRadar ?? "unknown",
+          situacao: payload.situacao ?? undefined,
+        };
+        setRadars((prev) => prev.map((r) => (r.id === radar.id ? radar : r)));
+        setFilteredRadars((prev) => prev.map((r) => (r.id === radar.id ? radar : r)));
+      });
+    } catch (e) {
+      console.warn("Socket.IO não disponível para alertas em tempo real:", e);
+    }
+    return () => {
+      if (socket) socket.disconnect();
+    };
+  }, [isNavigating, routeData]);
 
   return (
     <View style={styles.container}>
@@ -1376,10 +1442,10 @@ export default function Home({ onOpenEditor }: HomeProps) {
             }}
           />
 
-          {/* Botão de reportar radar - estilo Waze */}
+          {/* Botão de reportar radar - abre modal com velocidade e tipo */}
           <TouchableOpacity
             style={styles.reportRadarButton}
-            onPress={handleReportRadar}
+            onPress={() => setShowReportModal(true)}
             disabled={isReportingRadar}
             activeOpacity={0.7}
           >
@@ -1475,6 +1541,74 @@ export default function Home({ onOpenEditor }: HomeProps) {
           </Animated.View>
         </Animated.View>
       )}
+
+      {/* Modal: Reportar radar (velocidade + tipo) */}
+      <Modal
+        visible={showReportModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowReportModal(false)}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          style={styles.reportModalOverlay}
+          onPress={() => setShowReportModal(false)}
+        >
+          <View style={styles.reportModalContent} onStartShouldSetResponder={() => true}>
+            <Text style={styles.reportModalTitle}>Reportar radar</Text>
+            <Text style={styles.reportModalSubtitle}>
+              Na sua localização atual
+            </Text>
+            <Text style={styles.reportModalLabel}>Velocidade (km/h) — opcional</Text>
+            <TextInput
+              style={styles.reportModalInput}
+              placeholder="Ex: 60"
+              keyboardType="number-pad"
+              value={reportSpeedLimit}
+              onChangeText={setReportSpeedLimit}
+            />
+            <Text style={styles.reportModalLabel}>Tipo de radar</Text>
+            <View style={styles.reportModalTypeRow}>
+              {REPORT_RADAR_TYPES.map((t) => (
+                <TouchableOpacity
+                  key={t.value}
+                  style={[
+                    styles.reportModalTypeButton,
+                    reportRadarType === t.value && styles.reportModalTypeButtonActive,
+                  ]}
+                  onPress={() => setReportRadarType(t.value)}
+                >
+                  <Text
+                    style={[
+                      styles.reportModalTypeButtonText,
+                      reportRadarType === t.value && styles.reportModalTypeButtonTextActive,
+                    ]}
+                  >
+                    {t.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={styles.reportModalButtons}>
+              <TouchableOpacity
+                style={styles.reportModalCancel}
+                onPress={() => setShowReportModal(false)}
+              >
+                <Text style={styles.reportModalCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.reportModalSubmit}
+                onPress={() => handleReportRadar()}
+                disabled={isReportingRadar}
+              >
+                <Text style={styles.reportModalSubmitText}>
+                  {isReportingRadar ? "Enviando…" : "Reportar"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -1632,6 +1766,98 @@ const styles = StyleSheet.create({
   },
   reportRadarButtonText: {
     fontSize: 28,
+    color: "#fff",
+  },
+  reportModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  reportModalContent: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 20,
+    width: "100%",
+    maxWidth: 360,
+  },
+  reportModalTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#1f2937",
+    marginBottom: 4,
+  },
+  reportModalSubtitle: {
+    fontSize: 13,
+    color: "#6b7280",
+    marginBottom: 16,
+  },
+  reportModalLabel: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#374151",
+    marginBottom: 6,
+  },
+  reportModalInput: {
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+    marginBottom: 12,
+  },
+  reportModalTypeRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 16,
+  },
+  reportModalTypeButton: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: "#e5e7eb",
+    alignItems: "center",
+  },
+  reportModalTypeButtonActive: {
+    backgroundColor: "#3b82f6",
+  },
+  reportModalTypeButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#374151",
+  },
+  reportModalTypeButtonTextActive: {
+    color: "#fff",
+  },
+  reportModalButtons: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  reportModalCancel: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: "#e5e7eb",
+    alignItems: "center",
+  },
+  reportModalCancelText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#374151",
+  },
+  reportModalSubmit: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: "#3b82f6",
+    alignItems: "center",
+  },
+  reportModalSubmitText: {
+    fontSize: 14,
+    fontWeight: "600",
     color: "#fff",
   },
   editorButton: {

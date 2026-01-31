@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   StyleSheet,
   Text,
   TextInput,
@@ -39,6 +40,13 @@ export default function RadarEditorScreen({
     latitude: number;
     longitude: number;
   } | null>(null);
+  const [radarType, setRadarType] = useState<"reportado" | "fixo" | "móvel">("reportado");
+
+  const RADAR_TYPES: { value: "reportado" | "fixo" | "móvel"; label: string }[] = [
+    { value: "reportado", label: "Reportado" },
+    { value: "fixo", label: "Fixo" },
+    { value: "móvel", label: "Móvel" },
+  ];
 
   const loadRadars = useCallback(async () => {
     setLoading(true);
@@ -86,6 +94,7 @@ export default function RadarEditorScreen({
     if (mode === "add") {
       setPendingAddCoords(coords);
       setNewSpeedLimit("");
+      setRadarType("reportado");
       setSelectedRadar(null);
       return;
     }
@@ -122,14 +131,15 @@ export default function RadarEditorScreen({
         latitude: pendingAddCoords.latitude,
         longitude: pendingAddCoords.longitude,
         speedLimit: newSpeedLimit ? parseInt(newSpeedLimit, 10) : undefined,
-        type: "reportado",
+        type: radarType,
       });
       setRadars((prev) => [...prev, radar]);
       setPendingAddCoords(null);
       setNewSpeedLimit("");
+      setRadarType("reportado");
       setMode("view");
     } catch (e) {
-      Alert.alert("Erro", "Não foi possível adicionar o radar.");
+      Alert.alert("Erro", e instanceof Error ? e.message : "Não foi possível adicionar o radar.");
     } finally {
       setSaving(false);
     }
@@ -192,12 +202,32 @@ export default function RadarEditorScreen({
     if (!selectedRadar) return;
     setSaving(true);
     const updated = await updateRadar(selectedRadar.id, {
-      situacao: "inativo",
+      situacao: "Inativo",
     });
     setSaving(false);
     if (updated) {
-      setRadars((prev) => prev.filter((r) => r.id !== selectedRadar.id));
-      setSelectedRadar(null);
+      setRadars((prev) =>
+        prev.map((r) =>
+          r.id === selectedRadar.id ? { ...r, ...updated, situacao: "Inativo" } : r
+        )
+      );
+      setSelectedRadar(updated);
+      setMode("view");
+    }
+  };
+
+  const handleActivate = async () => {
+    if (!selectedRadar) return;
+    setSaving(true);
+    const updated = await updateRadar(selectedRadar.id, { situacao: "Ativo" });
+    setSaving(false);
+    if (updated) {
+      setRadars((prev) =>
+        prev.map((r) =>
+          r.id === selectedRadar.id ? { ...r, ...updated, situacao: "Ativo" } : r
+        )
+      );
+      setSelectedRadar(updated);
       setMode("view");
     }
   };
@@ -209,10 +239,47 @@ export default function RadarEditorScreen({
           <Text style={styles.closeButtonText}>← Voltar</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Editor de radares</Text>
-        <TouchableOpacity onPress={loadRadars} style={styles.reloadButton}>
-          <Text style={styles.reloadButtonText}>Recarregar</Text>
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={[styles.headerButton, mode === "add" && styles.headerButtonActive]}
+            onPress={() => {
+              setMode("add");
+              setSelectedRadar(null);
+              setPendingAddCoords(null);
+            }}
+          >
+            <Text style={[styles.headerButtonText, mode === "add" && styles.headerButtonTextActive]}>
+              + Adicionar
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={loadRadars} style={styles.headerButton}>
+            <Text style={styles.headerButtonText}>Recarregar</Text>
+          </TouchableOpacity>
+        </View>
       </View>
+
+      {/* Banner claro quando em modo adicionar */}
+      {mode === "add" && (
+        <View style={styles.addBanner}>
+          <Text style={styles.addBannerText}>
+            Toque ou segure no mapa para posicionar o novo radar
+          </Text>
+        </View>
+      )}
+      {mode === "move" && selectedRadar && (
+        <View style={styles.addBanner}>
+          <Text style={styles.addBannerText}>
+            Toque ou segure no mapa na nova posição do radar
+          </Text>
+        </View>
+      )}
+      {mode === "view" && !selectedRadar && !pendingAddCoords && (
+        <View style={styles.hintBar}>
+          <Text style={styles.hintText}>
+            Toque em um radar no mapa para editar ou mover • Use "+ Adicionar" para novo radar
+          </Text>
+        </View>
+      )}
 
       <View style={styles.mapWrapper}>
         <Map
@@ -230,64 +297,95 @@ export default function RadarEditorScreen({
         )}
       </View>
 
-      {/* Modo: dica */}
-      {mode === "add" && (
-        <View style={styles.hintBar}>
-          <Text style={styles.hintText}>
-            Toque no mapa para colocar um novo radar
-          </Text>
-        </View>
-      )}
-      {mode === "move" && selectedRadar && (
-        <View style={styles.hintBar}>
-          <Text style={styles.hintText}>
-            Toque no mapa na nova posição do radar
-          </Text>
-        </View>
-      )}
-
-      {/* Painel: adicionar radar (após toque no mapa) */}
-      {mode === "add" && pendingAddCoords && (
-        <View style={styles.panel}>
-          <Text style={styles.panelTitle}>Novo radar</Text>
-          <Text style={styles.panelSubtitle}>
-            {pendingAddCoords.latitude.toFixed(5)},{" "}
-            {pendingAddCoords.longitude.toFixed(5)}
-          </Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Limite (km/h) - opcional"
-            keyboardType="number-pad"
-            value={newSpeedLimit}
-            onChangeText={setNewSpeedLimit}
-          />
-          <View style={styles.panelRow}>
-            <TouchableOpacity
-              style={[styles.button, styles.buttonSecondary]}
-              onPress={() => {
-                setPendingAddCoords(null);
-                setNewSpeedLimit("");
-              }}
-            >
-              <Text style={styles.buttonSecondaryText}>Cancelar</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.button, styles.buttonPrimary]}
-              onPress={handleSaveNewRadar}
-              disabled={saving}
-            >
-              <Text style={styles.buttonPrimaryText}>
-                {saving ? "Salvando..." : "Salvar"}
-              </Text>
-            </TouchableOpacity>
+      {/* Modal: Reportar radar (velocidade + tipo) */}
+      <Modal
+        visible={!!pendingAddCoords}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setPendingAddCoords(null);
+          setNewSpeedLimit("");
+          setRadarType("reportado");
+        }}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          style={styles.modalOverlay}
+          onPress={() => {
+            setPendingAddCoords(null);
+            setNewSpeedLimit("");
+            setRadarType("reportado");
+          }}
+        >
+          <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
+            <Text style={styles.panelTitle}>Reportar radar</Text>
+            <Text style={styles.panelSubtitle}>
+              {pendingAddCoords?.latitude.toFixed(5)}, {pendingAddCoords?.longitude.toFixed(5)}
+            </Text>
+            <Text style={styles.modalLabel}>Velocidade (km/h) — opcional</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Ex: 60"
+              keyboardType="number-pad"
+              value={newSpeedLimit}
+              onChangeText={setNewSpeedLimit}
+            />
+            <Text style={styles.modalLabel}>Tipo de radar</Text>
+            <View style={styles.typeRow}>
+              {RADAR_TYPES.map((t) => (
+                <TouchableOpacity
+                  key={t.value}
+                  style={[
+                    styles.typeButton,
+                    radarType === t.value && styles.typeButtonActive,
+                  ]}
+                  onPress={() => setRadarType(t.value)}
+                >
+                  <Text
+                    style={[
+                      styles.typeButtonText,
+                      radarType === t.value && styles.typeButtonTextActive,
+                    ]}
+                  >
+                    {t.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={styles.panelRow}>
+              <TouchableOpacity
+                style={[styles.button, styles.buttonSecondary]}
+                onPress={() => {
+                  setPendingAddCoords(null);
+                  setNewSpeedLimit("");
+                  setRadarType("reportado");
+                }}
+              >
+                <Text style={styles.buttonSecondaryText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, styles.buttonPrimary]}
+                onPress={handleSaveNewRadar}
+                disabled={saving}
+              >
+                <Text style={styles.buttonPrimaryText}>
+                  {saving ? "Salvando..." : "Salvar"}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
-      )}
+        </TouchableOpacity>
+      </Modal>
 
       {/* Painel: radar selecionado - editar / mover / deletar */}
       {mode === "view" && selectedRadar && !pendingAddCoords && (
         <View style={styles.panel}>
           <Text style={styles.panelTitle}>Radar selecionado</Text>
+          {(selectedRadar.situacao === "Inativo" || selectedRadar.situacao === "inativo") && (
+            <Text style={[styles.panelSubtitle, { fontWeight: "600", color: "#6b7280" }]}>
+              Inativo
+            </Text>
+          )}
           <Text style={styles.panelSubtitle}>
             {selectedRadar.latitude.toFixed(5)}, {selectedRadar.longitude.toFixed(5)}
             {selectedRadar.speedLimit != null &&
@@ -332,6 +430,15 @@ export default function RadarEditorScreen({
             >
               <Text style={styles.buttonSecondaryText}>Inativar</Text>
             </TouchableOpacity>
+            {(selectedRadar.situacao === "Inativo" || selectedRadar.situacao === "inativo") && (
+              <TouchableOpacity
+                style={[styles.button, { backgroundColor: "#10b981" }]}
+                onPress={handleActivate}
+                disabled={saving}
+              >
+                <Text style={styles.buttonPrimaryText}>Ativar</Text>
+              </TouchableOpacity>
+            )}
           </View>
           <TouchableOpacity
             style={[styles.button, styles.buttonSecondary, { marginTop: 8 }]}
@@ -367,8 +474,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     paddingTop: 48,
     backgroundColor: "#fff",
     borderBottomWidth: 1,
@@ -382,16 +489,43 @@ const styles = StyleSheet.create({
     color: "#3b82f6",
   },
   title: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "600",
     color: "#1f2937",
+    flex: 1,
   },
-  reloadButton: {
-    padding: 8,
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
-  reloadButtonText: {
+  headerButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: "#e5e7eb",
+  },
+  headerButtonActive: {
+    backgroundColor: "#3b82f6",
+  },
+  headerButtonText: {
     fontSize: 14,
-    color: "#3b82f6",
+    fontWeight: "600",
+    color: "#374151",
+  },
+  headerButtonTextActive: {
+    color: "#fff",
+  },
+  addBanner: {
+    backgroundColor: "#3b82f6",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  addBannerText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#fff",
+    textAlign: "center",
   },
   mapWrapper: {
     flex: 1,
@@ -439,6 +573,50 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#6b7280",
     marginBottom: 12,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  modalContent: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 20,
+    width: "100%",
+    maxWidth: 360,
+  },
+  modalLabel: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#374151",
+    marginBottom: 6,
+  },
+  typeRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 16,
+  },
+  typeButton: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: "#e5e7eb",
+    alignItems: "center",
+  },
+  typeButtonActive: {
+    backgroundColor: "#3b82f6",
+  },
+  typeButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#374151",
+  },
+  typeButtonTextActive: {
+    color: "#fff",
   },
   input: {
     borderWidth: 1,

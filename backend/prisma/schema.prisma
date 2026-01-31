@@ -29,6 +29,7 @@ model Radar {
   velocidadeOriginalPesado Int? // Velocidade original do CSV/fonte (para preservar quando houver votação)
   sentido                  String? // "Crescente" | "Decrescente"
   situacao                 String? // "Ativo" | "Inativo"
+  ativo                    Boolean @default(true)
   concessionaria           String? // Nome da concessionária
   license                  String? // Licença dos dados (ex: "CC-BY 4.0")
   attribution              String? // Atribuição/credito da fonte
