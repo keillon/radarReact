@@ -891,15 +891,45 @@ export default function Home({ onOpenEditor }: HomeProps) {
                 type: payload.tipoRadar ?? "unknown",
                 situacao: payload.situacao ?? undefined,
               };
-              setRadars((prev) => (prev.some((r) => r.id === radar.id) ? prev : [...prev, radar]));
+              
+              console.log(`📡 WebSocket: Novo radar recebido durante ${isNavigatingRef.current ? 'navegação' : 'mapa'}:`, radar.id);
+              
+              // Sempre adicionar ao estado principal de radares
+              setRadars((prev) => {
+                if (prev.some((r) => r.id === radar.id)) {
+                  return prev; // Já existe, não adicionar novamente
+                }
+                return [...prev, radar];
+              });
+              
+              // Durante navegação: filtrar pela rota e adicionar ao filteredRadars
               const nav = isNavigatingRef.current;
               const rd = routeDataRef.current;
               if (nav && rd?.route?.geometry?.coordinates) {
                 const routePoints = rd.route.geometry.coordinates.map((c: number[]) => ({ latitude: c[1], longitude: c[0] }));
                 const near = filterRadarsNearRoute([radar], routePoints, 100);
                 if (near.length > 0) {
-                  setFilteredRadars((prev) => (prev.some((r) => r.id === radar.id) ? prev : [...prev, radar]));
+                  console.log(`✅ Radar ${radar.id} está próximo à rota, adicionando ao filteredRadars`);
+                  setFilteredRadars((prev) => {
+                    if (prev.some((r) => r.id === radar.id)) {
+                      return prev; // Já existe
+                    }
+                    const updated = [...prev, radar];
+                    console.log(`📊 filteredRadars atualizado: ${updated.length} radares`);
+                    return updated;
+                  });
+                } else {
+                  console.log(`⚠️ Radar ${radar.id} não está próximo à rota (distância > 100m)`);
                 }
+              } else {
+                // Não está navegando: adicionar diretamente ao filteredRadars
+                console.log(`✅ Adicionando radar ao filteredRadars (não está navegando)`);
+                setFilteredRadars((prev) => {
+                  if (prev.some((r) => r.id === radar.id)) {
+                    return prev; // Já existe
+                  }
+                  return [...prev, radar];
+                });
               }
             } else if (eventName === "radar:update") {
               const radar: Radar = {
@@ -910,8 +940,18 @@ export default function Home({ onOpenEditor }: HomeProps) {
                 type: payload.tipoRadar ?? "unknown",
                 situacao: payload.situacao ?? undefined,
               };
+              
+              console.log(`📡 WebSocket: Radar atualizado:`, radar.id);
+              
+              // Atualizar em ambos os estados
               setRadars((prev) => prev.map((r) => (r.id === radar.id ? radar : r)));
-              setFilteredRadars((prev) => prev.map((r) => (r.id === radar.id ? radar : r)));
+              setFilteredRadars((prev) => {
+                const updated = prev.map((r) => (r.id === radar.id ? radar : r));
+                console.log(`📊 filteredRadars atualizado após update: ${updated.length} radares`);
+                return updated;
+              });
+            } else if (eventName === "connected") {
+              console.log("✅ WebSocket conectado:", payload.message);
             }
           } catch (e) {
             console.warn("Erro ao processar mensagem WebSocket:", e);
@@ -1030,6 +1070,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
               longitude: r.longitude,
               speedLimit: r.speedLimit,
             }))}
+            key={`radars-${filteredRadars.length}`}
             // @ts-ignore - nearbyRadarIds prop exists in MapboxNavigationProps
             nearbyRadarIds={Array.from(nearbyRadarIds)}
             // @ts-ignore - bottomPadding prop exists in MapboxNavigationProps
