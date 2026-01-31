@@ -50,7 +50,7 @@ index 7d28df3..95dfa12 100644
    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
    implementation 'androidx.cardview:cardview:1.0.0'
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
-index 41a3ba0..4e7af8c 100644
+index 41a3ba0..d0f7897 100644
 --- a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
 +++ b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
 @@ -3,25 +3,34 @@ package com.mapboxnavigation
@@ -1424,7 +1424,7 @@ index 41a3ba0..4e7af8c 100644
    }
  
    fun setLocal(language: String) {
-@@ -820,4 +1041,752 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -820,4 +1041,759 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
    fun setShowCancelButton(show: Boolean) {
      binding.stop.visibility = if (show) View.VISIBLE else View.INVISIBLE
    }
@@ -1450,6 +1450,7 @@ index 41a3ba0..4e7af8c 100644
 +        filterRadarsNearRoute()
 +      } else {
 +        filteredRadars = radars
++        updateRadarsOnMap() // Atualizar mapa quando não há rota
 +      }
 +
 +      updateRadarAnnotations()
@@ -1890,10 +1891,16 @@ index 41a3ba0..4e7af8c 100644
 +                )
 +              }
 +              else -> {
-+                style.addStyleLayer(layerValue, null)
++                // Adicionar layer acima da rota para garantir visibilidade
++                val aboveLayerId = if (style.styleLayerExists(TOP_LEVEL_ROUTE_LINE_LAYER_ID)) {
++                  TOP_LEVEL_ROUTE_LINE_LAYER_ID
++                } else {
++                  null
++                }
++                style.addStyleLayer(layerValue, aboveLayerId)
 +                Log.d(
 +                        "MapboxNavigationView",
-+                        "✅ SymbolLayer adicionado com sucesso para ${radarsToDisplay.size} radares"
++                        "✅ SymbolLayer adicionado com sucesso para ${radarsToDisplay.size} radares ${if (aboveLayerId != null) "acima da rota" else ""}"
 +                )
 +              }
 +            }
