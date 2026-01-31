@@ -19,14 +19,15 @@ declare module "fastify" {
 }
 
 async function start() {
+  // Registrar CORS primeiro
   await fastify.register(cors, {
     origin: true,
   });
 
-  // Registrar WebSocket plugin ANTES de outras rotas
+  // Registrar WebSocket plugin
   await fastify.register(websocket);
 
-  // Função helper para broadcast para todos os clientes conectados (decorar antes de usar)
+  // Função helper para broadcast para todos os clientes conectados
   fastify.decorate("wsBroadcast", (event: string, data: any) => {
     const message = JSON.stringify({ event, data });
     activeConnections.forEach((conn: any) => {
@@ -41,22 +42,31 @@ async function start() {
     });
   });
 
-  // Rota WebSocket para atualizações de radares em tempo real (registrar ANTES de outras rotas)
-  fastify.get("/ws", { websocket: true }, (connection: any, req) => {
+  // Rota WebSocket para atualizações de radares em tempo real
+  // IMPORTANTE: Registrar ANTES de outras rotas para evitar conflitos
+  fastify.get("/ws", { websocket: true }, (connection: any, req: any) => {
     activeConnections.add(connection);
-    fastify.log.info({ url: req.url }, "WebSocket client connected");
+    fastify.log.info({ url: req.url }, "✅ WebSocket client connected");
 
     connection.on("close", () => {
       activeConnections.delete(connection);
-      fastify.log.info("WebSocket client disconnected");
+      fastify.log.info("❌ WebSocket client disconnected");
     });
 
     connection.on("error", (error: Error) => {
-      fastify.log.error({ error }, "WebSocket error");
+      fastify.log.error({ error }, "❌ WebSocket error");
       activeConnections.delete(connection);
     });
+
+    // Enviar mensagem de boas-vindas
+    try {
+      connection.send(JSON.stringify({ event: "connected", data: { message: "WebSocket connected" } }));
+    } catch (e) {
+      fastify.log.error({ error: e }, "Error sending welcome message");
+    }
   });
 
+  // Registrar outras rotas DEPOIS do WebSocket
   await fastify.register(authRoutes);
   await fastify.register(radarRoutes);
   await fastify.register(notificationRoutes);
