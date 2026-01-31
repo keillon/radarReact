@@ -17,16 +17,19 @@
   },
   "dependencies": {
     "@fastify/cors": "^8.4.0",
+    "@fastify/websocket": "^11.2.0",
     "@prisma/client": "^5.7.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/pdf-parse": "^1.1.4",
+    "@types/ws": "^8.18.1",
     "bcryptjs": "^3.0.3",
     "fastify": "^4.24.3",
     "fastify-socket.io": "^5.1.0",
     "jsonwebtoken": "^9.0.3",
     "pdf-parse": "^1.1.1",
     "socket.io": "^4.8.3",
+    "ws": "^8.19.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

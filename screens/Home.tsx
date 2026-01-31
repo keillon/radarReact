@@ -13,7 +13,22 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import Geolocation from "react-native-geolocation-service";
+// Geolocation: carregar sob demanda para evitar "Requiring unknown module 'undefined'" no startup
+type GeolocationApi = { getCurrentPosition: any; watchPosition: any; clearWatch: any };
+let GeolocationModule: GeolocationApi | null = null;
+function getGeolocation(): GeolocationApi {
+  if (GeolocationModule == null) {
+    try {
+      const m = require("react-native-geolocation-service");
+      const api = m.default ?? m;
+      GeolocationModule = api;
+      return api;
+    } catch {
+      throw new Error("react-native-geolocation-service não disponível");
+    }
+  }
+  return GeolocationModule;
+}
 
 import SearchContainer from "../components/SearchContainer";
 import {
@@ -386,8 +401,8 @@ export default function Home({ onOpenEditor }: HomeProps) {
         }
       }
 
-      Geolocation.getCurrentPosition(
-        (position) => {
+      getGeolocation().getCurrentPosition(
+        (position: { coords: { latitude: number; longitude: number } }) => {
           const loc: LatLng = {
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
@@ -408,7 +423,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
               console.error("Erro ao buscar radares na inicialização:", error);
             });
         },
-        (error) => {
+        (error: unknown) => {
           console.error("Erro ao obter localização:", error);
           Alert.alert("Erro", "Não foi possível obter sua localização");
         },
@@ -620,18 +635,18 @@ export default function Home({ onOpenEditor }: HomeProps) {
 
     // Limpar watch anterior se existir
     if (locationWatchRef.current?.watchId) {
-      Geolocation.clearWatch(locationWatchRef.current.watchId);
+      getGeolocation().clearWatch(locationWatchRef.current.watchId);
     }
 
-    const watchId = Geolocation.watchPosition(
-      (position) => {
+    const watchId = getGeolocation().watchPosition(
+      (position: { coords: { latitude: number; longitude: number } }) => {
         const currentPos: LatLng = {
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
         };
         setCurrentLocation(currentPos);
       },
-      (error) => {
+      (error: unknown) => {
         console.error("Erro ao monitorar localização:", error);
       },
       {
@@ -651,7 +666,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
 
     return () => {
       if (locationWatchRef.current?.watchId) {
-        Geolocation.clearWatch(locationWatchRef.current.watchId);
+        getGeolocation().clearWatch(locationWatchRef.current.watchId);
       }
       if (locationUpdateDebounce.current) {
         clearTimeout(locationUpdateDebounce.current);
@@ -844,54 +859,96 @@ export default function Home({ onOpenEditor }: HomeProps) {
   isNavigatingRef.current = isNavigating;
   routeDataRef.current = routeData;
 
-  // WebSocket (Socket.IO): radares em tempo real para todos (mapa e navegação), inclusive durante navegação
+  // WebSocket nativo: radares em tempo real para todos (mapa e navegação), inclusive durante navegação
   useEffect(() => {
-    let socket: any = null;
-    try {
-      const socketIO = require("socket.io-client");
-      const ioFn = socketIO.io ?? socketIO.default?.io ?? socketIO.default;
-      if (typeof ioFn === "function") {
-        socket = ioFn(API_BASE_URL, { transports: ["websocket", "polling"] });
-      }
-      if (!socket) return;
+    let ws: WebSocket | null = null;
+    let reconnectTimeout: NodeJS.Timeout | null = null;
+    let reconnectAttempts = 0;
+    const maxReconnectAttempts = 5;
 
-      socket.on("radar:new", (payload: { id: string; latitude: number; longitude: number; velocidadeLeve?: number | null; tipoRadar?: string; situacao?: string | null }) => {
-        const radar: Radar = {
-          id: payload.id,
-          latitude: payload.latitude,
-          longitude: payload.longitude,
-          speedLimit: payload.velocidadeLeve ?? undefined,
-          type: payload.tipoRadar ?? "unknown",
-          situacao: payload.situacao ?? undefined,
+    const connectWebSocket = () => {
+      try {
+        const wsUrl = API_BASE_URL.replace(/^https?:\/\//, "").replace(/\/$/, "");
+        const protocol = API_BASE_URL.startsWith("https") ? "wss" : "ws";
+        ws = new WebSocket(`${protocol}://${wsUrl}/ws`);
+
+        ws.onopen = () => {
+          console.log("WebSocket conectado para alertas de radares em tempo real");
+          reconnectAttempts = 0;
         };
-        setRadars((prev) => (prev.some((r) => r.id === radar.id) ? prev : [...prev, radar]));
-        const nav = isNavigatingRef.current;
-        const rd = routeDataRef.current;
-        if (nav && rd?.route?.geometry?.coordinates) {
-          const routePoints = rd.route.geometry.coordinates.map((c: number[]) => ({ latitude: c[1], longitude: c[0] }));
-          const near = filterRadarsNearRoute([radar], routePoints, 100);
-          if (near.length > 0) {
-            setFilteredRadars((prev) => (prev.some((r) => r.id === radar.id) ? prev : [...prev, radar]));
+
+        ws.onmessage = (event) => {
+          try {
+            const message = JSON.parse(event.data);
+            const { event: eventName, data: payload } = message;
+
+            if (eventName === "radar:new") {
+              const radar: Radar = {
+                id: payload.id,
+                latitude: payload.latitude,
+                longitude: payload.longitude,
+                speedLimit: payload.velocidadeLeve ?? undefined,
+                type: payload.tipoRadar ?? "unknown",
+                situacao: payload.situacao ?? undefined,
+              };
+              setRadars((prev) => (prev.some((r) => r.id === radar.id) ? prev : [...prev, radar]));
+              const nav = isNavigatingRef.current;
+              const rd = routeDataRef.current;
+              if (nav && rd?.route?.geometry?.coordinates) {
+                const routePoints = rd.route.geometry.coordinates.map((c: number[]) => ({ latitude: c[1], longitude: c[0] }));
+                const near = filterRadarsNearRoute([radar], routePoints, 100);
+                if (near.length > 0) {
+                  setFilteredRadars((prev) => (prev.some((r) => r.id === radar.id) ? prev : [...prev, radar]));
+                }
+              }
+            } else if (eventName === "radar:update") {
+              const radar: Radar = {
+                id: payload.id,
+                latitude: payload.latitude,
+                longitude: payload.longitude,
+                speedLimit: payload.velocidadeLeve ?? undefined,
+                type: payload.tipoRadar ?? "unknown",
+                situacao: payload.situacao ?? undefined,
+              };
+              setRadars((prev) => prev.map((r) => (r.id === radar.id ? radar : r)));
+              setFilteredRadars((prev) => prev.map((r) => (r.id === radar.id ? radar : r)));
+            }
+          } catch (e) {
+            console.warn("Erro ao processar mensagem WebSocket:", e);
           }
-        }
-      });
-      socket.on("radar:update", (payload: { id: string; latitude: number; longitude: number; velocidadeLeve?: number | null; tipoRadar?: string; situacao?: string | null }) => {
-        const radar: Radar = {
-          id: payload.id,
-          latitude: payload.latitude,
-          longitude: payload.longitude,
-          speedLimit: payload.velocidadeLeve ?? undefined,
-          type: payload.tipoRadar ?? "unknown",
-          situacao: payload.situacao ?? undefined,
         };
-        setRadars((prev) => prev.map((r) => (r.id === radar.id ? radar : r)));
-        setFilteredRadars((prev) => prev.map((r) => (r.id === radar.id ? radar : r)));
-      });
-    } catch (e) {
-      console.warn("Socket.IO não disponível para alertas em tempo real:", e);
-    }
+
+        ws.onerror = (error) => {
+          console.warn("Erro WebSocket:", error);
+        };
+
+        ws.onclose = () => {
+          console.log("WebSocket desconectado");
+          ws = null;
+          
+          // Tentar reconectar
+          if (reconnectAttempts < maxReconnectAttempts) {
+            reconnectAttempts++;
+            const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000); // Backoff exponencial, max 30s
+            reconnectTimeout = setTimeout(() => {
+              console.log(`Tentando reconectar WebSocket (tentativa ${reconnectAttempts}/${maxReconnectAttempts})...`);
+              connectWebSocket();
+            }, delay);
+          }
+        };
+      } catch (e) {
+        console.warn("WebSocket não disponível para alertas em tempo real:", e);
+      }
+    };
+
+    connectWebSocket();
+
     return () => {
-      if (socket) socket.disconnect();
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (ws) {
+        ws.close();
+        ws = null;
+      }
     };
   }, []);
 
@@ -1680,12 +1737,14 @@ const styles = StyleSheet.create({
   radarAlertContainer: {
     position: "absolute",
     // Acima do trip progress: quando o radar aparece a câmera sobe e o trip progress fica embaixo
-    bottom: Platform.OS === "ios" ? 300 : 140,
-    left: 16,
+    bottom: Platform.OS === "ios" ? 300 : 120,
+    left: 90,
     right: 16,
     zIndex: 1000,
     elevation: 10,
     pointerEvents: "none",
+  
+    
   },
   radarAlertContent: {
     flexDirection: "row",
@@ -1697,28 +1756,31 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
+    width: "80%",
+    height: "auto",
+
   },
   radarAlertIcon: {
-    fontSize: 32,
+    fontSize: 24,
     marginRight: 12,
   },
   radarAlertTextContainer: {
     flex: 1,
   },
   radarAlertTitle: {
-    fontSize: 18,
+    fontSize: 10,
     fontWeight: "600",
     color: "#000",
     marginBottom: 2,
     opacity: 0.9,
   },
   radarAlertDistance: {
-    fontSize: 26,
+    fontSize: 24,
     fontWeight: "bold",
     color: "#000",
   },
   radarAlertSpeed: {
-    fontSize: 46,
+    fontSize: 20,
     fontWeight: "500",
     color: "#000",
   },

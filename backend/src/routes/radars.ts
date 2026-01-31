@@ -554,16 +554,15 @@ export async function radarRoutes(fastify: FastifyInstance) {
         fs.writeFileSync(lastSyncFile, JSON.stringify(lastSyncInfo, null, 2), "utf-8");
       } catch (_) {}
 
-      if (fastify.io) {
-        fastify.io.emit("radar:new", {
-          id: radar.id,
-          latitude: radar.latitude,
-          longitude: radar.longitude,
-          velocidadeLeve: radar.velocidadeLeve,
-          tipoRadar: radar.tipoRadar,
-          situacao: radar.situacao,
-        });
-      }
+      // Broadcast via WebSocket
+      fastify.wsBroadcast("radar:new", {
+        id: radar.id,
+        latitude: radar.latitude,
+        longitude: radar.longitude,
+        velocidadeLeve: radar.velocidadeLeve,
+        tipoRadar: radar.tipoRadar,
+        situacao: radar.situacao,
+      });
 
       return {
         radar: {
@@ -624,16 +623,15 @@ export async function radarRoutes(fastify: FastifyInstance) {
         },
       });
 
-      if (fastify.io) {
-        fastify.io.emit("radar:new", {
-          id: radar.id,
-          latitude: radar.latitude,
-          longitude: radar.longitude,
-          velocidadeLeve: radar.velocidadeLeve,
-          tipoRadar: radar.tipoRadar,
-          situacao: radar.situacao,
-        });
-      }
+      // Broadcast via WebSocket
+      fastify.wsBroadcast("radar:new", {
+        id: radar.id,
+        latitude: radar.latitude,
+        longitude: radar.longitude,
+        velocidadeLeve: radar.velocidadeLeve,
+        tipoRadar: radar.tipoRadar,
+        situacao: radar.situacao,
+      });
 
       // Atualizar data de sincronização quando um radar móvel é reportado
       try {
@@ -722,16 +720,15 @@ export async function radarRoutes(fastify: FastifyInstance) {
         data: data as any,
       });
 
-      if (fastify.io) {
-        fastify.io.emit("radar:update", {
-          id: radar.id,
-          latitude: radar.latitude,
-          longitude: radar.longitude,
-          velocidadeLeve: radar.velocidadeLeve,
-          tipoRadar: radar.tipoRadar,
-          situacao: radar.situacao,
-        });
-      }
+      // Broadcast via WebSocket
+      fastify.wsBroadcast("radar:update", {
+        id: radar.id,
+        latitude: radar.latitude,
+        longitude: radar.longitude,
+        velocidadeLeve: radar.velocidadeLeve,
+        tipoRadar: radar.tipoRadar,
+        situacao: radar.situacao,
+      });
 
       return {
         id: radar.id,
