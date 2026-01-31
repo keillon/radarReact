@@ -1,13 +1,19 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { Server as SocketIOServer } from "socket.io";
+import { createServer } from "http";
 import { radarRoutes } from "./routes/radars";
 import { notificationRoutes } from "./routes/notifications";
 import { adminRoutes } from "./routes/admin";
 import { authRoutes } from "./routes/auth";
 import { userRoutes } from "./routes/users";
 
-const fastify = Fastify({ logger: true });
+// Criar servidor HTTP primeiro para que o Socket.IO possa ser anexado antes do Fastify iniciar
+const httpServer = createServer();
+const fastify = Fastify({ logger: true, serverFactory: (handler) => {
+  httpServer.on('request', handler);
+  return httpServer;
+}});
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -30,13 +36,8 @@ async function start() {
   const host = "0.0.0.0";
 
   try {
-    // Iniciar o servidor HTTP primeiro
-    await fastify.listen({ port, host });
-    console.log(`Server listening on ${host}:${port}`);
-
-    // Criar Socket.IO após o listen - o servidor HTTP já está rodando
-    // O Socket.IO precisa ser anexado ao servidor HTTP que já está ativo
-    const io = new SocketIOServer(fastify.server, {
+    // Criar Socket.IO ANTES do listen - anexar ao servidor HTTP que será usado pelo Fastify
+    const io = new SocketIOServer(httpServer, {
       cors: { 
         origin: true,
         credentials: true 
@@ -53,7 +54,11 @@ async function start() {
         fastify.log.info({ id: socket.id }, "Client disconnected");
       });
     });
-    console.log("Socket.IO attached for real-time radar alerts");
+    console.log("Socket.IO configured for real-time radar alerts");
+
+    // Agora iniciar o servidor HTTP (Socket.IO já está anexado e interceptará as requisições)
+    await fastify.listen({ port, host });
+    console.log(`Server listening on ${host}:${port}`);
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);
