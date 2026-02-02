@@ -865,6 +865,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
     latitude: r.latitude,
     longitude: r.longitude,
     speedLimit: r.speedLimit,
+    type: r.type, // Passar tipo do radar para o componente nativo
   })), [filteredRadars]);
 
   // WebSocket nativo: radares em tempo real para todos (mapa e navegação), inclusive durante navegação

@@ -1,4 +1,5 @@
 import { FastifyInstance } from "fastify";
+import { adminAuth } from "../middlewares/adminAuth";
 import { prisma } from "../utils/prisma";
 import { decodePolyline } from "../utils/polyline";
 import { pointToLineDistance, haversineDistance } from "../utils/distance";
@@ -6,15 +7,16 @@ import { syncAllRadars } from "../services/radarSources";
 import { checkForUpdates, syncANTT } from "../scripts/syncANTTAuto";
 import * as fs from "fs";
 import * as path from "path";
+import { parseMaparadarCSV } from "../services/maparadar";
 
 /**
  * Buscar radares do arquivo CSV local
  * Formato CSV: longitude,latitude,descrição
  * Exemplo: -43.030287,-22.665031,Radar Fixo - 30 kmh@30
  */
-async function fetchRadarsFromCSV(): Promise<any[]> {
-  try {
-    const csvPath = path.join(process.cwd(), "maparadar.csv");
+  async function fetchRadarsFromCSV(): Promise<any[]> {
+    try {
+    const csvPath = path.join(process.cwd(), "backend", "maparadar.csv");
     
     if (!fs.existsSync(csvPath)) {
       console.error(`❌ [CSV] Arquivo não encontrado: ${csvPath}`);
@@ -1392,6 +1394,55 @@ export async function radarRoutes(fastify: FastifyInstance) {
         error: "Erro ao sincronizar ANTT",
         details: error.message,
       });
+    }
+  });
+
+  // GET map radar do CSV (icons baseados em tipo)
+  fastify.get("/radars/maparadar-csv", async (request, reply) => {
+    try {
+      const query = request.query as { reload?: string };
+      const forceReload = query.reload === "1" || (typeof query.reload === 'string' && query.reload.toLowerCase() === 'true');
+      const items = await parseMaparadarCSV(forceReload);
+      const mapped = items.map((it, idx) => ({
+        id: `csv-${idx}`,
+        latitude: it.latitude,
+        longitude: it.longitude,
+        tipoRadar: it.tipoRadar,
+        source: "maparadar-csv",
+      }));
+      return { radars: mapped };
+    } catch (error: any) {
+      fastify.log.error("Erro ao ler maparadar CSV:", error);
+      return reply.code(500).send({ error: "Erro ao ler maparadar CSV", details: error.message });
+    }
+  });
+
+  // Admin pagination: list radares with page/limit
+  fastify.get("/admin/radars", async (request, reply) => {
+    // Admin simple check (header token)
+    const token = (request.headers as any)["x-admin-token"];
+    const expected = process.env.ADMIN_TOKEN;
+    if (!token || !expected || token !== expected) {
+      return reply.code(403).send({ error: "Admin access required" });
+    }
+    const query = request.query as { page?: string; limit?: string; status?: string };
+    const page = Math.max(1, parseInt(query.page ?? "1"));
+    const limit = Math.max(1, parseInt(query.limit ?? "100"));
+    const skip = (page - 1) * limit;
+    const where: any = {};
+    if (query.status) {
+      const s = query.status.toLowerCase();
+      if (s === "active") where.ativo = true;
+      else if (s === "inactive") where.ativo = false;
+    }
+    try {
+      const total = await prisma.radar.count({ where });
+      const radars = await prisma.radar.findMany({ where, skip, take: limit, orderBy: { createdAt: "desc" } });
+      const totalPages = Math.ceil(total / limit);
+      return { radars, pagination: { page, perPage: limit, total, totalPages } };
+    } catch (err: any) {
+      fastify.log.error("Erro em /admin/radars:", err);
+      return reply.code(500).send({ error: "Erro ao buscar radares (admin)", details: err.message });
     }
   });
 }

@@ -70,12 +70,12 @@ export default function App() {
     };
   }, [center, zoom, loadRadars, getRadiusForZoom]);
 
-  const handleSelectRadar = (radar: Radar) => {
+  const handleSelectRadar = useCallback((radar: Radar) => {
     setSelected(radar);
     setSpeedLimit(radar.speedLimit != null ? String(radar.speedLimit) : "");
     setMode("view");
     setPendingAdd(null);
-  };
+  }, []);
 
   const handleMapClick = (lat: number, lng: number) => {
     if (mode === "add") {
