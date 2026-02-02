@@ -14,12 +14,12 @@ function extractTipoRadarFromDescription(description: string): string {
     .trim()
     .toLowerCase()
     .normalize("NFD")
-    .replace(/\u0300/g, "");
+    .replace(/[\u0300-\u036f]/g, "");
   if (d.includes("semaforo") && d.includes("camera"))
     return "Semaforo com Camera";
   if (d.includes("semaforo") && d.includes("radar"))
     return "Semaforo com Radar";
-  if (d.includes("radar") && (d.includes("movel") || d.includes("móvel")))
+  if (d.includes("radar") && d.includes("movel"))
     return "Radar Movel";
   if (d.includes("radar") && d.includes("fixo")) return "Radar Fixo";
   return "Radar Fixo";
@@ -31,9 +31,19 @@ function extractTipoRadarFromDescription(description: string): string {
  */
 async function fetchRadarsFromCSV(): Promise<any[]> {
   try {
-    const csvPath = path.join(process.cwd(), "backend", "maparadar.csv");
+    // Caminho relativo ao arquivo: funciona com cwd = projeto ou backend/
+    const fromFile = path.join(__dirname, "..", "..", "maparadar.csv");
+    const fromCwd = path.join(process.cwd(), "backend", "maparadar.csv");
+    const fromCwdBackend = path.join(process.cwd(), "maparadar.csv");
+    const csvPath = fs.existsSync(fromFile)
+      ? fromFile
+      : fs.existsSync(fromCwd)
+        ? fromCwd
+        : fromCwdBackend;
     if (!fs.existsSync(csvPath)) {
-      console.error(`❌ [CSV] Arquivo não encontrado: ${csvPath}`);
+      console.error(
+        `❌ [CSV] Arquivo não encontrado. Tentou: ${fromFile}, ${fromCwd}, ${fromCwdBackend}`
+      );
       return [];
     }
     console.log(`🔍 [CSV] Lendo radares do arquivo: ${csvPath}`);
@@ -498,8 +508,19 @@ export async function radarRoutes(fastify: FastifyInstance) {
           `✅ Radares encontrados: ${activeRadars.length} (Públicos: ${publicRadars.length}, Móveis: ${mobileRadars.length}, Fixos: ${fixedRadars.length})`
         );
 
+        // Garantir tipoRadar em todos os radares (ícone correto no frontend)
+        const radarsForResponse = activeRadars.map((r: any) => ({
+          ...r,
+          tipoRadar:
+            r.tipoRadar ??
+            extractTipoRadarFromDescription(
+              r.metadata?.description ?? r.rodovia ?? ""
+            ) ??
+            "Radar Fixo",
+        }));
+
         const response: any = {
-          radars: activeRadars,
+          radars: radarsForResponse,
         };
 
         const serializeTime = Date.now();
