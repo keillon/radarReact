@@ -18,21 +18,16 @@ interface MapProps {
   onZoomChange?: (zoom: number) => void;
 }
 
-export default function Map(props?: MapProps) {
-  // Garantir que props existe
-  const safeProps = props || {};
-  
-  const {
-    radars = [],
-    selectedId = null,
-    onSelectRadar = () => {},
-    onMapClick = () => {},
-    center = [-46.6333, -23.5505] as [number, number],
-    zoom = 10,
-    onCenterChange,
-    onZoomChange,
-  } = safeProps;
-  
+export default function Map({
+  radars = [],
+  selectedId = null,
+  onSelectRadar = () => {},
+  onMapClick = () => {},
+  center = [-46.6333, -23.5505] as [number, number],
+  zoom = 10,
+  onCenterChange,
+  onZoomChange,
+}: MapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<Map<string, mapboxgl.Marker>>(new Map());
@@ -40,10 +35,22 @@ export default function Map(props?: MapProps) {
   const onCenterChangeRef = useRef(onCenterChange);
   const onZoomChangeRef = useRef(onZoomChange);
   
-  // Atualizar refs quando props mudam
-  onMapClickRef.current = onMapClick;
-  if (onCenterChange) onCenterChangeRef.current = onCenterChange;
-  if (onZoomChange) onZoomChangeRef.current = onZoomChange;
+  // Atualizar refs quando props mudam (usar useEffect para evitar loops)
+  useEffect(() => {
+    onMapClickRef.current = onMapClick;
+  }, [onMapClick]);
+  
+  useEffect(() => {
+    if (onCenterChange) {
+      onCenterChangeRef.current = onCenterChange;
+    }
+  }, [onCenterChange]);
+  
+  useEffect(() => {
+    if (onZoomChange) {
+      onZoomChangeRef.current = onZoomChange;
+    }
+  }, [onZoomChange]);
 
   // Init map
   useEffect(() => {
