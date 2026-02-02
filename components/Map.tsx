@@ -70,7 +70,7 @@ export default function Map({
             duration: 1000,
             useNativeDriver: false,
           }),
-        ]),
+        ])
       ).start();
     } else {
       pulseAnimation.setValue(1);
@@ -127,46 +127,27 @@ export default function Map({
     }
   };
 
-  // Função para mapear velocidade para nome da imagem da placa
-  const getPlacaImageName = (speedLimit: number | null | undefined): string => {
-    if (!speedLimit || speedLimit === 0) return "placa0";
-
-    // Mapear para as velocidades disponíveis (20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160)
-    const speeds = [
-      10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160,
-    ];
-
-    // Encontrar a velocidade mais próxima disponível
-    const closestSpeed = speeds.reduce((prev, curr) =>
-      Math.abs(curr - speedLimit) < Math.abs(prev - speedLimit) ? curr : prev,
-    );
-
-    return `placa${closestSpeed}`;
+  /** Mapeia tipo do CSV/API para ícone (igual admin e RadarOverlay). */
+  const getRadarIconName = (radar: Radar): string => {
+    const type = radar?.type;
+    if (!type) return "radar";
+    const t = String(type).trim().toLowerCase().normalize("NFD").replace(/\u0300/g, "");
+    if (t.includes("semaforo") && t.includes("camera")) return "radarSemaforico";
+    if (t.includes("semaforo") && t.includes("radar")) return "radarSemaforico";
+    if (t.includes("radar") && t.includes("fixo")) return "radarFixo";
+    if (t.includes("radar") && (t.includes("movel") || t.includes("móvel"))) return "radarMovel";
+    return "radar";
   };
 
-  // Objeto com todas as imagens das placas
-  const placaImages = {
-    placa0: require("../assets/images/placa0.png"),
-    placa10: require("../assets/images/placa10.png"),
-    placa20: require("../assets/images/placa20.png"),
-    placa30: require("../assets/images/placa30.png"),
-    placa40: require("../assets/images/placa40.png"),
-    placa50: require("../assets/images/placa50.png"),
-    placa60: require("../assets/images/placa60.png"),
-    placa70: require("../assets/images/placa70.png"),
-    placa80: require("../assets/images/placa80.png"),
-    placa90: require("../assets/images/placa90.png"),
-    placa100: require("../assets/images/placa100.png"),
-    placa110: require("../assets/images/placa110.png"),
-    placa120: require("../assets/images/placa120.png"),
-    placa130: require("../assets/images/placa130.png"),
-    placa140: require("../assets/images/placa140.png"),
-    placa150: require("../assets/images/placa150.png"),
-    placa160: require("../assets/images/placa160.png"),
-    placa: require("../assets/images/placa0.png"), // Fallback (placa.png não existe)
+  // Ícones de radar por tipo (sem placas de velocidade)
+  const radarImages = {
+    radar: require("../assets/images/radar.png"),
+    radarFixo: require("../assets/images/radarFixo.png"),
+    radarMovel: require("../assets/images/radarMovel.png"),
+    radarSemaforico: require("../assets/images/radarSemaforico.png"),
   };
 
-  // Criar GeoJSON para radares com nome da imagem e propriedade de proximidade
+  // Criar GeoJSON para radares com ícone por tipo (radar, radarFixo, radarMovel, radarSemaforico)
   const radarsGeoJSON = {
     type: "FeatureCollection" as const,
     features: (radars || [])
@@ -177,7 +158,7 @@ export default function Map({
           typeof radar.latitude === "number" &&
           typeof radar.longitude === "number" &&
           !isNaN(radar.latitude) &&
-          !isNaN(radar.longitude),
+          !isNaN(radar.longitude)
       )
       .map((radar) => ({
         type: "Feature" as const,
@@ -188,10 +169,9 @@ export default function Map({
         },
         properties: {
           id: radar.id,
-          speedLimit: radar.speedLimit || null,
           type: radar.type || "default",
-          iconImage: getPlacaImageName(radar.speedLimit), // Nome da imagem para o ícone
-          isNearby: nearbyRadarIds?.has(radar.id) ? 1 : 0, // Flag para animação pulsante
+          iconImage: getRadarIconName(radar),
+          isNearby: nearbyRadarIds?.has(radar.id) ? 1 : 0,
         },
       })),
   };
@@ -228,7 +208,9 @@ export default function Map({
         compassPosition={{ bottom: 420, right: 20 }}
         scaleBarEnabled={false}
         onPress={(event) => {
-          const geometry = event?.geometry as { coordinates?: number[] } | undefined;
+          const geometry = event?.geometry as
+            | { coordinates?: number[] }
+            | undefined;
           const coords = geometry?.coordinates;
           if (onMapPress && Array.isArray(coords) && coords.length >= 2) {
             const [lng, lat] = coords;
@@ -236,7 +218,9 @@ export default function Map({
           }
         }}
         onLongPress={(event) => {
-          const geometry = event?.geometry as { coordinates?: number[] } | undefined;
+          const geometry = event?.geometry as
+            | { coordinates?: number[] }
+            | undefined;
           const coords = geometry?.coordinates;
           if (onMapPress && Array.isArray(coords) && coords.length >= 2) {
             const [lng, lat] = coords;
@@ -386,9 +370,9 @@ export default function Map({
             </ShapeSource>
           )}
 
-        {/* Adicionar imagens das placas ao mapa - DEVE estar antes do ShapeSource que as usa */}
+        {/* Ícones de radar por tipo (radar, radarFixo, radarMovel, radarSemaforico) */}
         <Images
-          images={placaImages}
+          images={radarImages}
           onImageMissing={(imageId) => {
             console.warn(`⚠️ Imagem faltando no mapa: ${imageId}`);
           }}
@@ -419,7 +403,7 @@ export default function Map({
                       const radarId = feature.properties?.id || feature.id;
                       if (radarId != null && radars != null) {
                         const radar = radars.find(
-                          (r) => r != null && r.id === radarId,
+                          (r) => r != null && r.id === radarId
                         );
                         if (radar != null) {
                           onRadarPress(radar);
@@ -472,19 +456,15 @@ export default function Map({
                 }}
               />
 
-              {/* Marcadores individuais de radares usando placas */}
+              {/* Marcadores individuais: ícone por tipo (radar, radarFixo, radarMovel, radarSemaforico) */}
               <SymbolLayer
                 id="radarMarkers"
                 filter={["!", ["has", "point_count"]]}
                 style={{
-                  iconImage: [
-                    "coalesce",
-                    ["get", "iconImage"],
-                    "placa", // Fallback se iconImage não existir
-                  ],
-                  iconSize: 0.1, // Aumentar tamanho para melhor visibilidade
-                  iconAllowOverlap: true, // Permitir que as placas se sobreponham
-                  iconIgnorePlacement: true, // Ignorar placement para evitar conflitos
+                  iconImage: ["coalesce", ["get", "iconImage"], "radar"],
+                  iconSize: 0.2,
+                  iconAllowOverlap: true,
+                  iconIgnorePlacement: true,
                 }}
               />
             </ShapeSource>

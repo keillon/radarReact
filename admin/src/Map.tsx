@@ -1,16 +1,35 @@
-import { useEffect, useRef } from "react";
 import mapboxgl from "mapbox-gl";
-// Import local assets for icons (organized under assets/images)
-import radarSemaforico from "../../assets/images/radarSemaforico.png";
-import radarMovel from "../../assets/images/radarMovel.png";
-import radarFixo from "../../assets/images/radarFixo.png";
-import radarIcon from "../../assets/images/radar.png";
+import { memo, useEffect, useRef } from "react";
 import type { Radar } from "./api";
 
 const MAPBOX_TOKEN =
   import.meta.env.VITE_MAPBOX_TOKEN || import.meta.env.VITE_MapboxAccessToken;
 
 mapboxgl.accessToken = MAPBOX_TOKEN || "";
+
+const SOURCE_ID = "radars-source";
+const LAYER_ID = "radars-layer";
+const CLUSTER_LAYER_ID = "radars-clusters";
+const CLUSTER_COUNT_LAYER_ID = "radars-cluster-count";
+
+/** Mapeia tipo do CSV/API para ícone (usado em admin, app e navegação). */
+function getRadarIconName(type: string | undefined): string {
+  if (!type) return "radar";
+  const t = type.trim().toLowerCase().normalize("NFD").replace(/\u0300/g, "");
+  if (t.includes("semaforo") && t.includes("camera")) return "radarSemaforico";
+  if (t.includes("semaforo") && t.includes("radar")) return "radarSemaforico";
+  if (t.includes("radar") && t.includes("fixo")) return "radarFixo";
+  if (t.includes("radar") && (t.includes("movel") || t.includes("móvel"))) return "radarMovel";
+  return "radar";
+}
+
+const ICON_NAMES = [
+  "radar",
+  "radarFixo",
+  "radarMovel",
+  "radarSemaforico",
+] as const;
+const ICON_SIZE = 0.2;
 
 interface MapProps {
   radars?: Radar[];
@@ -23,45 +42,62 @@ interface MapProps {
   onZoomChange?: (zoom: number) => void;
 }
 
-export default function Map(props: MapProps = {}) {
-  const {
-    radars = [],
-    selectedId = null,
-    onSelectRadar = () => {},
-    onMapClick = () => {},
-    center = [-46.6333, -23.5505] as [number, number],
-    zoom = 10,
-    onCenterChange,
-    onZoomChange,
-  } = props;
+function radarsToGeoJSON(radars: Radar[]): GeoJSON.FeatureCollection {
+  return {
+    type: "FeatureCollection",
+    features: radars.map((r) => ({
+      type: "Feature" as const,
+      geometry: {
+        type: "Point" as const,
+        coordinates: [r.longitude, r.latitude],
+      },
+      properties: {
+        id: r.id,
+        inactive: r.situacao === "Inativo" || r.situacao === "inativo",
+        icon: getRadarIconName(r.type),
+      },
+    })),
+  };
+}
+
+function Map({
+  radars = [],
+  selectedId = null,
+  onSelectRadar = () => {},
+  onMapClick = () => {},
+  center = [-46.6333, -23.5505] as [number, number],
+  zoom = 10,
+  onCenterChange,
+  onZoomChange,
+}: Partial<MapProps> = {}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
-  // Usar Record ao invés de Map para evitar conflito de nomes
-  const markersRef = useRef<Record<string, mapboxgl.Marker>>({});
+  const radarsRef = useRef<Radar[]>([]);
   const onMapClickRef = useRef(onMapClick);
   const onCenterChangeRef = useRef(onCenterChange);
   const onZoomChangeRef = useRef(onZoomChange);
   const onSelectRadarRef = useRef(onSelectRadar);
-  const isUpdatingProgrammaticallyRef = useRef(false);
-  
-  // Atualizar refs quando props mudam (usar useEffect para evitar loops)
+  const lastKnownCenterRef = useRef(center);
+  const lastKnownZoomRef = useRef(zoom);
+  const prevSelectedIdRef = useRef<string | null>(null);
+
   useEffect(() => {
     onMapClickRef.current = onMapClick;
   }, [onMapClick]);
-  
-  useEffect(() => {
-    onCenterChangeRef.current = onCenterChange;
-  }, [onCenterChange]);
-  
-  useEffect(() => {
-    onZoomChangeRef.current = onZoomChange;
-  }, [onZoomChange]);
-  
   useEffect(() => {
     onSelectRadarRef.current = onSelectRadar;
   }, [onSelectRadar]);
+  useEffect(() => {
+    if (onCenterChange) onCenterChangeRef.current = onCenterChange;
+  }, [onCenterChange]);
+  useEffect(() => {
+    if (onZoomChange) onZoomChangeRef.current = onZoomChange;
+  }, [onZoomChange]);
+  useEffect(() => {
+    radarsRef.current = radars;
+  }, [radars]);
 
-  // Init map
+  // Init map + source + layer
   useEffect(() => {
     if (!containerRef.current || !MAPBOX_TOKEN) return;
     const map = new mapboxgl.Map({
@@ -73,163 +109,254 @@ export default function Map(props: MapProps = {}) {
     map.addControl(new mapboxgl.NavigationControl(), "top-right");
     mapRef.current = map;
 
+    map.on("load", () => {
+      if (!map.getSource(SOURCE_ID)) {
+        map.addSource(SOURCE_ID, {
+          type: "geojson",
+          data: radarsToGeoJSON(radarsRef.current),
+          promoteId: "id",
+          cluster: true,
+          clusterRadius: 50,
+          clusterMaxZoom: 14,
+        });
+
+        // Carregar ícones (radar, radarFixo, radarMovel, radarSemaforico)
+        const base = window.location.origin;
+        Promise.all(
+          ICON_NAMES.map(
+            (name) =>
+              new Promise<void>((resolve, reject) => {
+                map.loadImage(`${base}/icons/${name}.png`, (err, img) => {
+                  if (err) reject(err);
+                  else if (img) {
+                    map.addImage(name, img);
+                    resolve();
+                  } else reject(new Error(`Failed to load ${name}.png`));
+                });
+              })
+          )
+        ).then(() => {
+          // Camada de clusters (círculos)
+          map.addLayer({
+            id: CLUSTER_LAYER_ID,
+            type: "circle",
+            source: SOURCE_ID,
+            filter: ["has", "point_count"],
+            paint: {
+              "circle-color": [
+                "step",
+                ["get", "point_count"],
+                "#fbbf24",
+                10,
+                "#b45309",
+                50,
+                "#1e3a8a",
+              ],
+              "circle-radius": [
+                "step",
+                ["get", "point_count"],
+                20,
+                10,
+                28,
+                50,
+                36,
+              ],
+              "circle-stroke-width": 2,
+              "circle-stroke-color": "#fff",
+            },
+          });
+          // Contagem no cluster
+          map.addLayer({
+            id: CLUSTER_COUNT_LAYER_ID,
+            type: "symbol",
+            source: SOURCE_ID,
+            filter: ["has", "point_count"],
+            layout: {
+              "text-field": ["get", "point_count_abbreviated"],
+              "text-font": ["Open Sans Bold", "Arial Unicode MS Bold"],
+              "text-size": 12,
+            },
+            paint: { "text-color": "#fff" },
+          });
+          // Marcadores individuais: ícone por tipo (radar, radarFixo, radarMovel, radarSemaforico)
+          map.addLayer({
+            id: LAYER_ID,
+            type: "symbol",
+            source: SOURCE_ID,
+            filter: ["!", ["has", "point_count"]],
+            layout: {
+              "icon-image": ["coalesce", ["get", "icon"], "radar"],
+              "icon-size": ICON_SIZE,
+              "icon-allow-overlap": true,
+              "icon-ignore-placement": true,
+            },
+            paint: {
+              "icon-opacity": [
+                "case",
+                ["boolean", ["feature-state", "selected"], false],
+                1,
+                ["get", "inactive"],
+                0.7,
+                1,
+              ],
+            },
+          });
+        });
+
+        map.getCanvas().style.cursor = "default";
+        [LAYER_ID, CLUSTER_LAYER_ID].forEach((lid) => {
+          map.on("mouseenter", lid, () => {
+            map.getCanvas().style.cursor = "pointer";
+          });
+        });
+        map.on("mouseleave", LAYER_ID, () => {
+          map.getCanvas().style.cursor = "default";
+        });
+        map.on("mouseleave", CLUSTER_LAYER_ID, () => {
+          map.getCanvas().style.cursor = "default";
+        });
+      }
+    });
+
     map.on("click", (e) => {
+      const clusterFeatures = map.queryRenderedFeatures(e.point, {
+        layers: [CLUSTER_LAYER_ID],
+      });
+      if (clusterFeatures.length > 0) {
+        const clusterId = clusterFeatures[0].properties?.cluster_id;
+        const source = map.getSource(SOURCE_ID) as mapboxgl.GeoJSONSource;
+        if (source && typeof clusterId === "number") {
+          source.getClusterExpansionZoom(clusterId, (err, zoom) => {
+            if (
+              !err &&
+              zoom != null &&
+              clusterFeatures[0].geometry?.type === "Point"
+            ) {
+              const coords = (
+                clusterFeatures[0].geometry as GeoJSON.Point
+              ).coordinates.slice() as [number, number];
+              map.flyTo({ center: coords, zoom: Math.min(zoom, 16) });
+            }
+          });
+        }
+        return;
+      }
+      const pointFeatures = map.queryRenderedFeatures(e.point, {
+        layers: [LAYER_ID],
+      });
+      if (pointFeatures.length > 0) {
+        const fid = pointFeatures[0].id as string | undefined;
+        const id = fid ?? pointFeatures[0].properties?.id;
+        if (id) {
+          const radar = radarsRef.current.find((r) => r.id === id);
+          if (radar) {
+            onSelectRadarRef.current(radar);
+            return;
+          }
+        }
+      }
       onMapClickRef.current(e.lngLat.lat, e.lngLat.lng);
     });
 
-    // Atualizar center/zoom quando usuário move o mapa (não durante atualizações programáticas)
+    const notifyTimeoutRef = {
+      current: null as ReturnType<typeof setTimeout> | null,
+    };
+    const NOTIFY_DEBOUNCE_MS = 250;
     const updateFromMap = () => {
-      // Ignorar se estamos atualizando programaticamente
-      if (isUpdatingProgrammaticallyRef.current) {
-        return;
-      }
-      
       const currentCenter = map.getCenter();
       const currentZoom = map.getZoom();
-      if (onCenterChangeRef.current) {
-        onCenterChangeRef.current([currentCenter.lng, currentCenter.lat]);
-      }
-      if (onZoomChangeRef.current) {
-        onZoomChangeRef.current(currentZoom);
-      }
+      const newCenter: [number, number] = [
+        currentCenter.lng,
+        currentCenter.lat,
+      ];
+      const lastCenter = lastKnownCenterRef.current;
+      const lastZoom = lastKnownZoomRef.current;
+      const centerDiff =
+        Math.abs(currentCenter.lng - lastCenter[0]) > 0.0001 ||
+        Math.abs(currentCenter.lat - lastCenter[1]) > 0.0001;
+      const zoomDiff = Math.abs(currentZoom - lastZoom) > 0.01;
+      if (!centerDiff && !zoomDiff) return;
+      if (notifyTimeoutRef.current) clearTimeout(notifyTimeoutRef.current);
+      notifyTimeoutRef.current = setTimeout(() => {
+        notifyTimeoutRef.current = null;
+        if (centerDiff) {
+          lastKnownCenterRef.current = newCenter;
+          if (onCenterChangeRef.current) onCenterChangeRef.current(newCenter);
+        }
+        if (zoomDiff) {
+          lastKnownZoomRef.current = currentZoom;
+          if (onZoomChangeRef.current) onZoomChangeRef.current(currentZoom);
+        }
+      }, NOTIFY_DEBOUNCE_MS);
     };
-
     map.on("moveend", updateFromMap);
-    map.on("zoomend", updateFromMap);
 
     return () => {
+      if (notifyTimeoutRef.current) clearTimeout(notifyTimeoutRef.current);
       map.off("moveend", updateFromMap);
-      map.off("zoomend", updateFromMap);
-      // Limpar todos os markers
-      Object.values(markersRef.current).forEach((marker: mapboxgl.Marker) => marker.remove());
-      markersRef.current = {};
       map.remove();
       mapRef.current = null;
     };
   }, []);
 
-  // Update center/zoom (evitar atualizar se já está no valor correto para evitar loops)
+  // Sync center/zoom from props
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    
     const currentCenter = map.getCenter();
     const currentZoom = map.getZoom();
-    
-    // Só atualizar se realmente mudou (evitar loops infinitos)
-    const centerChanged = 
-      Math.abs(currentCenter.lng - center[0]) > 0.0001 || 
+    const centerChanged =
+      Math.abs(currentCenter.lng - center[0]) > 0.0001 ||
       Math.abs(currentCenter.lat - center[1]) > 0.0001;
     const zoomChanged = Math.abs(currentZoom - zoom) > 0.01;
-    
-    if (centerChanged || zoomChanged) {
-      isUpdatingProgrammaticallyRef.current = true;
-      
-      if (centerChanged) {
-        map.setCenter(center);
-      }
-      if (zoomChanged) {
-        map.setZoom(zoom);
-      }
-      
-      // Resetar flag após um pequeno delay para permitir que os eventos sejam processados
-      setTimeout(() => {
-        isUpdatingProgrammaticallyRef.current = false;
-      }, 100);
+    if (centerChanged) {
+      map.setCenter(center);
+      lastKnownCenterRef.current = center;
+    }
+    if (zoomChanged) {
+      map.setZoom(zoom);
+      lastKnownZoomRef.current = zoom;
     }
   }, [center, zoom]);
 
-  // Helpers: mapear radar para ícone direto, substituindo placas
-  const getRadarIconFor = (radar: any) => {
-    const t = String((radar?.type || radar?.tipoRadar || "").toLowerCase());
-    if (t.includes("semafor")) return radarSemaforico;
-    if (t.includes("movel") || t.includes("mov")) return radarMovel;
-    if (t.includes("fixo")) return radarFixo;
-    return radarIcon;
-  };
-
-  // Radars as markers - otimizado para não recriar tudo
+  // Update GeoJSON source when radars change
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) return;
+    const source = map?.getSource(SOURCE_ID) as
+      | mapboxgl.GeoJSONSource
+      | undefined;
+    if (source) {
+      source.setData(radarsToGeoJSON(radars));
+    }
+  }, [radars]);
 
-    const newRadarIds = new Set(radars.map(r => r.id));
-    
-    // Remover markers que não existem mais
-    Object.keys(markersRef.current).forEach((radarId) => {
-      if (!newRadarIds.has(radarId)) {
-        markersRef.current[radarId].remove();
-        delete markersRef.current[radarId];
+  // Update feature-state for selected radar
+  useEffect(() => {
+    const map = mapRef.current;
+    const source = map?.getSource(SOURCE_ID);
+    if (!map || !source) return;
+    const prev = prevSelectedIdRef.current;
+    if (prev) {
+      try {
+        map.removeFeatureState({ source: SOURCE_ID, id: prev });
+      } catch {
+        // ignore if feature no longer exists
       }
-    });
-
-    // Adicionar/atualizar markers
-    radars.forEach((radar) => {
-      const isInactive = radar.situacao === "Inativo" || radar.situacao === "inativo";
-      const isSelected = selectedId === radar.id;
-      
-      // Determinar ícone baseado no tipo (via helper)
-      
-      const existingMarker = markersRef.current[radar.id];
-      
-      if (existingMarker) {
-        // Atualizar marker existente
-        const existingEl = existingMarker.getElement();
-        
-        // Atualizar posição se mudou
-        const currentLngLat = existingMarker.getLngLat();
-        if (Math.abs(currentLngLat.lng - radar.longitude) > 0.0001 || 
-            Math.abs(currentLngLat.lat - radar.latitude) > 0.0001) {
-          existingMarker.setLngLat([radar.longitude, radar.latitude]);
-        }
-        
-        // Atualizar estilo se seleção mudou
-        const shouldBeBlue = isSelected ? "#2563eb" : "#3b82f6";
-        const currentBg = isInactive ? "#9ca3af" : shouldBeBlue;
-        if (existingEl.style.background !== currentBg) {
-          existingEl.style.background = currentBg;
-        }
-        
-        // Atualizar título
-        existingEl.title = `Radar ${radar.id} ${radar.speedLimit ? radar.speedLimit + " km/h" : ""}${isInactive ? " (Inativo)" : ""}`;
-      } else {
-        // Criar novo marker com imagem baseada no tipo
-        const el = document.createElement("div");
-        el.className = "radar-marker";
-        
-        // Ícone único baseado no tipo de radar (sem placas)
-        const iconSrc = getRadarIconFor(radar);
-        const iconEl = document.createElement("img");
-        iconEl.src = iconSrc;
-        const iconSize = 6; // aproximadamente 0.2 de 32px
-        iconEl.style.width = `${iconSize}px`;
-        iconEl.style.height = `${iconSize}px`;
-        iconEl.style.objectFit = "contain";
-        iconEl.style.cursor = "pointer";
-        iconEl.style.filter = isInactive ? "grayscale(100%) opacity(0.8)" : "none";
-        iconEl.style.transition = "filter 0.2s";
-        el.appendChild(iconEl);
-        el.style.width = `${iconSize}px`;
-        el.style.height = `${iconSize}px`;
-        el.style.display = "flex";
-        el.style.alignItems = "center";
-        el.style.justifyContent = "center";
-        
-        el.title = `Radar ${radar.id} ${radar.speedLimit ? radar.speedLimit + " km/h" : ""}${isInactive ? " (Inativo)" : ""}`;
-
-        const marker = new mapboxgl.Marker({ element: el })
-          .setLngLat([radar.longitude, radar.latitude])
-          .addTo(map);
-
-        el.addEventListener("click", (ev) => {
-          ev.stopPropagation();
-          onSelectRadarRef.current(radar);
-        });
-
-        markersRef.current[radar.id] = marker;
+    }
+    prevSelectedIdRef.current = selectedId;
+    if (selectedId) {
+      try {
+        map.setFeatureState(
+          { source: SOURCE_ID, id: selectedId },
+          { selected: true }
+        );
+      } catch {
+        // ignore if feature not found
       }
-    });
-  }, [radars, selectedId]);
+    }
+  }, [selectedId]);
 
   return <div ref={containerRef} style={{ width: "100%", height: "100%" }} />;
 }
+
+export default memo(Map);

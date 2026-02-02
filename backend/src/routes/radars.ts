@@ -9,25 +9,38 @@ import * as fs from "fs";
 import * as path from "path";
 import { parseMaparadarCSV } from "../services/maparadar";
 
+/** Extrai tipo normalizado: Radar Fixo | Radar Movel | Semaforo com Radar | Semaforo com Camera */
+function extractTipoRadarFromDescription(description: string): string {
+  if (!description || typeof description !== "string") return "Radar Fixo";
+  const d = description
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\u0300/g, "");
+  if (d.includes("semaforo") && d.includes("camera"))
+    return "Semaforo com Camera";
+  if (d.includes("semaforo") && d.includes("radar"))
+    return "Semaforo com Radar";
+  if (d.includes("radar") && (d.includes("movel") || d.includes("móvel")))
+    return "Radar Movel";
+  if (d.includes("radar") && d.includes("fixo")) return "Radar Fixo";
+  return "Radar Fixo";
+}
+
 /**
- * Buscar radares do arquivo CSV local
- * Formato CSV: longitude,latitude,descrição
- * Exemplo: -43.030287,-22.665031,Radar Fixo - 30 kmh@30
+ * CSV: longitude,latitude,descrição@velocidade (descrição pode ter vírgulas; após @ = velocidade).
+ * Ex: -43.030287,-22.665031,Radar Fixo - 30 kmh@30
  */
-  async function fetchRadarsFromCSV(): Promise<any[]> {
-    try {
+async function fetchRadarsFromCSV(): Promise<any[]> {
+  try {
     const csvPath = path.join(process.cwd(), "backend", "maparadar.csv");
-    
     if (!fs.existsSync(csvPath)) {
       console.error(`❌ [CSV] Arquivo não encontrado: ${csvPath}`);
       return [];
     }
-
     console.log(`🔍 [CSV] Lendo radares do arquivo: ${csvPath}`);
-    
     const fileContent = fs.readFileSync(csvPath, "utf-8");
     const lines = fileContent.split("\n").filter((line) => line.trim() !== "");
-    
     console.log(`📊 [CSV] ${lines.length} linhas encontradas no arquivo`);
 
     const radars = lines
@@ -36,55 +49,69 @@ import { parseMaparadarCSV } from "../services/maparadar";
           const trimmedLine = line.trim();
           if (!trimmedLine) return null;
 
-          // Formato: longitude,latitude,descrição
-          const parts = trimmedLine.split(",");
-          
+          const atIndex = trimmedLine.lastIndexOf("@");
+          let rawThird = trimmedLine;
+          let speedFromAt: number | null = null;
+          if (atIndex >= 0) {
+            rawThird = trimmedLine.substring(0, atIndex).trim();
+            const afterAt = trimmedLine.substring(atIndex + 1).trim();
+            const num = parseInt(afterAt, 10);
+            if (!isNaN(num) && num >= 0) speedFromAt = num;
+          }
+
+          const parts = rawThird.split(",");
           if (parts.length < 2) {
-            console.warn(`⚠️ [CSV] Linha ${index + 1} inválida: ${trimmedLine.substring(0, 50)}`);
+            console.warn(
+              `⚠️ [CSV] Linha ${index + 1} inválida: ${trimmedLine.substring(
+                0,
+                50
+              )}`
+            );
             return null;
           }
 
           const longitude = parseFloat(parts[0].trim());
           const latitude = parseFloat(parts[1].trim());
-
           if (isNaN(latitude) || isNaN(longitude)) {
-            console.warn(`⚠️ [CSV] Linha ${index + 1} com coordenadas inválidas: ${trimmedLine.substring(0, 50)}`);
+            console.warn(`⚠️ [CSV] Linha ${index + 1} coordenadas inválidas`);
+            return null;
+          }
+          if (
+            latitude < -90 ||
+            latitude > 90 ||
+            longitude < -180 ||
+            longitude > 180
+          ) {
+            console.warn(
+              `⚠️ [CSV] Linha ${index + 1} coordenadas fora do range`
+            );
             return null;
           }
 
-          // Validar coordenadas
-          if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
-            console.warn(`⚠️ [CSV] Linha ${index + 1} com coordenadas fora do range: ${trimmedLine.substring(0, 50)}`);
-            return null;
-          }
-
-          // Extrair velocidade da descrição (ex: "Radar Fixo - 30 kmh@30" -> 30)
-          let velocidadeLeve: number | null = null;
-          const description = parts.slice(2).join(","); // Pode ter vírgulas na descrição
-          
-          if (description) {
-            // Tentar extrair número antes de "kmh" ou "@"
-            const speedMatch = description.match(/(\d+)\s*(?:kmh|km\/h|@)/i);
+          const description = parts.slice(2).join(",").trim();
+          let velocidadeLeve: number | null = speedFromAt;
+          if (velocidadeLeve == null && description) {
+            const speedMatch = description.match(/(\d+)\s*(?:kmh|km\/h)/i);
             if (speedMatch) {
-              const speed = parseInt(speedMatch[1]);
-              if (!isNaN(speed) && speed > 0) {
-                velocidadeLeve = speed;
-              }
+              const s = parseInt(speedMatch[1], 10);
+              if (!isNaN(s) && s > 0) velocidadeLeve = s;
             }
           }
 
+          const tipoRadar = extractTipoRadarFromDescription(description);
+
           return {
             id: `csv-${latitude}-${longitude}-${index}`,
-            latitude: latitude,
-            longitude: longitude,
+            latitude,
+            longitude,
             source: "csv",
             confirms: 0,
             denies: 0,
             lastConfirmedAt: new Date(),
             createdAt: new Date(),
-            velocidadeLeve: velocidadeLeve,
+            velocidadeLeve,
             velocidadePesado: null,
-            tipoRadar: description?.toLowerCase().includes("móvel") ? "móvel" : "fixo",
+            tipoRadar,
             rodovia: null,
             uf: null,
             municipio: null,
@@ -99,13 +126,15 @@ import { parseMaparadarCSV } from "../services/maparadar";
             },
           };
         } catch (error: any) {
-          console.warn(`⚠️ [CSV] Erro ao processar linha ${index + 1}: ${error.message}`);
+          console.warn(`⚠️ [CSV] Erro linha ${index + 1}: ${error.message}`);
           return null;
         }
       })
       .filter((r: any) => r !== null);
 
-    console.log(`✅ [CSV] ${radars.length} radares processados do arquivo CSV`);
+    console.log(
+      `✅ [CSV] ${radars.length} radares processados (tipoRadar: Radar Fixo/Movel, Semaforo com Radar/Camera)`
+    );
     return radars;
   } catch (error: any) {
     console.error("❌ [CSV] Erro ao ler arquivo CSV:", error);
@@ -275,7 +304,9 @@ export async function radarRoutes(fastify: FastifyInstance) {
         take: 500, // Limitar a 500 radares mais recentes
       });
 
-      fastify.log.info(`📊 ${recentRadars.length} radares recentes encontrados`);
+      fastify.log.info(
+        `📊 ${recentRadars.length} radares recentes encontrados`
+      );
 
       return {
         radars: recentRadars,
@@ -414,9 +445,7 @@ export async function radarRoutes(fastify: FastifyInstance) {
         const dbRadars = allRadars;
 
         // Buscar radares do arquivo CSV local
-        fastify.log.info(
-          `🔍 Buscando radares do arquivo CSV local...`
-        );
+        fastify.log.info(`🔍 Buscando radares do arquivo CSV local...`);
         let csvRadars: any[] = [];
         try {
           csvRadars = await fetchRadarsFromCSV();
@@ -531,8 +560,13 @@ export async function radarRoutes(fastify: FastifyInstance) {
         .send({ error: "Latitude and longitude are required" });
     }
 
-    if (body.velocidadeLeve !== undefined && (body.velocidadeLeve < 0 || body.velocidadeLeve > 200)) {
-      return reply.code(400).send({ error: "Velocidade deve estar entre 0 e 200 km/h" });
+    if (
+      body.velocidadeLeve !== undefined &&
+      (body.velocidadeLeve < 0 || body.velocidadeLeve > 200)
+    ) {
+      return reply
+        .code(400)
+        .send({ error: "Velocidade deve estar entre 0 e 200 km/h" });
     }
 
     try {
@@ -550,8 +584,18 @@ export async function radarRoutes(fastify: FastifyInstance) {
       });
 
       try {
-        const lastSyncFile = path.join(process.cwd(), "radarsFiles", ".last_sync_antt.json");
-        let lastSyncInfo: any = { lastModified: null, etag: null, contentHash: null, lastSyncDate: new Date().toISOString(), totalRadars: 0 };
+        const lastSyncFile = path.join(
+          process.cwd(),
+          "radarsFiles",
+          ".last_sync_antt.json"
+        );
+        let lastSyncInfo: any = {
+          lastModified: null,
+          etag: null,
+          contentHash: null,
+          lastSyncDate: new Date().toISOString(),
+          totalRadars: 0,
+        };
         if (fs.existsSync(lastSyncFile)) {
           try {
             lastSyncInfo = JSON.parse(fs.readFileSync(lastSyncFile, "utf-8"));
@@ -560,7 +604,11 @@ export async function radarRoutes(fastify: FastifyInstance) {
         }
         const dir = path.dirname(lastSyncFile);
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        fs.writeFileSync(lastSyncFile, JSON.stringify(lastSyncInfo, null, 2), "utf-8");
+        fs.writeFileSync(
+          lastSyncFile,
+          JSON.stringify(lastSyncInfo, null, 2),
+          "utf-8"
+        );
       } catch (_) {}
 
       // Broadcast via WebSocket
@@ -584,7 +632,9 @@ export async function radarRoutes(fastify: FastifyInstance) {
       };
     } catch (error: any) {
       console.error("Erro ao reportar radar:", error);
-      return reply.code(500).send({ error: "Erro ao reportar radar", details: error.message });
+      return reply
+        .code(500)
+        .send({ error: "Erro ao reportar radar", details: error.message });
     }
   });
 
@@ -721,7 +771,8 @@ export async function radarRoutes(fastify: FastifyInstance) {
       const data: Record<string, unknown> = {};
       if (body.latitude != null) data.latitude = body.latitude;
       if (body.longitude != null) data.longitude = body.longitude;
-      if (body.velocidadeLeve != null) data.velocidadeLeve = body.velocidadeLeve;
+      if (body.velocidadeLeve != null)
+        data.velocidadeLeve = body.velocidadeLeve;
       if (body.situacao != null) data.situacao = body.situacao;
 
       const radar = await prisma.radar.update({
@@ -765,7 +816,7 @@ export async function radarRoutes(fastify: FastifyInstance) {
       }
 
       await prisma.radar.delete({ where: { id } });
-      
+
       // Broadcast via WebSocket quando deletar
       fastify.wsBroadcast("radar:delete", {
         id: id,
