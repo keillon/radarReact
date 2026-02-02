@@ -131,11 +131,17 @@ export default function Map({
   const getRadarIconName = (radar: Radar): string => {
     const type = radar?.type;
     if (!type) return "radar";
-    const t = String(type).trim().toLowerCase().normalize("NFD").replace(/\u0300/g, "");
-    if (t.includes("semaforo") && t.includes("camera")) return "radarSemaforico";
+    const t = String(type)
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/\u0300/g, "");
+    if (t.includes("semaforo") && t.includes("camera"))
+      return "radarSemaforico";
     if (t.includes("semaforo") && t.includes("radar")) return "radarSemaforico";
     if (t.includes("radar") && t.includes("fixo")) return "radarFixo";
-    if (t.includes("radar") && (t.includes("movel") || t.includes("móvel"))) return "radarMovel";
+    if (t.includes("radar") && (t.includes("movel") || t.includes("móvel")))
+      return "radarMovel";
     return "radar";
   };
 
@@ -462,7 +468,7 @@ export default function Map({
                 filter={["!", ["has", "point_count"]]}
                 style={{
                   iconImage: ["coalesce", ["get", "iconImage"], "radar"],
-                  iconSize: 0.2,
+                  iconSize: 0.05,
                   iconAllowOverlap: true,
                   iconIgnorePlacement: true,
                 }}

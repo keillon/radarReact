@@ -1,13 +1,11 @@
 import { FastifyInstance } from "fastify";
-import { adminAuth } from "../middlewares/adminAuth";
-import { prisma } from "../utils/prisma";
-import { decodePolyline } from "../utils/polyline";
-import { pointToLineDistance, haversineDistance } from "../utils/distance";
-import { syncAllRadars } from "../services/radarSources";
-import { checkForUpdates, syncANTT } from "../scripts/syncANTTAuto";
 import * as fs from "fs";
 import * as path from "path";
+import { checkForUpdates, syncANTT } from "../scripts/syncANTTAuto";
 import { parseMaparadarCSV } from "../services/maparadar";
+import { syncAllRadars } from "../services/radarSources";
+import { decodePolyline } from "../utils/polyline";
+import { prisma } from "../utils/prisma";
 
 /** Extrai tipo normalizado: Radar Fixo | Radar Movel | Semaforo com Radar | Semaforo com Camera */
 function extractTipoRadarFromDescription(description: string): string {
@@ -1452,7 +1450,10 @@ export async function radarRoutes(fastify: FastifyInstance) {
   fastify.get("/radars/maparadar-csv", async (request, reply) => {
     try {
       const query = request.query as { reload?: string };
-      const forceReload = query.reload === "1" || (typeof query.reload === 'string' && query.reload.toLowerCase() === 'true');
+      const forceReload =
+        query.reload === "1" ||
+        (typeof query.reload === "string" &&
+          query.reload.toLowerCase() === "true");
       const items = await parseMaparadarCSV(forceReload);
       const mapped = items.map((it, idx) => ({
         id: `csv-${idx}`,
@@ -1464,7 +1465,9 @@ export async function radarRoutes(fastify: FastifyInstance) {
       return { radars: mapped };
     } catch (error: any) {
       fastify.log.error("Erro ao ler maparadar CSV:", error);
-      return reply.code(500).send({ error: "Erro ao ler maparadar CSV", details: error.message });
+      return reply
+        .code(500)
+        .send({ error: "Erro ao ler maparadar CSV", details: error.message });
     }
   });
 
@@ -1476,7 +1479,11 @@ export async function radarRoutes(fastify: FastifyInstance) {
     if (!token || !expected || token !== expected) {
       return reply.code(403).send({ error: "Admin access required" });
     }
-    const query = request.query as { page?: string; limit?: string; status?: string };
+    const query = request.query as {
+      page?: string;
+      limit?: string;
+      status?: string;
+    };
     const page = Math.max(1, parseInt(query.page ?? "1"));
     const limit = Math.max(1, parseInt(query.limit ?? "100"));
     const skip = (page - 1) * limit;
@@ -1488,12 +1495,25 @@ export async function radarRoutes(fastify: FastifyInstance) {
     }
     try {
       const total = await prisma.radar.count({ where });
-      const radars = await prisma.radar.findMany({ where, skip, take: limit, orderBy: { createdAt: "desc" } });
+      const radars = await prisma.radar.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: "desc" },
+      });
       const totalPages = Math.ceil(total / limit);
-      return { radars, pagination: { page, perPage: limit, total, totalPages } };
+      return {
+        radars,
+        pagination: { page, perPage: limit, total, totalPages },
+      };
     } catch (err: any) {
       fastify.log.error("Erro em /admin/radars:", err);
-      return reply.code(500).send({ error: "Erro ao buscar radares (admin)", details: err.message });
+      return reply
+        .code(500)
+        .send({
+          error: "Erro ao buscar radares (admin)",
+          details: err.message,
+        });
     }
   });
 }

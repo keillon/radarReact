@@ -15,11 +15,16 @@ const CLUSTER_COUNT_LAYER_ID = "radars-cluster-count";
 /** Mapeia tipo do CSV/API para ícone (usado em admin, app e navegação). */
 function getRadarIconName(type: string | undefined): string {
   if (!type) return "radar";
-  const t = type.trim().toLowerCase().normalize("NFD").replace(/\u0300/g, "");
+  const t = type
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\u0300/g, "");
   if (t.includes("semaforo") && t.includes("camera")) return "radarSemaforico";
   if (t.includes("semaforo") && t.includes("radar")) return "radarSemaforico";
   if (t.includes("radar") && t.includes("fixo")) return "radarFixo";
-  if (t.includes("radar") && (t.includes("movel") || t.includes("móvel"))) return "radarMovel";
+  if (t.includes("radar") && (t.includes("movel") || t.includes("móvel")))
+    return "radarMovel";
   return "radar";
 }
 
@@ -29,7 +34,7 @@ const ICON_NAMES = [
   "radarMovel",
   "radarSemaforico",
 ] as const;
-const ICON_SIZE = 0.2;
+const ICON_SIZE = 0.05;
 
 interface MapProps {
   radars?: Radar[];

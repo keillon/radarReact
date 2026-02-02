@@ -16,11 +16,16 @@ Mapbox.setAccessToken(MAPBOX_TOKEN);
 function getRadarIconName(radar: Radar): string {
   const type = radar?.type;
   if (!type) return "radar";
-  const t = String(type).trim().toLowerCase().normalize("NFD").replace(/\u0300/g, "");
+  const t = String(type)
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\u0300/g, "");
   if (t.includes("semaforo") && t.includes("camera")) return "radarSemaforico";
   if (t.includes("semaforo") && t.includes("radar")) return "radarSemaforico";
   if (t.includes("radar") && t.includes("fixo")) return "radarFixo";
-  if (t.includes("radar") && (t.includes("movel") || t.includes("móvel"))) return "radarMovel";
+  if (t.includes("radar") && (t.includes("movel") || t.includes("móvel")))
+    return "radarMovel";
   return "radar";
 }
 

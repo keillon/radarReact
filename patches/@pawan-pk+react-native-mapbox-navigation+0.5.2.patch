@@ -50,10 +50,10 @@ index 7d28df3..95dfa12 100644
    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
    implementation 'androidx.cardview:cardview:1.0.0'
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
-index 41a3ba0..b6473fc 100644
+index 41a3ba0..f261375 100644
 --- a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
 +++ b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
-@@ -3,25 +3,35 @@ package com.mapboxnavigation
+@@ -3,25 +3,34 @@ package com.mapboxnavigation
  import android.annotation.SuppressLint
  import android.content.res.Configuration
  import android.content.res.Resources
@@ -84,13 +84,12 @@ index 41a3ba0..b6473fc 100644
  import com.mapbox.maps.plugin.animation.camera
 +import com.mapbox.maps.plugin.compass.compass
  import com.mapbox.maps.plugin.locationcomponent.location
-+import com.mapbox.maps.ViewAnnotationAnchorConfig
 +import com.mapbox.maps.viewannotation.ViewAnnotationManager
 +import com.mapbox.navigation.base.ExperimentalPreviewMapboxNavigationAPI
  import com.mapbox.navigation.base.TimeFormat
  import com.mapbox.navigation.base.extensions.applyDefaultNavigationOptions
  import com.mapbox.navigation.base.extensions.applyLanguageAndVoiceUnitOptions
-@@ -50,13 +60,13 @@ import com.mapbox.navigation.tripdata.progress.model.EstimatedTimeToArrivalForma
+@@ -50,13 +59,13 @@ import com.mapbox.navigation.tripdata.progress.model.EstimatedTimeToArrivalForma
  import com.mapbox.navigation.tripdata.progress.model.PercentDistanceTraveledFormatter
  import com.mapbox.navigation.tripdata.progress.model.TimeRemainingFormatter
  import com.mapbox.navigation.tripdata.progress.model.TripProgressUpdateFormatter
@@ -105,32 +104,25 @@ index 41a3ba0..b6473fc 100644
  import com.mapbox.navigation.ui.maps.NavigationStyles
  import com.mapbox.navigation.ui.maps.camera.NavigationCamera
  import com.mapbox.navigation.ui.maps.camera.data.MapboxNavigationViewportDataSource
-@@ -68,6 +78,10 @@ import com.mapbox.navigation.ui.maps.route.RouteLayerConstants.TOP_LEVEL_ROUTE_L
+@@ -68,6 +77,7 @@ import com.mapbox.navigation.ui.maps.route.RouteLayerConstants.TOP_LEVEL_ROUTE_L
  import com.mapbox.navigation.ui.maps.route.arrow.api.MapboxRouteArrowApi
  import com.mapbox.navigation.ui.maps.route.arrow.api.MapboxRouteArrowView
  import com.mapbox.navigation.ui.maps.route.arrow.model.RouteArrowOptions
 +import com.mapbox.navigation.ui.maps.route.callout.api.DefaultRouteCalloutAdapter
-+import com.mapbox.navigation.ui.maps.route.callout.api.MapboxRouteCalloutAdapter
-+import com.mapbox.navigation.ui.maps.route.callout.model.CalloutViewHolder
-+import com.mapbox.navigation.ui.maps.route.callout.model.RouteCallout
  import com.mapbox.navigation.ui.maps.route.line.api.MapboxRouteLineApi
  import com.mapbox.navigation.ui.maps.route.line.api.MapboxRouteLineView
  import com.mapbox.navigation.ui.maps.route.line.model.MapboxRouteLineApiOptions
-@@ -80,10 +94,23 @@ import com.mapbox.navigation.voice.model.SpeechError
- import com.mapbox.navigation.voice.model.SpeechValue
- import com.mapbox.navigation.voice.model.SpeechVolume
+@@ -82,8 +92,19 @@ import com.mapbox.navigation.voice.model.SpeechVolume
  import com.mapboxnavigation.databinding.NavigationViewBinding
-+import java.text.SimpleDateFormat
-+import java.util.Date
  import java.util.Locale
  
 +/** Ponto de radar para exibição no mapa (id, coordenadas, limite de velocidade, tipo). */
 +data class RadarPoint(
-+  val id: String,
-+  val latitude: Double,
-+  val longitude: Double,
-+  val speedLimit: Double? = null,
-+  val type: String? = null // Tipo do radar: "semaforico", "fixo", "móvel", etc.
++        val id: String,
++        val latitude: Double,
++        val longitude: Double,
++        val speedLimit: Double? = null,
++        val type: String? = null // Tipo do radar: "semaforico", "fixo", "móvel", etc.
 +)
 +
  @SuppressLint("ViewConstructor")
@@ -141,7 +133,7 @@ index 41a3ba0..b6473fc 100644
    private companion object {
      private const val BUTTON_ANIMATION_DURATION = 1500L
    }
-@@ -93,28 +120,26 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -93,28 +114,26 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
    private var destinationTitle: String = "Destination"
    private var waypoints: List<Point> = listOf()
    private var waypointLegs: List<WaypointLegs> = listOf()
@@ -181,7 +173,7 @@ index 41a3ba0..b6473fc 100644
  
    /**
     * Mapbox Navigation entry point. There should only be one instance of this object for the app.
-@@ -123,43 +148,39 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -123,43 +142,39 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
    private var mapboxNavigation: MapboxNavigation? = null
  
    /*
@@ -247,7 +239,7 @@ index 41a3ba0..b6473fc 100644
    /**
     * Generates updates for the [MapboxManeuverView] to display the upcoming maneuver instructions
     * and remaining distance to the maneuver point.
-@@ -167,12 +188,23 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -167,12 +182,23 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
    private lateinit var maneuverApi: MapboxManeuverApi
  
    /**
@@ -273,7 +265,7 @@ index 41a3ba0..b6473fc 100644
     */
    private var isVoiceInstructionsMuted = false
      set(value) {
-@@ -187,134 +219,130 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -187,134 +213,130 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
      }
  
    /**
@@ -481,7 +473,7 @@ index 41a3ba0..b6473fc 100644
     */
    private val routeArrowView: MapboxRouteArrowView by lazy {
      MapboxRouteArrowView(routeArrowOptions)
-@@ -323,54 +351,81 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -323,54 +345,81 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
    /**
     * Gets notified with location updates.
     *
@@ -608,7 +600,7 @@ index 41a3ba0..b6473fc 100644
      // update the camera position to account for the progressed fragment of the route
      if (routeProgress.fractionTraveled.toDouble() != 0.0) {
        viewportDataSource.onRouteProgressChanged(routeProgress)
-@@ -378,57 +433,121 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -378,57 +427,124 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
      viewportDataSource.evaluate()
  
      // draw the upcoming maneuver arrow on the map
@@ -665,7 +657,9 @@ index 41a3ba0..b6473fc 100644
 +                          ManeuverViewOptions.Builder()
 +                                  .primaryManeuverOptions(
 +                                          ManeuverPrimaryOptions.Builder()
-+                                                  .textAppearance(R.style.PrimaryManeuverTextAppearance)
++                                                  .textAppearance(
++                                                          R.style.PrimaryManeuverTextAppearance
++                                                  )
 +                                                  .build()
 +                                  )
 +                                  .secondaryManeuverOptions(
@@ -678,7 +672,9 @@ index 41a3ba0..b6473fc 100644
 +                                                  .textAppearance(R.style.ManeuverTextAppearance)
 +                                                  .build()
 +                                  )
-+                                  .stepDistanceTextAppearance(R.style.StepDistanceRemainingAppearance)
++                                  .stepDistanceTextAppearance(
++                                          R.style.StepDistanceRemainingAppearance
++                                  )
 +                                  .build()
 +
 +                  // Mostrar instrução de manobra (layout tem maneuverView)
@@ -714,8 +710,8 @@ index 41a3ba0..b6473fc 100644
 +  }
 +
 +  /**
-+   * Atualiza a barra de trip progress usando o tripProgressApi do Mapbox
-+   * O MapboxTripProgressView atualiza automaticamente via RouteProgressObserver
++   * Atualiza a barra de trip progress usando o tripProgressApi do Mapbox O MapboxTripProgressView
++   * atualiza automaticamente via RouteProgressObserver
 +   */
 +  private fun updateTripProgressUi(routeProgress: RouteProgress) {
 +    try {
@@ -725,26 +721,22 @@ index 41a3ba0..b6473fc 100644
 +      if (::tripProgressApi.isInitialized && binding.tripProgressView != null) {
 +        // O tripProgressView atualiza automaticamente quando recebe RouteProgress
 +        // via RouteProgressObserver registrado no mapboxNavigation
-+        
++
 +        // Aplicar cores de texto pretas após a view ser atualizada
-+        binding.tripProgressView?.post {
-+          applyTripProgressTextColors()
-+        }
++        binding.tripProgressView?.post { applyTripProgressTextColors() }
 +      }
 +    } catch (e: Exception) {
 +      Log.w("MapboxNavigationView", "updateTripProgressUi error: ${e.message}")
 +    }
 +  }
-+  
-+  /**
-+   * Aplica cores de texto pretas em todos os TextViews dentro do tripProgressView
-+   */
++
++  /** Aplica cores de texto pretas em todos os TextViews dentro do tripProgressView */
 +  private fun applyTripProgressTextColors() {
 +    try {
 +      binding.tripProgressView?.let { view ->
 +        val textColor = android.graphics.Color.parseColor("#212121")
 +        val textViews = mutableListOf<android.widget.TextView>()
-+        
++
 +        fun findTextViews(parent: android.view.ViewGroup) {
 +          for (i in 0 until parent.childCount) {
 +            val child = parent.getChildAt(i)
@@ -756,11 +748,14 @@ index 41a3ba0..b6473fc 100644
 +            }
 +          }
 +        }
-+        
++
 +        if (view is android.view.ViewGroup) {
 +          findTextViews(view)
 +          if (textViews.isNotEmpty()) {
-+            Log.d("MapboxNavigationView", "✅ Aplicadas cores pretas em ${textViews.size} TextViews do tripProgressView")
++            Log.d(
++                    "MapboxNavigationView",
++                    "✅ Aplicadas cores pretas em ${textViews.size} TextViews do tripProgressView"
++            )
 +          }
 +        }
 +      }
@@ -770,7 +765,7 @@ index 41a3ba0..b6473fc 100644
    }
  
    /**
-@@ -436,39 +555,62 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -436,39 +552,60 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
     *
     * A change can mean:
     * - routes get changed with [MapboxNavigation.setNavigationRoutes]
@@ -789,7 +784,7 @@ index 41a3ba0..b6473fc 100644
 -          routeLineView.renderRouteDrawData(this, value)
 +    try {
 +      if (!isValidForOperations()) return@RoutesObserver
-+      
++
 +      if (routeUpdateResult.navigationRoutes.isNotEmpty()) {
 +        // Armazenar rota atual para filtrar radares
 +        currentRoute = routeUpdateResult.navigationRoutes.first()
@@ -805,9 +800,7 @@ index 41a3ba0..b6473fc 100644
 +          routeLineApi.setNavigationRoutes(
 +                  routeUpdateResult.navigationRoutes,
 +                  alternativesMetadata ?: emptyList()
-+          ) { value ->
-+            routeLineView.renderRouteDrawData(style, value)
-+          }
++          ) { value -> routeLineView.renderRouteDrawData(style, value) }
          }
 -      }
  
@@ -859,7 +852,7 @@ index 41a3ba0..b6473fc 100644
      }
    }
  
-@@ -477,156 +619,203 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -477,156 +614,204 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
    }
  
    private fun onCreate() {
@@ -1021,11 +1014,12 @@ index 41a3ba0..b6473fc 100644
 +                              )
 +                              .build()
 +              )
-+      
++
 +      // Aplicar cores de texto após a view ser criada
-+      binding.tripProgressView?.postDelayed({
-+        applyTripProgressTextColors()
-+      }, 500) // Delay para garantir que a view está totalmente renderizada
++      binding.tripProgressView?.postDelayed(
++              { applyTripProgressTextColors() },
++              500
++      ) // Delay para garantir que a view está totalmente renderizada
 +
 +      // initialize voice instructions api and the voice instruction player (pt-BR)
 +      val voiceLanguage = locale.toLanguageTag()
@@ -1186,7 +1180,7 @@ index 41a3ba0..b6473fc 100644
        puckBearingEnabled = true
        enabled = true
      }
-@@ -634,20 +823,21 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -634,20 +819,21 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
      startRoute()
    }
  
@@ -1219,7 +1213,7 @@ index 41a3ba0..b6473fc 100644
  
    private fun onArrival(routeProgress: RouteProgress) {
      val leg = routeProgress.currentLegProgress
-@@ -656,9 +846,7 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -656,9 +842,7 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
        event.putInt("index", leg.legIndex)
        event.putDouble("latitude", leg.legDestination?.location?.latitude() ?: 0.0)
        event.putDouble("longitude", leg.legDestination?.location?.longitude() ?: 0.0)
@@ -1230,7 +1224,7 @@ index 41a3ba0..b6473fc 100644
      }
    }
  
-@@ -669,8 +857,8 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -669,8 +853,8 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
  
    private val measureAndLayout = Runnable {
      measure(
@@ -1241,7 +1235,7 @@ index 41a3ba0..b6473fc 100644
      )
      layout(left, top, right, bottom)
    }
-@@ -687,53 +875,93 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -687,53 +871,93 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
      names.add(destinationTitle)
  
      mapboxNavigation?.requestRoutes(
@@ -1374,7 +1368,7 @@ index 41a3ba0..b6473fc 100644
      // register event listeners
      mapboxNavigation?.registerRoutesObserver(routesObserver)
      mapboxNavigation?.registerArrivalObserver(arrivalObserver)
-@@ -741,12 +969,6 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -741,12 +965,6 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
      mapboxNavigation?.registerLocationObserver(locationObserver)
      mapboxNavigation?.registerVoiceInstructionsObserver(voiceInstructionsObserver)
  
@@ -1387,7 +1381,7 @@ index 41a3ba0..b6473fc 100644
      findRoute(coordinatesList)
    }
  
-@@ -766,14 +988,13 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -766,14 +984,13 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
      binding.maneuverView.visibility = View.INVISIBLE
      binding.routeOverview.visibility = View.INVISIBLE
      binding.tripProgressCard.visibility = View.INVISIBLE
@@ -1404,7 +1398,7 @@ index 41a3ba0..b6473fc 100644
    }
  
    fun onDropViewInstance() {
-@@ -782,10 +1003,12 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -782,10 +999,12 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
  
    fun setStartOrigin(origin: Point?) {
      this.origin = origin
@@ -1417,7 +1411,7 @@ index 41a3ba0..b6473fc 100644
    }
  
    fun setDestinationTitle(title: String) {
-@@ -802,7 +1025,7 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -802,7 +1021,7 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
  
    fun setDirectionUnit(unit: String) {
      this.distanceUnit = unit
@@ -1426,7 +1420,7 @@ index 41a3ba0..b6473fc 100644
    }
  
    fun setLocal(language: String) {
-@@ -820,4 +1043,782 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -820,4 +1039,730 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
    fun setShowCancelButton(show: Boolean) {
      binding.stop.visibility = if (show) View.VISIBLE else View.INVISIBLE
    }
@@ -1534,40 +1528,41 @@ index 41a3ba0..b6473fc 100644
 +    loadRadarImages(style)
 +  }
 +
++  /** Mapeia tipo do radar para nome do ícone: radar, radar_fixo, radar_movel, radar_semaforico. */
++  private fun getRadarIconName(type: String?): String {
++    if (type.isNullOrBlank()) return "radar"
++    val t = java.text.Normalizer.normalize(type.trim().lowercase(), java.text.Normalizer.Form.NFD).replace("\u0300", "")
++    if (t.contains("semaforo") && t.contains("camera")) return "radar_semaforico"
++    if (t.contains("semaforo") && t.contains("radar")) return "radar_semaforico"
++    if (t.contains("radar") && t.contains("fixo")) return "radar_fixo"
++    if (t.contains("radar") && (t.contains("movel") || t.contains("móvel"))) return "radar_movel"
++    return "radar"
++  }
++
++  /** Ícones por tipo: radar (genérico), radar_fixo, radar_movel, radar_semaforico. */
 +  private fun loadRadarImages(style: com.mapbox.maps.Style) {
 +    try {
 +      val imageNames =
 +              listOf(
-+                      "placa0",
-+                      "placa10",
-+                      "placa20",
-+                      "placa30",
-+                      "placa40",
-+                      "placa50",
-+                      "placa60",
-+                      "placa70",
-+                      "placa80",
-+                      "placa90",
-+                      "placa100",
-+                      "placa110",
-+                      "placa120",
-+                      "placa130",
-+                      "placa140",
-+                      "placa150",
-+                      "placa160",
-+                      "placa",
-+                      "radar", // Radar normal
-+                      "radar_semaforico" // Radar semafórico
++                      "radar",
++                      "radar_fixo",
++                      "radar_movel",
++                      "radar_semaforico"
 +              )
 +
 +      imageNames.forEach { imageName ->
 +        try {
-+          val resourceName = "assets_images_$imageName"
-+          val resourceId =
++          var resourceName = "assets_images_$imageName"
++          var resourceId =
 +                  context.resources.getIdentifier(resourceName, "drawable", context.packageName)
-+
++          // Fallback: React Native pode gerar camelCase (ex: assets_images_radarFixo)
++          if (resourceId == 0 && imageName.contains("_")) {
++            val camelCase = imageName.split("_").joinToString("") { it.replaceFirstChar { c -> c.uppercaseChar() } }.replaceFirstChar { it.lowercaseChar() }
++            resourceName = "assets_images_$camelCase"
++            resourceId = context.resources.getIdentifier(resourceName, "drawable", context.packageName)
++          }
 +          if (resourceId == 0) {
-+            Log.w("MapboxNavigationView", "⚠️ Recurso não encontrado: $resourceName")
++            Log.w("MapboxNavigationView", "⚠️ Recurso não encontrado: $imageName (tentou $resourceName)")
 +            return@forEach
 +          }
 +
@@ -1810,36 +1805,8 @@ index 41a3ba0..b6473fc 100644
 +    try {
 +      val features =
 +              radarsToDisplay.map { radar: RadarPoint ->
-+                val speedLimit = radar.speedLimit ?: 0.0
-+                
-+                // Determinar imagem baseado no tipo do radar
-+                val radarType = radar.type?.lowercase() ?: ""
-+                val iconImage = when {
-+                  radarType.contains("semaforico") || radarType.contains("semáforo") -> "radar_semaforico"
-+                  radarType.contains("fixo") || radarType.contains("móvel") || radarType.contains("mobile") -> {
-+                    // Para radares fixos/móveis, usar placa com velocidade
-+                    val speeds = listOf(20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160)
-+                    val closestSpeed = if (speedLimit > 0) {
-+                      speeds.minByOrNull { kotlin.math.abs(it - speedLimit) } ?: 0
-+                    } else {
-+                      0
-+                    }
-+                    if (closestSpeed > 0) "placa$closestSpeed" else "radar"
-+                  }
-+                  else -> {
-+                    // Padrão: usar placa com velocidade ou radar genérico
-+                    val speeds = listOf(20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160)
-+                    val closestSpeed = if (speedLimit > 0) {
-+                      speeds.minByOrNull { kotlin.math.abs(it - speedLimit) } ?: 0
-+                    } else {
-+                      0
-+                    }
-+                    if (closestSpeed > 0) "placa$closestSpeed" else "radar"
-+                  }
-+                }
-+                
++                val iconImage = getRadarIconName(radar.type)
 +                val isNearby = nearbyRadarIds.contains(radar.id)
-+
 +                Feature.fromGeometry(
 +                        Point.fromLngLat(radar.longitude, radar.latitude),
 +                        JsonObject().apply {
@@ -1915,11 +1882,12 @@ index 41a3ba0..b6473fc 100644
 +              }
 +              else -> {
 +                // Adicionar layer acima da rota para garantir visibilidade
-+                val layerPosition = if (style.styleLayerExists(TOP_LEVEL_ROUTE_LINE_LAYER_ID)) {
-+                  LayerPosition(TOP_LEVEL_ROUTE_LINE_LAYER_ID, null, null)
-+                } else {
-+                  null
-+                }
++                val layerPosition =
++                        if (style.styleLayerExists(TOP_LEVEL_ROUTE_LINE_LAYER_ID)) {
++                          LayerPosition(TOP_LEVEL_ROUTE_LINE_LAYER_ID, null, null)
++                        } else {
++                          null
++                        }
 +                style.addStyleLayer(layerValue, layerPosition)
 +                Log.d(
 +                        "MapboxNavigationView",
@@ -1949,36 +1917,8 @@ index 41a3ba0..b6473fc 100644
 +
 +      val features =
 +              radarsToDisplay.map { radar: RadarPoint ->
-+                val speedLimit = radar.speedLimit ?: 0.0
-+                
-+                // Determinar imagem baseado no tipo do radar
-+                val radarType = radar.type?.lowercase() ?: ""
-+                val iconImage = when {
-+                  radarType.contains("semaforico") || radarType.contains("semáforo") -> "radar_semaforico"
-+                  radarType.contains("fixo") || radarType.contains("móvel") || radarType.contains("mobile") -> {
-+                    // Para radares fixos/móveis, usar placa com velocidade
-+                    val speeds = listOf(10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160)
-+                    val closestSpeed = if (speedLimit > 0) {
-+                      speeds.minByOrNull { kotlin.math.abs(it - speedLimit) } ?: 0
-+                    } else {
-+                      0
-+                    }
-+                    if (closestSpeed > 0) "placa$closestSpeed" else "radar"
-+                  }
-+                  else -> {
-+                    // Padrão: usar placa com velocidade ou radar genérico
-+                    val speeds = listOf(10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160)
-+                    val closestSpeed = if (speedLimit > 0) {
-+                      speeds.minByOrNull { kotlin.math.abs(it - speedLimit) } ?: 0
-+                    } else {
-+                      0
-+                    }
-+                    if (closestSpeed > 0) "placa$closestSpeed" else "radar"
-+                  }
-+                }
-+                
++                val iconImage = getRadarIconName(radar.type)
 +                val isNearby = nearbyRadarIds.contains(radar.id)
-+
 +                Feature.fromGeometry(
 +                        Point.fromLngLat(radar.longitude, radar.latitude),
 +                        JsonObject().apply {
@@ -2170,8 +2110,8 @@ index 41a3ba0..b6473fc 100644
 +  }
 +
 +  /**
-+   * Promove uma rota alternativa para ser a rota principal.
-+   * A seleção é feita tocando no callout da rota alternativa no mapa.
++   * Promove uma rota alternativa para ser a rota principal. A seleção é feita tocando no callout da
++   * rota alternativa no mapa.
 +   */
 +  private fun selectAlternativeRoute(selectedIndex: Int, source: String) {
 +    if (selectedIndex < 0 || selectedIndex >= alternativeRoutes.size) {
@@ -2196,7 +2136,10 @@ index 41a3ba0..b6473fc 100644
 +      currentRouteIndex = 0
 +
 +      mapboxNavigation?.setNavigationRoutes(alternativeRoutes)
-+      Log.d("MapboxNavigationView", "✅ Rota alternativa selecionada: index=$selectedIndex (source=$source)")
++      Log.d(
++              "MapboxNavigationView",
++              "✅ Rota alternativa selecionada: index=$selectedIndex (source=$source)"
++      )
 +
 +      // Notificar React (se quiser mostrar UI / estado)
 +      val ev = Arguments.createMap()
@@ -2208,8 +2151,6 @@ index 41a3ba0..b6473fc 100644
 +    }
 +  }
  }
-+  
-\ No newline at end of file
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationViewManager.kt b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationViewManager.kt
 index 03fad26..8870d40 100644
 --- a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationViewManager.kt
