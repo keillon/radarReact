@@ -19,8 +19,7 @@ function extractTipoRadarFromDescription(description: string): string {
     return "Semaforo com Camera";
   if (d.includes("semaforo") && d.includes("radar"))
     return "Semaforo com Radar";
-  if (d.includes("radar") && d.includes("movel"))
-    return "Radar Movel";
+  if (d.includes("radar") && d.includes("movel")) return "Radar Movel";
   if (d.includes("radar") && d.includes("fixo")) return "Radar Fixo";
   return "Radar Fixo";
 }
@@ -38,8 +37,8 @@ async function fetchRadarsFromCSV(): Promise<any[]> {
     const csvPath = fs.existsSync(fromFile)
       ? fromFile
       : fs.existsSync(fromCwd)
-        ? fromCwd
-        : fromCwdBackend;
+      ? fromCwd
+      : fromCwdBackend;
     if (!fs.existsSync(csvPath)) {
       console.error(
         `❌ [CSV] Arquivo não encontrado. Tentou: ${fromFile}, ${fromCwd}, ${fromCwdBackend}`
@@ -680,11 +679,12 @@ export async function radarRoutes(fastify: FastifyInstance) {
       }
     }
 
-    // Validar tipoRadar se fornecido
-    if (body.tipoRadar && !["móvel", "fixo"].includes(body.tipoRadar)) {
+    // Validar tipoRadar se fornecido (reportado, fixo, móvel, semaforo)
+    const tiposValidos = ["móvel", "fixo", "reportado", "semaforo"];
+    if (body.tipoRadar && !tiposValidos.includes(body.tipoRadar)) {
       return reply
         .code(400)
-        .send({ error: "tipoRadar deve ser 'móvel' ou 'fixo'" });
+        .send({ error: "tipoRadar deve ser 'reportado', 'fixo', 'móvel' ou 'semaforo'" });
     }
 
     try {
@@ -1529,12 +1529,10 @@ export async function radarRoutes(fastify: FastifyInstance) {
       };
     } catch (err: any) {
       fastify.log.error("Erro em /admin/radars:", err);
-      return reply
-        .code(500)
-        .send({
-          error: "Erro ao buscar radares (admin)",
-          details: err.message,
-        });
+      return reply.code(500).send({
+        error: "Erro ao buscar radares (admin)",
+        details: err.message,
+      });
     }
   });
 }

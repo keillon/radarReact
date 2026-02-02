@@ -127,8 +127,17 @@ export default function Map({
     }
   };
 
-  /** Mapeia tipo do CSV/API para ícone (igual admin e RadarOverlay). */
-  const getRadarIconName = (radar: Radar): string => {
+  const PLACA_SPEEDS = [20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160];
+  const getClosestPlacaName = (speed: number | undefined): string => {
+    if (speed == null || speed <= 0) return "placa60";
+    const closest = PLACA_SPEEDS.reduce((a, b) =>
+      Math.abs(a - speed) <= Math.abs(b - speed) ? a : b
+    );
+    return `placa${closest}`;
+  };
+
+  /** Ícone no mapa: fixo usa placa por velocidade; demais por tipo. */
+  const getRadarIconForMap = (radar: Radar): string => {
     const type = radar?.type;
     if (!type) return "radar";
     const t = String(type)
@@ -136,21 +145,34 @@ export default function Map({
       .toLowerCase()
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "");
-    if (t.includes("semaforo") && t.includes("camera"))
-      return "radarSemaforico";
+    if (t.includes("radar") && t.includes("fixo"))
+      return getClosestPlacaName(radar.speedLimit);
+    if (t.includes("semaforo") && t.includes("camera")) return "radarSemaforico";
     if (t.includes("semaforo") && t.includes("radar")) return "radarSemaforico";
-    if (t.includes("radar") && t.includes("fixo")) return "radarFixo";
-    if (t.includes("radar") && t.includes("movel"))
-      return "radarMovel";
+    if (t.includes("radar") && t.includes("movel")) return "radarMovel";
     return "radar";
   };
 
-  // Ícones de radar por tipo (sem placas de velocidade)
   const radarImages = {
     radar: require("../assets/images/radar.png"),
     radarFixo: require("../assets/images/radarFixo.png"),
     radarMovel: require("../assets/images/radarMovel.png"),
     radarSemaforico: require("../assets/images/radarSemaforico.png"),
+    placa20: require("../assets/images/placa20.png"),
+    placa30: require("../assets/images/placa30.png"),
+    placa40: require("../assets/images/placa40.png"),
+    placa50: require("../assets/images/placa50.png"),
+    placa60: require("../assets/images/placa60.png"),
+    placa70: require("../assets/images/placa70.png"),
+    placa80: require("../assets/images/placa80.png"),
+    placa90: require("../assets/images/placa90.png"),
+    placa100: require("../assets/images/placa100.png"),
+    placa110: require("../assets/images/placa110.png"),
+    placa120: require("../assets/images/placa120.png"),
+    placa130: require("../assets/images/placa130.png"),
+    placa140: require("../assets/images/placa140.png"),
+    placa150: require("../assets/images/placa150.png"),
+    placa160: require("../assets/images/placa160.png"),
   };
 
   // Criar GeoJSON para radares com ícone por tipo (radar, radarFixo, radarMovel, radarSemaforico)
@@ -176,7 +198,7 @@ export default function Map({
         properties: {
           id: radar.id,
           type: radar.type || "default",
-          iconImage: getRadarIconName(radar),
+          iconImage: getRadarIconForMap(radar),
           isNearby: nearbyRadarIds?.has(radar.id) ? 1 : 0,
         },
       })),

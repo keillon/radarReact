@@ -12,6 +12,17 @@ const LAYER_ID = "radars-layer";
 const CLUSTER_LAYER_ID = "radars-clusters";
 const CLUSTER_COUNT_LAYER_ID = "radars-cluster-count";
 
+/** Velocidades disponíveis para placas (radar fixo). */
+const PLACA_SPEEDS = [20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160];
+
+function getClosestPlacaName(speed: number | undefined): string {
+  if (speed == null || speed <= 0) return "placa60";
+  const closest = PLACA_SPEEDS.reduce((a, b) =>
+    Math.abs(a - speed) <= Math.abs(b - speed) ? a : b
+  );
+  return `placa${closest}`;
+}
+
 /** Mapeia tipo do CSV/API para ícone (usado em admin, app e navegação). */
 function getRadarIconName(type: string | undefined): string {
   if (!type) return "radar";
@@ -23,9 +34,22 @@ function getRadarIconName(type: string | undefined): string {
   if (t.includes("semaforo") && t.includes("camera")) return "radarSemaforico";
   if (t.includes("semaforo") && t.includes("radar")) return "radarSemaforico";
   if (t.includes("radar") && t.includes("fixo")) return "radarFixo";
-  if (t.includes("radar") && t.includes("movel"))
-    return "radarMovel";
+  if (t.includes("radar") && t.includes("movel")) return "radarMovel";
   return "radar";
+}
+
+/** Ícone no mapa: fixo usa placa por velocidade; demais usam ícone por tipo. */
+function getRadarIconForMap(r: { type?: string; speedLimit?: number }): string {
+  const type = r?.type;
+  if (!type) return "radar";
+  const t = type
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  if (t.includes("radar") && t.includes("fixo"))
+    return getClosestPlacaName(r.speedLimit);
+  return getRadarIconName(type);
 }
 
 const ICON_NAMES = [
@@ -33,6 +57,7 @@ const ICON_NAMES = [
   "radarFixo",
   "radarMovel",
   "radarSemaforico",
+  ...PLACA_SPEEDS.map((s) => `placa${s}` as const),
 ] as const;
 const ICON_SIZE = 0.05;
 
@@ -59,7 +84,7 @@ function radarsToGeoJSON(radars: Radar[]): GeoJSON.FeatureCollection {
       properties: {
         id: r.id,
         inactive: r.situacao === "Inativo" || r.situacao === "inativo",
-        icon: getRadarIconName(r.type),
+        icon: getRadarIconForMap(r),
       },
     })),
   };

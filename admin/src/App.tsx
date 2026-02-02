@@ -24,7 +24,7 @@ export default function App() {
     lat: number;
     lng: number;
   } | null>(null);
-  const [radarType, setRadarType] = useState<"reportado" | "fixo" | "móvel">(
+  const [radarType, setRadarType] = useState<"reportado" | "fixo" | "móvel" | "semaforo">(
     "reportado"
   );
   const [error, setError] = useState<string | null>(null);
@@ -32,8 +32,9 @@ export default function App() {
 
   const RADAR_TYPES = [
     { value: "reportado" as const, label: "Reportado" },
-    { value: "fixo" as const, label: "Fixo" },
-    { value: "móvel" as const, label: "Móvel" },
+    { value: "fixo" as const, label: "Radar Fixo" },
+    { value: "móvel" as const, label: "Radar Móvel" },
+    { value: "semaforo" as const, label: "Semáforo c/ Radar" },
   ];
 
   // Calcular raio baseado no zoom para melhor performance
@@ -364,7 +365,7 @@ export default function App() {
             <select
               value={radarType}
               onChange={(e) =>
-                setRadarType(e.target.value as "reportado" | "fixo" | "móvel")
+                setRadarType(e.target.value as "reportado" | "fixo" | "móvel" | "semaforo")
               }
               style={{
                 width: "100%",

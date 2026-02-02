@@ -302,15 +302,20 @@ export default function Home({ onOpenEditor }: HomeProps) {
   const [isReportingRadar, setIsReportingRadar] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportSpeedLimit, setReportSpeedLimit] = useState("");
-  const [reportRadarType, setReportRadarType] = useState<"reportado" | "fixo" | "móvel">("reportado");
+  const [reportRadarType, setReportRadarType] = useState<"reportado" | "fixo" | "móvel" | "semaforo">("reportado");
   const [MapboxNavComponent, setMapboxNavComponent] = useState<React.ComponentType<any> | null>(null);
   const [mapboxNavError, setMapboxNavError] = useState<string | null>(null);
   const lastSyncTimeRef = useRef<number>(Date.now());
 
-  const REPORT_RADAR_TYPES: { value: "reportado" | "fixo" | "móvel"; label: string }[] = [
-    { value: "reportado", label: "Reportado" },
-    { value: "fixo", label: "Fixo" },
-    { value: "móvel", label: "Móvel" },
+  const REPORT_RADAR_TYPES: {
+    value: "reportado" | "fixo" | "móvel" | "semaforo";
+    label: string;
+    icon: number;
+  }[] = [
+    { value: "reportado", label: "Reportado", icon: require("../assets/images/radar.png") },
+    { value: "fixo", label: "Radar Fixo", icon: require("../assets/images/placa60.png") },
+    { value: "móvel", label: "Radar Móvel", icon: require("../assets/images/radarMovel.png") },
+    { value: "semaforo", label: "Semáforo c/ Radar", icon: require("../assets/images/radarSemaforico.png") },
   ];
   const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -681,7 +686,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
 
   // Reportar radar na localização atual (modal: velocidade + tipo).
   // Futuro: mesma lógica pode ser usada para reportar acidentes, trânsito, etc. (estilo Waze) — por ora só radar.
-  const handleReportRadar = async (opts?: { speedLimit?: number; type?: "reportado" | "fixo" | "móvel" }) => {
+  const handleReportRadar = async (opts?: { speedLimit?: number; type?: "reportado" | "fixo" | "móvel" | "semaforo" }) => {
     if (!currentLocation) {
       Alert.alert("Erro", "Não foi possível obter sua localização atual");
       return;
@@ -733,7 +738,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
         );
       }
       setReportSpeedLimit("");
-      setReportRadarType("reportado");
+      setReportRadarType("reportado" as const);
     } catch (error: any) {
       console.error("Erro ao reportar radar:", error);
 
@@ -1718,7 +1723,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
         </Animated.View>
       )}
 
-      {/* Modal: Reportar radar (velocidade + tipo) */}
+      {/* Modal: Reportar radar (velocidade + tipo) — ícones + nomes, layout moderno */}
       <Modal
         visible={showReportModal}
         transparent
@@ -1744,21 +1749,24 @@ export default function Home({ onOpenEditor }: HomeProps) {
               onChangeText={setReportSpeedLimit}
             />
             <Text style={styles.reportModalLabel}>Tipo de radar</Text>
-            <View style={styles.reportModalTypeRow}>
+            <View style={styles.reportModalTypeGrid}>
               {REPORT_RADAR_TYPES.map((t) => (
                 <TouchableOpacity
                   key={t.value}
                   style={[
-                    styles.reportModalTypeButton,
-                    reportRadarType === t.value && styles.reportModalTypeButtonActive,
+                    styles.reportModalTypeCard,
+                    reportRadarType === t.value && styles.reportModalTypeCardActive,
                   ]}
                   onPress={() => setReportRadarType(t.value)}
+                  activeOpacity={0.8}
                 >
+                  <Image source={t.icon} style={styles.reportModalTypeIcon} resizeMode="contain" />
                   <Text
                     style={[
-                      styles.reportModalTypeButtonText,
-                      reportRadarType === t.value && styles.reportModalTypeButtonTextActive,
+                      styles.reportModalTypeCardText,
+                      reportRadarType === t.value && styles.reportModalTypeCardTextActive,
                     ]}
+                    numberOfLines={2}
                   >
                     {t.label}
                   </Text>
@@ -1990,29 +1998,43 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     color: "#000",
   },
-  reportModalTypeRow: {
+  reportModalTypeGrid: {
     flexDirection: "row",
-    gap: 8,
-    marginBottom: 16,
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    gap: 10,
+    marginBottom: 20,
   },
-  reportModalTypeButton: {
-    flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: "#e5e7eb",
+  reportModalTypeCard: {
+    width: "48%",
+    minWidth: 130,
+    maxWidth: 200,
+    flexDirection: "row",
     alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: "#f3f4f6",
+    borderWidth: 2,
+    borderColor: "transparent",
   },
-  reportModalTypeButtonActive: {
-    backgroundColor: "#3b82f6",
+  reportModalTypeCardActive: {
+    backgroundColor: "#eff6ff",
+    borderColor: "#3b82f6",
   },
-  reportModalTypeButtonText: {
+  reportModalTypeIcon: {
+    width: 36,
+    height: 36,
+    marginRight: 12,
+  },
+  reportModalTypeCardText: {
+    flex: 1,
     fontSize: 14,
     fontWeight: "600",
     color: "#374151",
   },
-  reportModalTypeButtonTextActive: {
-    color: "#fff",
+  reportModalTypeCardTextActive: {
+    color: "#1d4ed8",
   },
   reportModalButtons: {
     flexDirection: "row",

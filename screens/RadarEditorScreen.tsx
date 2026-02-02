@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Modal,
   StyleSheet,
   Text,
@@ -40,12 +41,17 @@ export default function RadarEditorScreen({
     latitude: number;
     longitude: number;
   } | null>(null);
-  const [radarType, setRadarType] = useState<"reportado" | "fixo" | "móvel">("reportado");
+  const [radarType, setRadarType] = useState<"reportado" | "fixo" | "móvel" | "semaforo">("reportado");
 
-  const RADAR_TYPES: { value: "reportado" | "fixo" | "móvel"; label: string }[] = [
-    { value: "reportado", label: "Reportado" },
-    { value: "fixo", label: "Fixo" },
-    { value: "móvel", label: "Móvel" },
+  const RADAR_TYPES: {
+    value: "reportado" | "fixo" | "móvel" | "semaforo";
+    label: string;
+    icon: number;
+  }[] = [
+    { value: "reportado", label: "Reportado", icon: require("../assets/images/radar.png") },
+    { value: "fixo", label: "Radar Fixo", icon: require("../assets/images/placa60.png") },
+    { value: "móvel", label: "Radar Móvel", icon: require("../assets/images/radarMovel.png") },
+    { value: "semaforo", label: "Semáforo c/ Radar", icon: require("../assets/images/radarSemaforico.png") },
   ];
 
   const loadRadars = useCallback(async () => {
@@ -331,21 +337,24 @@ export default function RadarEditorScreen({
               onChangeText={setNewSpeedLimit}
             />
             <Text style={styles.modalLabel}>Tipo de radar</Text>
-            <View style={styles.typeRow}>
+            <View style={styles.typeGrid}>
               {RADAR_TYPES.map((t) => (
                 <TouchableOpacity
                   key={t.value}
                   style={[
-                    styles.typeButton,
-                    radarType === t.value && styles.typeButtonActive,
+                    styles.typeCard,
+                    radarType === t.value && styles.typeCardActive,
                   ]}
                   onPress={() => setRadarType(t.value)}
+                  activeOpacity={0.8}
                 >
+                  <Image source={t.icon} style={styles.typeCardIcon} resizeMode="contain" />
                   <Text
                     style={[
-                      styles.typeButtonText,
-                      radarType === t.value && styles.typeButtonTextActive,
+                      styles.typeCardText,
+                      radarType === t.value && styles.typeCardTextActive,
                     ]}
+                    numberOfLines={2}
                   >
                     {t.label}
                   </Text>
@@ -594,29 +603,43 @@ const styles = StyleSheet.create({
     color: "#374151",
     marginBottom: 6,
   },
-  typeRow: {
+  typeGrid: {
     flexDirection: "row",
-    gap: 8,
-    marginBottom: 16,
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    gap: 10,
+    marginBottom: 20,
   },
-  typeButton: {
-    flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: "#e5e7eb",
+  typeCard: {
+    width: "48%",
+    minWidth: 130,
+    maxWidth: 200,
+    flexDirection: "row",
     alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: "#f3f4f6",
+    borderWidth: 2,
+    borderColor: "transparent",
   },
-  typeButtonActive: {
-    backgroundColor: "#3b82f6",
+  typeCardActive: {
+    backgroundColor: "#eff6ff",
+    borderColor: "#3b82f6",
   },
-  typeButtonText: {
+  typeCardIcon: {
+    width: 36,
+    height: 36,
+    marginRight: 12,
+  },
+  typeCardText: {
+    flex: 1,
     fontSize: 14,
     fontWeight: "600",
     color: "#374151",
   },
-  typeButtonTextActive: {
-    color: "#fff",
+  typeCardTextActive: {
+    color: "#1d4ed8",
   },
   input: {
     borderWidth: 1,
