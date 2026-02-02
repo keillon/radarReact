@@ -26,7 +26,7 @@ export default function Map({
 }: MapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
-  const markersRef = useRef<mapboxgl.Marker[]>([]);
+  const markersRef = useRef<Map<string, mapboxgl.Marker>>(new Map());
   const onMapClickRef = useRef(onMapClick);
   onMapClickRef.current = onMapClick;
 
@@ -47,6 +47,9 @@ export default function Map({
     });
 
     return () => {
+      // Limpar todos os markers
+      markersRef.current.forEach(marker => marker.remove());
+      markersRef.current.clear();
       map.remove();
       mapRef.current = null;
     };
@@ -92,46 +95,31 @@ export default function Map({
     const map = mapRef.current;
     if (!map) return;
 
-    // Criar mapa de IDs para comparar
-    const existingIds = new Set(markersRef.current.map((_, idx) => {
-      // Tentar obter ID do marker se possível, senão usar índice
-      return idx < radars.length ? radars[idx].id : null;
-    }).filter(Boolean));
-
     const newRadarIds = new Set(radars.map(r => r.id));
     
     // Remover markers que não existem mais
-    const toRemove: number[] = [];
-    markersRef.current.forEach((marker, idx) => {
-      if (idx < radars.length) {
-        const radarId = radars[idx].id;
-        if (!newRadarIds.has(radarId)) {
-          toRemove.push(idx);
-        }
-      } else {
-        toRemove.push(idx);
+    markersRef.current.forEach((marker, radarId) => {
+      if (!newRadarIds.has(radarId)) {
+        marker.remove();
+        markersRef.current.delete(radarId);
       }
-    });
-    
-    // Remover em ordem reversa para manter índices corretos
-    toRemove.reverse().forEach(idx => {
-      markersRef.current[idx].remove();
-      markersRef.current.splice(idx, 1);
     });
 
     // Adicionar/atualizar markers
-    radars.forEach((radar, idx) => {
+    radars.forEach((radar) => {
       const isInactive = radar.situacao === "Inativo" || radar.situacao === "inativo";
       const isSelected = selectedId === radar.id;
       
-      // Se já existe marker nessa posição, atualizar
-      if (idx < markersRef.current.length) {
-        const existingMarker = markersRef.current[idx];
+      const existingMarker = markersRef.current.get(radar.id);
+      
+      if (existingMarker) {
+        // Atualizar marker existente
         const existingEl = existingMarker.getElement();
         
         // Atualizar posição se mudou
         const currentLngLat = existingMarker.getLngLat();
-        if (currentLngLat.lng !== radar.longitude || currentLngLat.lat !== radar.latitude) {
+        if (Math.abs(currentLngLat.lng - radar.longitude) > 0.0001 || 
+            Math.abs(currentLngLat.lat - radar.latitude) > 0.0001) {
           existingMarker.setLngLat([radar.longitude, radar.latitude]);
         }
         
@@ -142,34 +130,35 @@ export default function Map({
           existingEl.style.background = currentBg;
         }
         
-        return;
+        // Atualizar título
+        existingEl.title = `Radar ${radar.id} ${radar.speedLimit ? radar.speedLimit + " km/h" : ""}${isInactive ? " (Inativo)" : ""}`;
+      } else {
+        // Criar novo marker
+        const el = document.createElement("div");
+        el.className = "radar-marker";
+        el.style.cssText = `
+          width: 28px; height: 28px;
+          background: ${isInactive ? "#9ca3af" : isSelected ? "#2563eb" : "#3b82f6"};
+          border: 2px solid #fff;
+          border-radius: 50%;
+          cursor: pointer;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+          opacity: ${isInactive ? 0.8 : 1};
+          transition: background 0.2s;
+        `;
+        el.title = `Radar ${radar.id} ${radar.speedLimit ? radar.speedLimit + " km/h" : ""}${isInactive ? " (Inativo)" : ""}`;
+
+        const marker = new mapboxgl.Marker({ element: el })
+          .setLngLat([radar.longitude, radar.latitude])
+          .addTo(map);
+
+        el.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          onSelectRadar(radar);
+        });
+
+        markersRef.current.set(radar.id, marker);
       }
-      
-      // Criar novo marker
-      const el = document.createElement("div");
-      el.className = "radar-marker";
-      el.style.cssText = `
-        width: 28px; height: 28px;
-        background: ${isInactive ? "#9ca3af" : isSelected ? "#2563eb" : "#3b82f6"};
-        border: 2px solid #fff;
-        border-radius: 50%;
-        cursor: pointer;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-        opacity: ${isInactive ? 0.8 : 1};
-        transition: background 0.2s;
-      `;
-      el.title = `Radar ${radar.id} ${radar.speedLimit ? radar.speedLimit + " km/h" : ""}${isInactive ? " (Inativo)" : ""}`;
-
-      const marker = new mapboxgl.Marker({ element: el })
-        .setLngLat([radar.longitude, radar.latitude])
-        .addTo(map);
-
-      el.addEventListener("click", (ev) => {
-        ev.stopPropagation();
-        onSelectRadar(radar);
-      });
-
-      markersRef.current.push(marker);
     });
   }, [radars, selectedId, onSelectRadar]);
 
