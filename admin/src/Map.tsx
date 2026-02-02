@@ -18,17 +18,20 @@ interface MapProps {
   onZoomChange?: (zoom: number) => void;
 }
 
-export default function Map(props: MapProps = {} as MapProps) {
+export default function Map(props?: MapProps) {
+  // Garantir que props existe
+  const safeProps = props || {};
+  
   const {
     radars = [],
     selectedId = null,
     onSelectRadar = () => {},
     onMapClick = () => {},
-    center = [0, 0],
+    center = [-46.6333, -23.5505] as [number, number],
     zoom = 10,
     onCenterChange,
     onZoomChange,
-  } = props || {};
+  } = safeProps;
   
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
