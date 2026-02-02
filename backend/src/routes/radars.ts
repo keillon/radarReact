@@ -7,151 +7,111 @@ import { checkForUpdates, syncANTT } from "../scripts/syncANTTAuto";
 import * as fs from "fs";
 import * as path from "path";
 
-// Chave da API Lufop para buscar radares do Brasil
-const LUFOP_API_KEY = "e04fe8cac3c839f4ae32c9c999dc4a4b";
+import * as fs from "fs";
+import * as path from "path";
 
 /**
- * Buscar radares da API Lufop
+ * Buscar radares do arquivo CSV local
+ * Formato CSV: longitude,latitude,descrição
+ * Exemplo: -43.030287,-22.665031,Radar Fixo - 30 kmh@30
  */
-async function fetchRadarsFromLufop(
-  lat: number,
-  lon: number,
-  radiusKm: number = 500
-): Promise<any[]> {
+async function fetchRadarsFromCSV(): Promise<any[]> {
   try {
-    // Endpoint correto da API Lufop: https://api.lufop.net/api
-    // Parâmetros: key, format=json, nbr=100, pays=br
-    // Limitar a 1000 resultados (máximo recomendado)
-    const maxResults = 1000;
-    const url = `https://api.lufop.net/api?key=${LUFOP_API_KEY}&format=json&nbr=${maxResults}&pays=br`;
-
-    console.log(`🔍 [Lufop] Buscando radares: ${url.substring(0, 80)}...`);
-
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(
-        `❌ [Lufop] Erro na requisição: ${
-          response.status
-        } - ${errorText.substring(0, 200)}`
-      );
+    const csvPath = path.join(process.cwd(), "maparadar(1).csv");
+    
+    if (!fs.existsSync(csvPath)) {
+      console.error(`❌ [CSV] Arquivo não encontrado: ${csvPath}`);
       return [];
     }
 
-    const data: any = await response.json();
-    console.log(
-      `✅ [Lufop] Resposta recebida: ${
-        Array.isArray(data) ? data.length : "formato desconhecido"
-      } radares`
-    );
+    console.log(`🔍 [CSV] Lendo radares do arquivo: ${csvPath}`);
+    
+    const fileContent = fs.readFileSync(csvPath, "utf-8");
+    const lines = fileContent.split("\n").filter((line) => line.trim() !== "");
+    
+    console.log(`📊 [CSV] ${lines.length} linhas encontradas no arquivo`);
 
-    // A API retorna um array direto de radares
-    if (Array.isArray(data)) {
-      // Retornar TODOS os radares do Brasil (SEM NENHUM FILTRO DE DISTÂNCIA)
-      const processedRadars = processLufopRadars(data);
-      console.log(
-        `✅ [Lufop] ${processedRadars.length} radares processados do Brasil (TODOS, sem filtro)`
-      );
-      return processedRadars;
-    }
+    const radars = lines
+      .map((line, index) => {
+        try {
+          const trimmedLine = line.trim();
+          if (!trimmedLine) return null;
 
-    console.log(`⚠️ [Lufop] Formato de resposta não reconhecido`);
-    return [];
+          // Formato: longitude,latitude,descrição
+          const parts = trimmedLine.split(",");
+          
+          if (parts.length < 2) {
+            console.warn(`⚠️ [CSV] Linha ${index + 1} inválida: ${trimmedLine.substring(0, 50)}`);
+            return null;
+          }
+
+          const longitude = parseFloat(parts[0].trim());
+          const latitude = parseFloat(parts[1].trim());
+
+          if (isNaN(latitude) || isNaN(longitude)) {
+            console.warn(`⚠️ [CSV] Linha ${index + 1} com coordenadas inválidas: ${trimmedLine.substring(0, 50)}`);
+            return null;
+          }
+
+          // Validar coordenadas
+          if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+            console.warn(`⚠️ [CSV] Linha ${index + 1} com coordenadas fora do range: ${trimmedLine.substring(0, 50)}`);
+            return null;
+          }
+
+          // Extrair velocidade da descrição (ex: "Radar Fixo - 30 kmh@30" -> 30)
+          let velocidadeLeve: number | null = null;
+          const description = parts.slice(2).join(","); // Pode ter vírgulas na descrição
+          
+          if (description) {
+            // Tentar extrair número antes de "kmh" ou "@"
+            const speedMatch = description.match(/(\d+)\s*(?:kmh|km\/h|@)/i);
+            if (speedMatch) {
+              const speed = parseInt(speedMatch[1]);
+              if (!isNaN(speed) && speed > 0) {
+                velocidadeLeve = speed;
+              }
+            }
+          }
+
+          return {
+            id: `csv-${latitude}-${longitude}-${index}`,
+            latitude: latitude,
+            longitude: longitude,
+            source: "csv",
+            confirms: 0,
+            denies: 0,
+            lastConfirmedAt: new Date(),
+            createdAt: new Date(),
+            velocidadeLeve: velocidadeLeve,
+            velocidadePesado: null,
+            tipoRadar: description?.toLowerCase().includes("móvel") ? "móvel" : "fixo",
+            rodovia: null,
+            uf: null,
+            municipio: null,
+            km: null,
+            sentido: null,
+            situacao: "Ativo",
+            concessionaria: null,
+            ativo: true,
+            metadata: {
+              description: description || null,
+              lineNumber: index + 1,
+            },
+          };
+        } catch (error: any) {
+          console.warn(`⚠️ [CSV] Erro ao processar linha ${index + 1}: ${error.message}`);
+          return null;
+        }
+      })
+      .filter((r: any) => r !== null);
+
+    console.log(`✅ [CSV] ${radars.length} radares processados do arquivo CSV`);
+    return radars;
   } catch (error: any) {
-    console.error("❌ [Lufop] Erro ao buscar radares:", error);
+    console.error("❌ [CSV] Erro ao ler arquivo CSV:", error);
     return [];
   }
-}
-
-/**
- * Processar radares da Lufop e converter para formato padrão
- * Formato da API: { ID, name, lat, lng, type, commune, voie, vitesse, pays, dept, update, ... }
- */
-function processLufopRadars(radars: any[]): any[] {
-  return radars
-    .map((radar: any) => {
-      // Formato da API Lufop: lat, lng (não latitude/longitude)
-      const lat = radar.lat;
-      const lon = radar.lng;
-
-      if (!lat || !lon) {
-        return null;
-      }
-
-      // Extrair velocidade (pode ser string vazia ou número)
-      let velocidadeLeve: number | null = null;
-      if (radar.vitesse) {
-        const speedStr = String(radar.vitesse).trim();
-        if (speedStr && speedStr !== "") {
-          const speedNum = parseInt(speedStr);
-          if (!isNaN(speedNum) && speedNum > 0) {
-            velocidadeLeve = speedNum;
-          }
-        }
-      }
-
-      // Extrair estado do campo dept (ex: "88 - Santa Catarina" -> "SC")
-      let uf: string | null = null;
-      if (radar.dept) {
-        const deptStr = String(radar.dept);
-        // Tentar extrair sigla do estado ou usar o nome completo
-        const estadoMap: Record<string, string> = {
-          "Santa Catarina": "SC",
-          "Rio de Janeiro": "RJ",
-          "São Paulo": "SP",
-          "Minas Gerais": "MG",
-          Goiás: "GO",
-          "District fédéral": "DF",
-        };
-
-        for (const [nome, sigla] of Object.entries(estadoMap)) {
-          if (deptStr.includes(nome)) {
-            uf = sigla;
-            break;
-          }
-        }
-
-        if (!uf) {
-          uf = deptStr.split(" - ")[1] || deptStr;
-        }
-      }
-
-      return {
-        id: radar.ID || `lufop-${lat}-${lon}`,
-        latitude: parseFloat(lat),
-        longitude: parseFloat(lon),
-        source: "lufop",
-        confirms: 0,
-        denies: 0,
-        lastConfirmedAt: radar.update ? new Date(radar.update) : new Date(),
-        createdAt: radar.update ? new Date(radar.update) : new Date(),
-        velocidadeLeve: velocidadeLeve,
-        velocidadePesado: null,
-        tipoRadar: radar.typeradar || "fixo",
-        rodovia: radar.voie || null,
-        uf: uf,
-        municipio: radar.commune || null,
-        km: null,
-        sentido: null,
-        situacao: "Ativo",
-        concessionaria: null,
-        // Metadados adicionais da Lufop
-        metadata: {
-          lufopId: radar.ID,
-          lufopName: radar.name,
-          lufopType: radar.type,
-          lufopUpdate: radar.update,
-        },
-      };
-    })
-    .filter((r: any) => r !== null);
 }
 
 export async function radarRoutes(fastify: FastifyInstance) {
@@ -454,22 +414,18 @@ export async function radarRoutes(fastify: FastifyInstance) {
         // NÃO FILTRAR POR DISTÂNCIA - Retornar TODOS os radares do banco
         const dbRadars = allRadars;
 
-        // Buscar radares da API Lufop
+        // Buscar radares do arquivo CSV local
         fastify.log.info(
-          `🔍 Buscando radares da API Lufop (lat=${centerLat}, lon=${centerLon}, radius=${radius}km)...`
+          `🔍 Buscando radares do arquivo CSV local...`
         );
-        let lufopRadars: any[] = [];
+        let csvRadars: any[] = [];
         try {
-          lufopRadars = await fetchRadarsFromLufop(
-            centerLat,
-            centerLon,
-            radius
-          );
+          csvRadars = await fetchRadarsFromCSV();
           fastify.log.info(
-            `✅ ${lufopRadars.length} radares encontrados da API Lufop`
+            `✅ ${csvRadars.length} radares encontrados do arquivo CSV`
           );
         } catch (error: any) {
-          fastify.log.error(`❌ Erro ao buscar da Lufop:`, error);
+          fastify.log.error(`❌ Erro ao ler CSV:`, error);
         }
 
         // Combinar radares do banco com radares da Lufop
@@ -484,8 +440,8 @@ export async function radarRoutes(fastify: FastifyInstance) {
           radarMap.set(key, radar);
         });
 
-        // Adicionar radares da Lufop (não sobrescrever se já existir do banco)
-        lufopRadars.forEach((radar) => {
+        // Adicionar radares do CSV (não sobrescrever se já existir do banco)
+        csvRadars.forEach((radar) => {
           const key = `${radar.latitude.toFixed(6)}-${radar.longitude.toFixed(
             6
           )}`;
