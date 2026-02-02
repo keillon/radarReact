@@ -14,7 +14,7 @@ import * as path from "path";
  */
 async function fetchRadarsFromCSV(): Promise<any[]> {
   try {
-    const csvPath = path.join(process.cwd(), "maparadar(1).csv");
+    const csvPath = path.join(process.cwd(), "maparadar.csv");
     
     if (!fs.existsSync(csvPath)) {
       console.error(`❌ [CSV] Arquivo não encontrado: ${csvPath}`);
