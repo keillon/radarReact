@@ -7,9 +7,6 @@ import { checkForUpdates, syncANTT } from "../scripts/syncANTTAuto";
 import * as fs from "fs";
 import * as path from "path";
 
-import * as fs from "fs";
-import * as path from "path";
-
 /**
  * Buscar radares do arquivo CSV local
  * Formato CSV: longitude,latitude,descrição
