@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Map from "./Map";
 import {
   Radar,
@@ -23,6 +23,7 @@ export default function App() {
   const [pendingAdd, setPendingAdd] = useState<{ lat: number; lng: number } | null>(null);
   const [radarType, setRadarType] = useState<"reportado" | "fixo" | "móvel">("reportado");
   const [error, setError] = useState<string | null>(null);
+  const loadTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const RADAR_TYPES = [
     { value: "reportado" as const, label: "Reportado" },
@@ -30,15 +31,18 @@ export default function App() {
     { value: "móvel" as const, label: "Móvel" },
   ];
 
-  const loadRadars = useCallback(async () => {
+  // Calcular raio baseado no zoom para melhor performance
+  const getRadiusForZoom = useCallback((zoomLevel: number): number => {
+    if (zoomLevel >= 12) return 10000; // 10km em zoom alto
+    if (zoomLevel >= 10) return 25000; // 25km em zoom médio
+    return 50000; // 50km em zoom baixo
+  }, []);
+
+  const loadRadars = useCallback(async (lat: number, lng: number, radius: number) => {
     setLoading(true);
     setError(null);
     try {
-      const list = await getRadarsNearLocation(
-        center[1],
-        center[0],
-        LOAD_RADIUS
-      );
+      const list = await getRadarsNearLocation(lat, lng, radius);
       setRadars(list);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao carregar radares");
@@ -46,11 +50,25 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [center]);
+  }, []);
 
+  // Debounce no carregamento quando center/zoom muda
   useEffect(() => {
-    loadRadars();
-  }, [loadRadars]);
+    if (loadTimeoutRef.current) {
+      clearTimeout(loadTimeoutRef.current);
+    }
+    
+    loadTimeoutRef.current = setTimeout(() => {
+      const radius = getRadiusForZoom(zoom);
+      loadRadars(center[1], center[0], radius);
+    }, 500); // Aguardar 500ms após parar de mover o mapa
+
+    return () => {
+      if (loadTimeoutRef.current) {
+        clearTimeout(loadTimeoutRef.current);
+      }
+    };
+  }, [center, zoom, loadRadars, getRadiusForZoom]);
 
   const handleSelectRadar = (radar: Radar) => {
     setSelected(radar);
@@ -213,7 +231,10 @@ export default function App() {
           </button>
           <button
             type="button"
-            onClick={loadRadars}
+            onClick={() => {
+              const radius = getRadiusForZoom(zoom);
+              loadRadars(center[1], center[0], radius);
+            }}
             disabled={loading}
             style={{
               padding: "8px 16px",
@@ -519,7 +540,7 @@ export default function App() {
           )}
 
           <p style={{ marginTop: 16, fontSize: 13, color: "#9ca3af" }}>
-            {radars.length} radar(es) na região (raio {LOAD_RADIUS / 1000} km).
+            {radars.length} radar(es) na região (raio {getRadiusForZoom(zoom) / 1000} km, zoom {zoom.toFixed(1)}).
           </p>
           <p style={{ marginTop: 8, fontSize: 11, color: "#9ca3af", wordBreak: "break-all" }}>
             API: {import.meta.env.VITE_API_URL || "http://72.60.247.18:3000"}
