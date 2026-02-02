@@ -373,6 +373,8 @@ export default function App() {
             onMapClick={handleMapClick}
             center={center}
             zoom={zoom}
+            onCenterChange={setCenter}
+            onZoomChange={setZoom}
           />
         </div>
 

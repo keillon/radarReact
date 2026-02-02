@@ -14,6 +14,8 @@ interface MapProps {
   onMapClick: (lat: number, lng: number) => void;
   center: [number, number];
   zoom: number;
+  onCenterChange?: (center: [number, number]) => void;
+  onZoomChange?: (zoom: number) => void;
 }
 
 export default function Map({
@@ -23,6 +25,8 @@ export default function Map({
   onMapClick,
   center,
   zoom,
+  onCenterChange,
+  onZoomChange,
 }: MapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -46,6 +50,33 @@ export default function Map({
       onMapClickRef.current(e.lngLat.lat, e.lngLat.lng);
     });
 
+    // Atualizar center/zoom quando usuário move o mapa
+    if (onCenterChange || onZoomChange) {
+      const updateFromMap = () => {
+        const currentCenter = map.getCenter();
+        const currentZoom = map.getZoom();
+        if (onCenterChange) {
+          onCenterChange([currentCenter.lng, currentCenter.lat]);
+        }
+        if (onZoomChange) {
+          onZoomChange(currentZoom);
+        }
+      };
+
+      map.on("moveend", updateFromMap);
+      map.on("zoomend", updateFromMap);
+
+      return () => {
+        map.off("moveend", updateFromMap);
+        map.off("zoomend", updateFromMap);
+        // Limpar todos os markers
+        markersRef.current.forEach(marker => marker.remove());
+        markersRef.current.clear();
+        map.remove();
+        mapRef.current = null;
+      };
+    }
+
     return () => {
       // Limpar todos os markers
       markersRef.current.forEach(marker => marker.remove());
@@ -53,7 +84,7 @@ export default function Map({
       map.remove();
       mapRef.current = null;
     };
-  }, []);
+  }, [onCenterChange, onZoomChange]);
 
   // Update center/zoom
   useEffect(() => {
