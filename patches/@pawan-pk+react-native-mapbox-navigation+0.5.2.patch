@@ -50,7 +50,7 @@ index 7d28df3..95dfa12 100644
    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
    implementation 'androidx.cardview:cardview:1.0.0'
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
-index 41a3ba0..f261375 100644
+index 41a3ba0..7f4a6c7 100644
 --- a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
 +++ b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
 @@ -3,25 +3,34 @@ package com.mapboxnavigation
@@ -1420,7 +1420,7 @@ index 41a3ba0..f261375 100644
    }
  
    fun setLocal(language: String) {
-@@ -820,4 +1039,730 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -820,4 +1039,867 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
    fun setShowCancelButton(show: Boolean) {
      binding.stop.visibility = if (show) View.VISIBLE else View.INVISIBLE
    }
@@ -1528,41 +1528,40 @@ index 41a3ba0..f261375 100644
 +    loadRadarImages(style)
 +  }
 +
-+  /** Mapeia tipo do radar para nome do ícone: radar, radar_fixo, radar_movel, radar_semaforico. */
-+  private fun getRadarIconName(type: String?): String {
-+    if (type.isNullOrBlank()) return "radar"
-+    val t = java.text.Normalizer.normalize(type.trim().lowercase(), java.text.Normalizer.Form.NFD).replace("\u0300", "")
-+    if (t.contains("semaforo") && t.contains("camera")) return "radar_semaforico"
-+    if (t.contains("semaforo") && t.contains("radar")) return "radar_semaforico"
-+    if (t.contains("radar") && t.contains("fixo")) return "radar_fixo"
-+    if (t.contains("radar") && (t.contains("movel") || t.contains("móvel"))) return "radar_movel"
-+    return "radar"
-+  }
-+
-+  /** Ícones por tipo: radar (genérico), radar_fixo, radar_movel, radar_semaforico. */
 +  private fun loadRadarImages(style: com.mapbox.maps.Style) {
 +    try {
 +      val imageNames =
 +              listOf(
-+                      "radar",
-+                      "radar_fixo",
-+                      "radar_movel",
-+                      "radar_semaforico"
++                      "placa0",
++                      "placa10",
++                      "placa20",
++                      "placa30",
++                      "placa40",
++                      "placa50",
++                      "placa60",
++                      "placa70",
++                      "placa80",
++                      "placa90",
++                      "placa100",
++                      "placa110",
++                      "placa120",
++                      "placa130",
++                      "placa140",
++                      "placa150",
++                      "placa160",
++                      "placa",
++                      "radar", // Radar normal
++                      "radar_semaforico" // Radar semafórico
 +              )
 +
 +      imageNames.forEach { imageName ->
 +        try {
-+          var resourceName = "assets_images_$imageName"
-+          var resourceId =
++          val resourceName = "assets_images_$imageName"
++          val resourceId =
 +                  context.resources.getIdentifier(resourceName, "drawable", context.packageName)
-+          // Fallback: React Native pode gerar camelCase (ex: assets_images_radarFixo)
-+          if (resourceId == 0 && imageName.contains("_")) {
-+            val camelCase = imageName.split("_").joinToString("") { it.replaceFirstChar { c -> c.uppercaseChar() } }.replaceFirstChar { it.lowercaseChar() }
-+            resourceName = "assets_images_$camelCase"
-+            resourceId = context.resources.getIdentifier(resourceName, "drawable", context.packageName)
-+          }
++
 +          if (resourceId == 0) {
-+            Log.w("MapboxNavigationView", "⚠️ Recurso não encontrado: $imageName (tentou $resourceName)")
++            Log.w("MapboxNavigationView", "⚠️ Recurso não encontrado: $resourceName")
 +            return@forEach
 +          }
 +
@@ -1805,8 +1804,76 @@ index 41a3ba0..f261375 100644
 +    try {
 +      val features =
 +              radarsToDisplay.map { radar: RadarPoint ->
-+                val iconImage = getRadarIconName(radar.type)
++                val speedLimit = radar.speedLimit ?: 0.0
++
++                // Determinar imagem baseado no tipo do radar
++                val radarType = radar.type?.lowercase() ?: ""
++                val iconImage =
++                        when {
++                          radarType.contains("semaforico") || radarType.contains("semáforo") ->
++                                  "radar_semaforico"
++                          radarType.contains("fixo") ||
++                                  radarType.contains("móvel") ||
++                                  radarType.contains("mobile") -> {
++                            // Para radares fixos/móveis, usar placa com velocidade
++                            val speeds =
++                                    listOf(
++                                            20,
++                                            30,
++                                            40,
++                                            50,
++                                            60,
++                                            70,
++                                            80,
++                                            90,
++                                            100,
++                                            110,
++                                            120,
++                                            130,
++                                            140,
++                                            150,
++                                            160
++                                    )
++                            val closestSpeed =
++                                    if (speedLimit > 0) {
++                                      speeds.minByOrNull { kotlin.math.abs(it - speedLimit) } ?: 0
++                                    } else {
++                                      0
++                                    }
++                            if (closestSpeed > 0) "placa$closestSpeed" else "radar"
++                          }
++                          else -> {
++                            // Padrão: usar placa com velocidade ou radar genérico
++                            val speeds =
++                                    listOf(
++                                            20,
++                                            30,
++                                            40,
++                                            50,
++                                            60,
++                                            70,
++                                            80,
++                                            90,
++                                            100,
++                                            110,
++                                            120,
++                                            130,
++                                            140,
++                                            150,
++                                            160
++                                    )
++                            val closestSpeed =
++                                    if (speedLimit > 0) {
++                                      speeds.minByOrNull { kotlin.math.abs(it - speedLimit) } ?: 0
++                                    } else {
++                                      0
++                                    }
++                            if (closestSpeed > 0) "placa$closestSpeed" else "radar"
++                          }
++                        }
++
 +                val isNearby = nearbyRadarIds.contains(radar.id)
++
 +                Feature.fromGeometry(
 +                        Point.fromLngLat(radar.longitude, radar.latitude),
 +                        JsonObject().apply {
@@ -1917,8 +1984,78 @@ index 41a3ba0..f261375 100644
 +
 +      val features =
 +              radarsToDisplay.map { radar: RadarPoint ->
-+                val iconImage = getRadarIconName(radar.type)
++                val speedLimit = radar.speedLimit ?: 0.0
++
++                // Determinar imagem baseado no tipo do radar
++                val radarType = radar.type?.lowercase() ?: ""
++                val iconImage =
++                        when {
++                          radarType.contains("semaforico") || radarType.contains("semáforo") ->
++                                  "radar_semaforico"
++                          radarType.contains("fixo") ||
++                                  radarType.contains("móvel") ||
++                                  radarType.contains("mobile") -> {
++                            // Para radares fixos/móveis, usar placa com velocidade
++                            val speeds =
++                                    listOf(
++                                            10,
++                                            20,
++                                            30,
++                                            40,
++                                            50,
++                                            60,
++                                            70,
++                                            80,
++                                            90,
++                                            100,
++                                            110,
++                                            120,
++                                            130,
++                                            140,
++                                            150,
++                                            160
++                                    )
++                            val closestSpeed =
++                                    if (speedLimit > 0) {
++                                      speeds.minByOrNull { kotlin.math.abs(it - speedLimit) } ?: 0
++                                    } else {
++                                      0
++                                    }
++                            if (closestSpeed > 0) "placa$closestSpeed" else "radar"
++                          }
++                          else -> {
++                            // Padrão: usar placa com velocidade ou radar genérico
++                            val speeds =
++                                    listOf(
++                                            10,
++                                            20,
++                                            30,
++                                            40,
++                                            50,
++                                            60,
++                                            70,
++                                            80,
++                                            90,
++                                            100,
++                                            110,
++                                            120,
++                                            130,
++                                            140,
++                                            150,
++                                            160
++                                    )
++                            val closestSpeed =
++                                    if (speedLimit > 0) {
++                                      speeds.minByOrNull { kotlin.math.abs(it - speedLimit) } ?: 0
++                                    } else {
++                                      0
++                                    }
++                            if (closestSpeed > 0) "placa$closestSpeed" else "radar"
++                          }
++                        }
++
 +                val isNearby = nearbyRadarIds.contains(radar.id)
++
 +                Feature.fromGeometry(
 +                        Point.fromLngLat(radar.longitude, radar.latitude),
 +                        JsonObject().apply {
@@ -2210,7 +2347,7 @@ index 03fad26..8870d40 100644
      const val NAME = "MapboxNavigationView"
    }
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/res/layout/navigation_view.xml b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/res/layout/navigation_view.xml
-index c00affd..ef433c4 100644
+index c00affd..3390454 100644
 --- a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/res/layout/navigation_view.xml
 +++ b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/res/layout/navigation_view.xml
 @@ -13,11 +13,23 @@
@@ -2222,7 +2359,7 @@ index c00affd..ef433c4 100644
 +    android:layout_width="wrap_content"
 +    android:layout_height="wrap_content"
 +    android:layout_marginStart="8dp"
-+    android:layout_marginBottom="8dp"
++    android:layout_marginBottom="120dp"
 +    android:visibility="invisible"
 +    app:layout_constraintStart_toStartOf="parent"
 +    app:layout_constraintBottom_toBottomOf="parent" />
