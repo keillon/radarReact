@@ -94,11 +94,25 @@ export default function Map({
     };
   }, []);
 
-  // Update center/zoom
+  // Update center/zoom (evitar atualizar se já está no valor correto para evitar loops)
   useEffect(() => {
-    if (mapRef.current) {
-      mapRef.current.setCenter(center);
-      mapRef.current.setZoom(zoom);
+    const map = mapRef.current;
+    if (!map) return;
+    
+    const currentCenter = map.getCenter();
+    const currentZoom = map.getZoom();
+    
+    // Só atualizar se realmente mudou (evitar loops infinitos)
+    const centerChanged = 
+      Math.abs(currentCenter.lng - center[0]) > 0.0001 || 
+      Math.abs(currentCenter.lat - center[1]) > 0.0001;
+    const zoomChanged = Math.abs(currentZoom - zoom) > 0.01;
+    
+    if (centerChanged) {
+      map.setCenter(center);
+    }
+    if (zoomChanged) {
+      map.setZoom(zoom);
     }
   }, [center, zoom]);
 
