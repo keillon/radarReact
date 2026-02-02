@@ -32,7 +32,11 @@ export default function Map({
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<Map<string, mapboxgl.Marker>>(new Map());
   const onMapClickRef = useRef(onMapClick);
+  const onCenterChangeRef = useRef(onCenterChange);
+  const onZoomChangeRef = useRef(onZoomChange);
   onMapClickRef.current = onMapClick;
+  onCenterChangeRef.current = onCenterChange;
+  onZoomChangeRef.current = onZoomChange;
 
   // Init map
   useEffect(() => {
@@ -51,40 +55,30 @@ export default function Map({
     });
 
     // Atualizar center/zoom quando usuário move o mapa
-    if (onCenterChange || onZoomChange) {
-      const updateFromMap = () => {
-        const currentCenter = map.getCenter();
-        const currentZoom = map.getZoom();
-        if (onCenterChange) {
-          onCenterChange([currentCenter.lng, currentCenter.lat]);
-        }
-        if (onZoomChange) {
-          onZoomChange(currentZoom);
-        }
-      };
+    const updateFromMap = () => {
+      const currentCenter = map.getCenter();
+      const currentZoom = map.getZoom();
+      if (onCenterChangeRef.current) {
+        onCenterChangeRef.current([currentCenter.lng, currentCenter.lat]);
+      }
+      if (onZoomChangeRef.current) {
+        onZoomChangeRef.current(currentZoom);
+      }
+    };
 
-      map.on("moveend", updateFromMap);
-      map.on("zoomend", updateFromMap);
-
-      return () => {
-        map.off("moveend", updateFromMap);
-        map.off("zoomend", updateFromMap);
-        // Limpar todos os markers
-        markersRef.current.forEach(marker => marker.remove());
-        markersRef.current.clear();
-        map.remove();
-        mapRef.current = null;
-      };
-    }
+    map.on("moveend", updateFromMap);
+    map.on("zoomend", updateFromMap);
 
     return () => {
+      map.off("moveend", updateFromMap);
+      map.off("zoomend", updateFromMap);
       // Limpar todos os markers
       markersRef.current.forEach(marker => marker.remove());
       markersRef.current.clear();
       map.remove();
       mapRef.current = null;
     };
-  }, [onCenterChange, onZoomChange]);
+  }, []);
 
   // Update center/zoom
   useEffect(() => {
