@@ -55,40 +55,13 @@ export default function Map({
     };
   }, []);
 
-  // Update center/zoom com debounce para evitar muitas atualizações
+  // Update center/zoom
   useEffect(() => {
-    if (!mapRef.current) return;
-    
-    const timeoutId = setTimeout(() => {
-      if (mapRef.current) {
-        mapRef.current.setCenter(center);
-        mapRef.current.setZoom(zoom);
-      }
-    }, 100);
-
-    return () => clearTimeout(timeoutId);
+    if (mapRef.current) {
+      mapRef.current.setCenter(center);
+      mapRef.current.setZoom(zoom);
+    }
   }, [center, zoom]);
-
-  // Atualizar center/zoom quando o mapa é movido
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-
-    const updateCenterZoom = () => {
-      const center = map.getCenter();
-      const zoom = map.getZoom();
-      // Notificar componente pai sobre mudanças (se necessário)
-      // Por enquanto, apenas atualizar localmente
-    };
-
-    map.on("moveend", updateCenterZoom);
-    map.on("zoomend", updateCenterZoom);
-
-    return () => {
-      map.off("moveend", updateCenterZoom);
-      map.off("zoomend", updateCenterZoom);
-    };
-  }, []);
 
   // Radars as markers - otimizado para não recriar tudo
   useEffect(() => {
