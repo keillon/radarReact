@@ -22,12 +22,18 @@ async function cleanupOldPositions() {
       console.log(`🧹 Limpeza: ${result.count} posições antigas removidas`);
     }
   } catch (error: any) {
-    // Ignorar erro se a tabela não existir (P2021) ou se houver problema de conexão
-    if (error?.code === "P2021" || error?.code === "P1001") {
-      // Silenciosamente ignorar - tabela pode não existir ainda ou banco não conectado
+    // Ignorar erro se a tabela não existir (P2021), problema de conexão (P1001) ou permissão negada
+    if (
+      error?.code === "P2021" ||
+      error?.code === "P1001" ||
+      error?.message?.includes("was denied access") ||
+      error?.message?.includes("permission denied")
+    ) {
+      // Silenciosamente ignorar - tabela pode não existir, banco não conectado ou sem permissão
       return;
     }
-    console.error("❌ Erro ao limpar posições antigas:", error);
+    // Log apenas para outros erros não esperados
+    console.error("❌ Erro ao limpar posições antigas:", error?.message || error);
   }
 }
 
