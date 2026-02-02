@@ -18,25 +18,29 @@ interface MapProps {
   onZoomChange?: (zoom: number) => void;
 }
 
-export default function Map({
-  radars,
-  selectedId,
-  onSelectRadar,
-  onMapClick,
-  center,
-  zoom,
-  onCenterChange,
-  onZoomChange,
-}: MapProps) {
+export default function Map(props: MapProps) {
+  const {
+    radars,
+    selectedId,
+    onSelectRadar,
+    onMapClick,
+    center,
+    zoom,
+    onCenterChange,
+    onZoomChange,
+  } = props;
+  
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<Map<string, mapboxgl.Marker>>(new Map());
   const onMapClickRef = useRef(onMapClick);
   const onCenterChangeRef = useRef(onCenterChange);
   const onZoomChangeRef = useRef(onZoomChange);
+  
+  // Atualizar refs quando props mudam
   onMapClickRef.current = onMapClick;
-  onCenterChangeRef.current = onCenterChange;
-  onZoomChangeRef.current = onZoomChange;
+  if (onCenterChange) onCenterChangeRef.current = onCenterChange;
+  if (onZoomChange) onZoomChangeRef.current = onZoomChange;
 
   // Init map
   useEffect(() => {
