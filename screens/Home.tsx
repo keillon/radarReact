@@ -557,15 +557,27 @@ export default function Home({ onOpenEditor }: HomeProps) {
       // Buscar radares em BACKGROUND (não bloqueia navegação)
       getRadarsNearRoute({
         route: routePoints,
-        radius: 100, // Reduzido para 100m (mais preciso)
+        radius: 250, // Aumentado para 250m para ser mais abrangente
       })
         .then((nearbyRadars) => {
           // Filtrar radares que estão realmente próximos da rota
-          const filtered = filterRadarsNearRoute(nearbyRadars, routePoints, 100);
-          setRadars(filtered);
-          setFilteredRadars(filtered);
+          const filteredFromApi = filterRadarsNearRoute(nearbyRadars, routePoints, 250);
+          
+          // UNIR: Manter o que já temos localmente (especialmente reportes recentes) e adicionar os novos
+          setRadars((prev) => {
+             const existingIds = new Set(prev.map(r => r.id));
+             const newRadars = filteredFromApi.filter(r => !existingIds.has(r.id));
+             return [...newRadars, ...prev]; // Prepor novos para prioridade, mas manter locais
+          });
+
+          setFilteredRadars((prev) => {
+             const existingIds = new Set(prev.map(r => r.id));
+             const newFiltered = filteredFromApi.filter(r => !existingIds.has(r.id));
+             return [...newFiltered, ...prev];
+          });
+
           console.log(
-            `✅ ${filtered.length} radares encontrados na rota (filtrados de ${nearbyRadars.length})`
+            `✅ ${filteredFromApi.length} radares da API injetados na lista (total filtrado)`
           );
         })
         .catch((error: any) => {
@@ -576,17 +588,14 @@ export default function Home({ onOpenEditor }: HomeProps) {
               const filtered = filterRadarsNearRoute(
                 fallbackRadars,
                 routePoints,
-                100
+                250
               );
-              setRadars(filtered);
-              setFilteredRadars(filtered);
+              setRadars(prev => [...filtered.filter(r => !prev.some(p => p.id === r.id)), ...prev]);
+              setFilteredRadars(prev => [...filtered.filter(r => !prev.some(p => p.id === r.id)), ...prev]);
               console.log(`✅ ${filtered.length} radares (fallback)`);
             })
             .catch((err) => {
               console.error("Erro no fallback de radares:", err);
-              // Continuar sem radares se tudo falhar
-              setRadars([]);
-              setFilteredRadars([]);
             });
         });
     } catch (error: any) {
@@ -722,20 +731,20 @@ export default function Home({ onOpenEditor }: HomeProps) {
       // Verificar se é um radar temporário (salvo localmente)
       const isLocalRadar = newRadar.id.startsWith("temp_");
 
-      // Adicionar o radar reportado à lista local imediatamente
+      // Adicionar o radar reportado à lista local imediatamente (PREPOR para prioridade)
       setRadars((prev) => {
         // Verificar se já existe para evitar duplicatas
         const exists = prev.some((r) => r.id === newRadar.id);
         if (exists) return prev;
-        return [...prev, newRadar];
+        return [newRadar, ...prev];
       });
 
-      // Se estiver navegando, também adicionar aos radares filtrados
+      // Se estiver navegando, também adicionar aos radares filtrados (PREPOR para prioridade)
       if (isNavigating && routeData) {
         setFilteredRadars((prev) => {
           const exists = prev.some((r) => r.id === newRadar.id);
           if (exists) return prev;
-          return [...prev, newRadar];
+          return [newRadar, ...prev];
         });
       }
 
