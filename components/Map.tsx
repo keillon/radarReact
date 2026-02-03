@@ -160,12 +160,11 @@ export default function Map({
       .toLowerCase()
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "");
-    if (t.includes("radar") && t.includes("fixo"))
+    if (t.includes("fixo") || t.includes("placa"))
       return getClosestPlacaName(radar.speedLimit);
-    if (t.includes("semaforo") && t.includes("camera"))
+    if (t.includes("semaforo") || t.includes("camera"))
       return "radarSemaforico";
-    if (t.includes("semaforo") && t.includes("radar")) return "radarSemaforico";
-    if (t.includes("radar") && t.includes("movel")) return "radarMovel";
+    if (t.includes("movel") || t.includes("mobile")) return "radarMovel";
     return "radar";
   };
 

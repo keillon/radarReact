@@ -874,17 +874,17 @@ export default function Home({ onOpenEditor }: HomeProps) {
   routeDataRef.current = routeData;
 
   // Preparar radares para o MapboxNavigation (sempre calcular, mesmo quando não está navegando)
-  const mapboxRadars = useMemo(
-    () =>
-      filteredRadars.map((r) => ({
-        id: r.id,
-        latitude: r.latitude,
-        longitude: r.longitude,
-        speedLimit: r.speedLimit,
-        type: r.type, // Passar tipo do radar para o componente nativo
-      })),
-    [filteredRadars]
-  );
+  const mapboxRadars = useMemo(() => {
+    // Se filteredRadars estiver vazio (ex: carregando rota), usar radars globais como fallback instantâneo
+    const list = filteredRadars.length > 0 ? filteredRadars : radars;
+    return list.map((r) => ({
+      id: r.id,
+      latitude: r.latitude,
+      longitude: r.longitude,
+      speedLimit: r.speedLimit,
+      type: r.type, // Passar tipo do radar para o componente nativo
+    }));
+  }, [filteredRadars, radars]);
 
   // WebSocket nativo: radares em tempo real para todos (mapa e navegação), inclusive durante navegação
   useEffect(() => {
