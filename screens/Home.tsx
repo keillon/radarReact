@@ -538,6 +538,12 @@ export default function Home({ onOpenEditor }: HomeProps) {
       // Iniciar navegação IMEDIATAMENTE (não esperar radares)
       setIsNavigating(true);
 
+      // NOVIDADE: Filtrar imediatamente os radares que já temos na memória para mostrar algo instantâneo
+      const localFiltered = filterRadarsNearRoute(radars, routePoints, 200);
+      if (localFiltered.length > 0) {
+        setFilteredRadars(localFiltered);
+      }
+
       // Fechar loading rapidamente
       Animated.timing(loadingOpacity, {
         toValue: 0,
@@ -2111,14 +2117,20 @@ const styles = StyleSheet.create({
   },
   reportModalSubmit: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
     backgroundColor: "#3b82f6",
     alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#3b82f6",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
   },
   reportModalSubmitText: {
-    fontSize: 14,
-    fontWeight: "600",
+    fontSize: 18,
+    fontWeight: "bold",
     color: "#fff",
   },
   editorButton: {
