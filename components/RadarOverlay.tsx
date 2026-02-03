@@ -12,7 +12,9 @@ import { MAPBOX_TOKEN } from "../services/mapbox";
 
 Mapbox.setAccessToken(MAPBOX_TOKEN);
 
-const PLACA_SPEEDS = [20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160];
+const PLACA_SPEEDS = [
+  20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160,
+];
 function getClosestPlacaName(speed: number | undefined): string {
   if (speed == null || speed <= 0) return "placa60";
   const closest = PLACA_SPEEDS.reduce((a, b) =>
@@ -38,6 +40,19 @@ function getRadarIconForMap(radar: Radar): string {
   return "radar";
 }
 
+/** Tamanhos de ícone por tipo (ajuste aqui para mudar no overlay de navegação). */
+const RADAR_ICON_SIZES: Record<string, number> = {
+  radar: 0.2,
+  radarMovel: 0.2,
+  radarSemaforico: 0.22,
+  radarFixo: 0.24,
+  placa: 0.24,
+};
+function getIconSizeForIcon(iconImage: string): number {
+  if (iconImage.startsWith("placa")) return RADAR_ICON_SIZES.placa ?? 0.24;
+  return RADAR_ICON_SIZES[iconImage] ?? RADAR_ICON_SIZES.radar ?? 0.2;
+}
+
 const radarImages = {
   radar: require("../assets/images/radar.png"),
   radarFixo: require("../assets/images/radarFixo.png"),
@@ -60,7 +75,7 @@ const radarImages = {
   placa160: require("../assets/images/placa160.png"),
 };
 
-const ICON_SIZE = 0.2;
+const DEFAULT_ICON_SIZE = 0.2;
 
 interface RadarOverlayProps {
   radars: Radar[];
@@ -91,6 +106,7 @@ export default function RadarOverlay({
         id: radar.id,
         type: radar.type || "default",
         iconImage: getRadarIconForMap(radar),
+        iconSize: getIconSizeForIcon(getRadarIconForMap(radar)),
       },
     })),
   };
@@ -143,7 +159,7 @@ export default function RadarOverlay({
             id="radars-overlay-icons"
             style={{
               iconImage: ["coalesce", ["get", "iconImage"], "radar"],
-              iconSize: ICON_SIZE,
+              iconSize: ["coalesce", ["get", "iconSize"], DEFAULT_ICON_SIZE],
               iconAllowOverlap: true,
               iconIgnorePlacement: true,
             }}

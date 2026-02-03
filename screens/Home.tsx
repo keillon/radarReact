@@ -1,4 +1,11 @@
-import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -14,7 +21,11 @@ import {
   View,
 } from "react-native";
 // Geolocation: carregar sob demanda para evitar "Requiring unknown module 'undefined'" no startup
-type GeolocationApi = { getCurrentPosition: any; watchPosition: any; clearWatch: any };
+type GeolocationApi = {
+  getCurrentPosition: any;
+  watchPosition: any;
+  clearWatch: any;
+};
 let GeolocationModule: GeolocationApi | null = null;
 function getGeolocation(): GeolocationApi {
   if (GeolocationModule == null) {
@@ -68,7 +79,9 @@ const MapComponent = React.lazy(() => {
   } catch (e) {
     return Promise.resolve({
       default: () => (
-        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <View
+          style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
+        >
           <Text>Erro ao carregar mapa</Text>
         </View>
       ),
@@ -81,7 +94,7 @@ const calculateDistance = (
   lat1: number,
   lon1: number,
   lat2: number,
-  lon2: number,
+  lon2: number
 ): number => {
   const R = 6371e3; // Raio da Terra em metros
   const φ1 = (lat1 * Math.PI) / 180;
@@ -101,7 +114,7 @@ const calculateDistance = (
 const distanceToLineSegment = (
   point: LatLng,
   lineStart: LatLng,
-  lineEnd: LatLng,
+  lineEnd: LatLng
 ): number => {
   const A = point.latitude - lineStart.latitude;
   const B = point.longitude - lineStart.longitude;
@@ -132,7 +145,7 @@ const distanceToLineSegment = (
 // Função para calcular distância de um ponto até a rota (distância perpendicular mais próxima)
 const calculateDistanceToRoute = (
   point: LatLng,
-  routePoints: LatLng[],
+  routePoints: LatLng[]
 ): number => {
   if (routePoints.length < 2) {
     // Se não há rota, retornar distância grande
@@ -167,7 +180,7 @@ function getCumulativeDistances(routePoints: LatLng[]): number[] {
         routePoints[i - 1].latitude,
         routePoints[i - 1].longitude,
         routePoints[i].latitude,
-        routePoints[i].longitude,
+        routePoints[i].longitude
       );
   }
   return cum;
@@ -180,7 +193,7 @@ function getCumulativeDistances(routePoints: LatLng[]): number[] {
 function projectPointOntoRoute(
   point: LatLng,
   routePoints: LatLng[],
-  cumulative: number[],
+  cumulative: number[]
 ): number {
   if (routePoints.length < 2 || cumulative.length !== routePoints.length) {
     return 0;
@@ -190,8 +203,7 @@ function projectPointOntoRoute(
   for (let i = 0; i < routePoints.length - 1; i++) {
     const segStart = routePoints[i];
     const segEnd = routePoints[i + 1];
-    const segLen =
-      cumulative[i + 1] - cumulative[i] || 1e-9;
+    const segLen = cumulative[i + 1] - cumulative[i] || 1e-9;
     const A = point.latitude - segStart.latitude;
     const B = point.longitude - segStart.longitude;
     const C = segEnd.latitude - segStart.latitude;
@@ -206,7 +218,7 @@ function projectPointOntoRoute(
       point.latitude,
       point.longitude,
       projLat,
-      projLon,
+      projLon
     );
     if (dist < bestDist) {
       bestDist = dist;
@@ -224,14 +236,18 @@ function projectPointOntoRoute(
 const calculateDistanceAlongRoute = (
   userLocation: LatLng,
   radarLocation: LatLng,
-  routePoints: LatLng[],
+  routePoints: LatLng[]
 ): { distance: number; hasPassed: boolean } => {
   if (routePoints.length < 2) {
     return { distance: Infinity, hasPassed: false };
   }
   const cumulative = getCumulativeDistances(routePoints);
   const userCum = projectPointOntoRoute(userLocation, routePoints, cumulative);
-  const radarCum = projectPointOntoRoute(radarLocation, routePoints, cumulative);
+  const radarCum = projectPointOntoRoute(
+    radarLocation,
+    routePoints,
+    cumulative
+  );
   const distanceAlongRoute = radarCum - userCum;
   // Histerese 5m: marcar "passou" quando < 5m para evitar flicker por ruído do GPS
   const hasPassed = distanceAlongRoute < 5;
@@ -251,7 +267,7 @@ const roundDistanceTo10 = (meters: number): number => {
 const filterRadarsNearRoute = (
   radars: Radar[],
   routePoints: LatLng[],
-  maxDistance: number = 100, // metros
+  maxDistance: number = 100 // metros
 ): Radar[] => {
   if (routePoints.length < 2) return radars;
 
@@ -266,7 +282,7 @@ const filterRadarsNearRoute = (
       const distance = distanceToLineSegment(
         radarPoint,
         routePoints[i],
-        routePoints[i + 1],
+        routePoints[i + 1]
       );
       if (distance <= maxDistance) {
         return true;
@@ -301,9 +317,15 @@ export default function Home({ onOpenEditor }: HomeProps) {
   const [nearbyRadarIds, setNearbyRadarIds] = useState<Set<string>>(new Set()); // IDs dos radares próximos para animação
   const [isReportingRadar, setIsReportingRadar] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showLocationErrorModal, setShowLocationErrorModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
   const [reportSpeedLimit, setReportSpeedLimit] = useState("");
-  const [reportRadarType, setReportRadarType] = useState<"reportado" | "fixo" | "móvel" | "semaforo">("reportado");
-  const [MapboxNavComponent, setMapboxNavComponent] = useState<React.ComponentType<any> | null>(null);
+  const [reportRadarType, setReportRadarType] = useState<
+    "reportado" | "fixo" | "móvel" | "semaforo"
+  >("móvel");
+  const [MapboxNavComponent, setMapboxNavComponent] =
+    useState<React.ComponentType<any> | null>(null);
   const [mapboxNavError, setMapboxNavError] = useState<string | null>(null);
   const lastSyncTimeRef = useRef<number>(Date.now());
 
@@ -312,10 +334,26 @@ export default function Home({ onOpenEditor }: HomeProps) {
     label: string;
     icon: number;
   }[] = [
-    { value: "reportado", label: "Reportado", icon: require("../assets/images/radar.png") },
-    { value: "fixo", label: "Radar Fixo", icon: require("../assets/images/placa60.png") },
-    { value: "móvel", label: "Radar Móvel", icon: require("../assets/images/radarMovel.png") },
-    { value: "semaforo", label: "Semáforo c/ Radar", icon: require("../assets/images/radarSemaforico.png") },
+    {
+      value: "reportado",
+      label: "Reportado",
+      icon: require("../assets/images/radar.png"),
+    },
+    {
+      value: "fixo",
+      label: "Radar Fixo",
+      icon: require("../assets/images/placa60.png"),
+    },
+    {
+      value: "móvel",
+      label: "Radar Móvel",
+      icon: require("../assets/images/radarMovel.png"),
+    },
+    {
+      value: "semaforo",
+      label: "Semáforo c/ Radar",
+      icon: require("../assets/images/radarSemaforico.png"),
+    },
   ];
   const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -329,13 +367,14 @@ export default function Home({ onOpenEditor }: HomeProps) {
   const passedRadarIds = useRef<Set<string>>(new Set()); // Rastrear radares que já foram passados
   const lastLocationUpdate = useRef<number>(0);
   const locationUpdateDebounce = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
+    null
   );
   const lastCalculatedDistance = useRef<number>(0);
   const radarZeroTimeRef2 = useRef<number | null>(null); // Timestamp quando chegou a 0 metros
   const modalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isNavigatingRef = useRef(false);
   const routeDataRef = useRef<RouteResponse | null>(null);
+  const radarCheckDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     initMapbox();
@@ -395,12 +434,12 @@ export default function Home({ onOpenEditor }: HomeProps) {
     try {
       if (Platform.OS === "android") {
         const granted = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
         );
         if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
           Alert.alert(
             "Permissão negada",
-            "É necessário permitir acesso à localização para usar o app",
+            "É necessário permitir acesso à localização para usar o app"
           );
           return;
         }
@@ -420,7 +459,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
           getRadarsNearLocation(loc.latitude, loc.longitude, 1000)
             .then((nearbyRadars) => {
               console.log(
-                `✅ ${nearbyRadars.length} radares encontrados na inicialização`,
+                `✅ ${nearbyRadars.length} radares encontrados na inicialização`
               );
               setRadars(nearbyRadars);
             })
@@ -430,7 +469,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
         },
         (error: unknown) => {
           console.error("Erro ao obter localização:", error);
-          Alert.alert("Erro", "Não foi possível obter sua localização");
+          setShowLocationErrorModal(true);
         },
         {
           enableHighAccuracy: true,
@@ -438,7 +477,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
           maximumAge: 10000,
           // Evita erro "interface but class was expected" do FusedLocationProviderClient
           forceLocationManager: true,
-        },
+        }
       );
     } catch (error) {
       console.error("Erro ao solicitar permissão:", error);
@@ -461,20 +500,12 @@ export default function Home({ onOpenEditor }: HomeProps) {
     setGeocoding(true);
     setIsPreparingNavigation(true);
 
-    // Animação de entrada do loading imediatamente
-    Animated.parallel([
-      Animated.timing(loadingOpacity, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-      Animated.spring(loadingScale, {
-        toValue: 1,
-        tension: 50,
-        friction: 7,
-        useNativeDriver: true,
-      }),
-    ]).start();
+    // Animação de entrada do loading (simplificada)
+    Animated.timing(loadingOpacity, {
+      toValue: 1,
+      duration: 150,
+      useNativeDriver: true,
+    }).start();
 
     try {
       // Se já temos coordenadas de destino (selecionado do autocomplete), usar diretamente
@@ -490,67 +521,13 @@ export default function Home({ onOpenEditor }: HomeProps) {
       setRouteData(routeResponse);
       setRoute(routeResponse.route);
 
-      // Extrair pontos da rota para enviar ao backend ANTES de iniciar navegação
+      // Extrair pontos da rota
       const routePoints = routeResponse.route.geometry.coordinates.map(
         (coord: number[]) => ({
           latitude: coord[1],
           longitude: coord[0],
-        }),
+        })
       );
-
-      // Buscar radares próximos à rota
-      try {
-        const nearbyRadars = await getRadarsNearRoute({
-          route: routePoints,
-          radius: 500, // Aumentado para 500m para capturar mais radares ao longo da rota
-        });
-        // Filtrar radares que estão realmente próximos da rota (distância perpendicular)
-        const filtered = filterRadarsNearRoute(nearbyRadars, routePoints, 100);
-        setRadars(filtered);
-        setFilteredRadars(filtered);
-        console.log(
-          `✅ ${filtered.length} radares encontrados na rota (filtrados de ${nearbyRadars.length})`,
-        );
-      } catch (error: any) {
-        // O erro já foi tratado dentro de getRadarsNearRoute com fallback
-        // Apenas logar se não for o erro esperado de rota não encontrada
-        if (
-          !error?.message?.includes("ROUTE_NOT_FOUND") &&
-          !error?.message?.includes("404")
-        ) {
-          console.error("Erro ao buscar radares:", error);
-        }
-        // O fallback já foi executado dentro de getRadarsNearRoute
-        // Se chegou aqui, o fallback também falhou ou retornou vazio
-        if (routePoints.length > 0) {
-          try {
-            const midPoint = routePoints[Math.floor(routePoints.length / 2)];
-            const fallbackRadars = await getRadarsNearLocation(
-              midPoint.latitude,
-              midPoint.longitude,
-              1000,
-            );
-            // Filtrar também no fallback
-            const filtered = filterRadarsNearRoute(
-              fallbackRadars,
-              routePoints,
-              100,
-            );
-            setRadars(filtered);
-            setFilteredRadars(filtered);
-            console.log(
-              `✅ ${filtered.length} radares encontrados (fallback, filtrados de ${fallbackRadars.length})`,
-            );
-          } catch (fallbackError) {
-            console.error("Erro no fallback de radares:", fallbackError);
-          }
-        }
-      }
-
-      // Loading já está sendo exibido desde o início
-      // Aguardar um pouco para garantir que tudo está pronto antes de mostrar a navegação
-      // Isso evita que o componente apareça se montando
-      await new Promise<void>((resolve) => setTimeout(() => resolve(), 500));
 
       // Limpar estado de radares para nova navegação (cada viagem começa "limpa")
       passedRadarIds.current.clear();
@@ -558,53 +535,69 @@ export default function Home({ onOpenEditor }: HomeProps) {
       lastCalculatedDistance.current = 0;
       radarZeroTimeRef2.current = null;
 
-      // Iniciar navegação com o SDK
+      // Iniciar navegação IMEDIATAMENTE (não esperar radares)
       setIsNavigating(true);
 
-      // Aguardar mais um pouco para garantir que o MapboxNavigation está renderizado
-      await new Promise<void>((resolve) => setTimeout(() => resolve(), 300));
-
-      // Animação de saída do loading
-      Animated.parallel([
-        Animated.timing(loadingOpacity, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-        Animated.timing(loadingScale, {
-          toValue: 0.9,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-      ]).start(() => {
-        // Esconder animação de loading após animação
+      // Fechar loading rapidamente
+      Animated.timing(loadingOpacity, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }).start(() => {
         setIsPreparingNavigation(false);
         loadingOpacity.setValue(0);
-        loadingScale.setValue(0.9);
       });
+
+      // Buscar radares em BACKGROUND (não bloqueia navegação)
+      getRadarsNearRoute({
+        route: routePoints,
+        radius: 100, // Reduzido para 100m (mais preciso)
+      })
+        .then((nearbyRadars) => {
+          // Filtrar radares que estão realmente próximos da rota
+          const filtered = filterRadarsNearRoute(nearbyRadars, routePoints, 100);
+          setRadars(filtered);
+          setFilteredRadars(filtered);
+          console.log(
+            `✅ ${filtered.length} radares encontrados na rota (filtrados de ${nearbyRadars.length})`
+          );
+        })
+        .catch((error: any) => {
+          // Fallback simples: usar localização atual se busca falhar
+          console.warn("Erro ao buscar radares na rota, usando fallback:", error);
+          getRadarsNearLocation(origin.latitude, origin.longitude, 1000)
+            .then((fallbackRadars) => {
+              const filtered = filterRadarsNearRoute(
+                fallbackRadars,
+                routePoints,
+                100
+              );
+              setRadars(filtered);
+              setFilteredRadars(filtered);
+              console.log(`✅ ${filtered.length} radares (fallback)`);
+            })
+            .catch((err) => {
+              console.error("Erro no fallback de radares:", err);
+              // Continuar sem radares se tudo falhar
+              setRadars([]);
+              setFilteredRadars([]);
+            });
+        });
     } catch (error: any) {
       console.error("Erro ao buscar rota:", error);
-      // Resetar animações em caso de erro
-      Animated.parallel([
-        Animated.timing(loadingOpacity, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-        Animated.timing(loadingScale, {
-          toValue: 0.9,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-      ]).start(() => {
+      // Resetar animação em caso de erro
+      Animated.timing(loadingOpacity, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }).start(() => {
         setIsPreparingNavigation(false);
         loadingOpacity.setValue(0);
-        loadingScale.setValue(0.9);
       });
       Alert.alert(
         "Erro",
         error.message ||
-          "Não foi possível calcular a rota. Verifique o endereço digitado.",
+          "Não foi possível calcular a rota. Verifique o endereço digitado."
       );
     } finally {
       setLoading(false);
@@ -622,7 +615,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
         const nearbyRadars = await getRadarsNearLocation(
           currentLocation.latitude,
           currentLocation.longitude,
-          1000, // raio de 1km
+          1000 // raio de 1km
         );
         setRadars(nearbyRadars);
         console.log(`✅ ${nearbyRadars.length} radares encontrados próximos`);
@@ -660,7 +653,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
         interval: 5000,
         fastestInterval: 3000,
         forceLocationManager: true,
-      },
+      }
     );
 
     if (!locationWatchRef.current) {
@@ -686,14 +679,29 @@ export default function Home({ onOpenEditor }: HomeProps) {
 
   // Reportar radar na localização atual (modal: velocidade + tipo).
   // Futuro: mesma lógica pode ser usada para reportar acidentes, trânsito, etc. (estilo Waze) — por ora só radar.
-  const handleReportRadar = async (opts?: { speedLimit?: number; type?: "reportado" | "fixo" | "móvel" | "semaforo" }) => {
+  const handleReportRadar = async (opts?: {
+    speedLimit?: number;
+    type?: "reportado" | "fixo" | "móvel" | "semaforo";
+  }) => {
     if (!currentLocation) {
       Alert.alert("Erro", "Não foi possível obter sua localização atual");
       return;
     }
 
-    const speedLimit = opts?.speedLimit ?? (reportSpeedLimit ? parseInt(reportSpeedLimit, 10) : undefined);
+    const speedLimit =
+      opts?.speedLimit ??
+      (reportSpeedLimit ? parseInt(reportSpeedLimit, 10) : undefined);
     const type = opts?.type ?? reportRadarType;
+
+    // Validação: velocidade obrigatória e máximo 120 km/h
+    if (!speedLimit || isNaN(speedLimit)) {
+      Alert.alert("Atenção", "Por favor, informe a velocidade do radar");
+      return;
+    }
+    if (speedLimit > 120) {
+      Alert.alert("Atenção", "A velocidade máxima permitida é 120 km/h");
+      return;
+    }
 
     setIsReportingRadar(true);
     setShowReportModal(false);
@@ -701,7 +709,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
       const newRadar = await reportRadar({
         latitude: currentLocation.latitude,
         longitude: currentLocation.longitude,
-        speedLimit: speedLimit && !isNaN(speedLimit) ? speedLimit : undefined,
+        speedLimit: speedLimit,
         type,
       });
 
@@ -725,20 +733,21 @@ export default function Home({ onOpenEditor }: HomeProps) {
         });
       }
 
-      // Mensagem diferente dependendo se foi salvo localmente ou no backend
+      // Mostrar modal de sucesso (auto-dismiss 5s)
       if (isLocalRadar) {
-        Alert.alert(
-          "Radar Reportado",
-          "Radar salvo localmente! Ele aparecerá no mapa e será sincronizado quando o servidor estiver disponível.",
-        );
+        setSuccessMessage("Radar salvo localmente! ✅\n\nEle aparecerá no mapa e será sincronizado quando o servidor estiver disponível.");
       } else {
-        Alert.alert(
-          "Sucesso",
-          "Radar reportado com sucesso! Outros usuários verão em breve.",
-        );
+        setSuccessMessage("Radar reportado com sucesso! ✅\n\nOutros usuários já podem vê-lo no mapa.");
       }
+      setShowSuccessModal(true);
+      
+      // Auto-dismiss após 5 segundos
+      setTimeout(() => {
+        setShowSuccessModal(false);
+      }, 5000);
+      
       setReportSpeedLimit("");
-      setReportRadarType("reportado" as const);
+      setReportRadarType("móvel" as const);
     } catch (error: any) {
       console.error("Erro ao reportar radar:", error);
 
@@ -749,14 +758,14 @@ export default function Home({ onOpenEditor }: HomeProps) {
       ) {
         Alert.alert(
           "Servidor indisponível",
-          "Não foi possível reportar o radar. Verifique sua conexão e tente novamente.",
+          "Não foi possível reportar o radar. Verifique sua conexão e tente novamente."
         );
         return;
       }
 
       Alert.alert(
         "Erro",
-        error.message || "Não foi possível reportar o radar. Tente novamente.",
+        error.message || "Não foi possível reportar o radar. Tente novamente."
       );
     } finally {
       setIsReportingRadar(false);
@@ -790,20 +799,20 @@ export default function Home({ onOpenEditor }: HomeProps) {
             (coord: number[]) => ({
               latitude: coord[1],
               longitude: coord[0],
-            }),
+            })
           );
 
           const filtered = filterRadarsNearRoute(
             recentRadars,
             routePoints,
-            100,
+            100
           );
 
           if (filtered.length > 0) {
             setFilteredRadars((prev) => {
               const existingIds = new Set(prev.map((r) => r.id));
               const newFiltered = filtered.filter(
-                (r) => !existingIds.has(r.id),
+                (r) => !existingIds.has(r.id)
               );
 
               if (newFiltered.length > 0) {
@@ -865,13 +874,17 @@ export default function Home({ onOpenEditor }: HomeProps) {
   routeDataRef.current = routeData;
 
   // Preparar radares para o MapboxNavigation (sempre calcular, mesmo quando não está navegando)
-  const mapboxRadars = useMemo(() => filteredRadars.map((r) => ({
-    id: r.id,
-    latitude: r.latitude,
-    longitude: r.longitude,
-    speedLimit: r.speedLimit,
-    type: r.type, // Passar tipo do radar para o componente nativo
-  })), [filteredRadars]);
+  const mapboxRadars = useMemo(
+    () =>
+      filteredRadars.map((r) => ({
+        id: r.id,
+        latitude: r.latitude,
+        longitude: r.longitude,
+        speedLimit: r.speedLimit,
+        type: r.type, // Passar tipo do radar para o componente nativo
+      })),
+    [filteredRadars]
+  );
 
   // WebSocket nativo: radares em tempo real para todos (mapa e navegação), inclusive durante navegação
   useEffect(() => {
@@ -882,12 +895,17 @@ export default function Home({ onOpenEditor }: HomeProps) {
 
     const connectWebSocket = () => {
       try {
-        const wsUrl = API_BASE_URL.replace(/^https?:\/\//, "").replace(/\/$/, "");
+        const wsUrl = API_BASE_URL.replace(/^https?:\/\//, "").replace(
+          /\/$/,
+          ""
+        );
         const protocol = API_BASE_URL.startsWith("https") ? "wss" : "ws";
         ws = new WebSocket(`${protocol}://${wsUrl}/ws`);
 
         ws.onopen = () => {
-          console.log("WebSocket conectado para alertas de radares em tempo real");
+          console.log(
+            "WebSocket conectado para alertas de radares em tempo real"
+          );
           reconnectAttempts = 0;
         };
 
@@ -905,9 +923,14 @@ export default function Home({ onOpenEditor }: HomeProps) {
                 type: payload.tipoRadar ?? "unknown",
                 situacao: payload.situacao ?? undefined,
               };
-              
-              console.log(`📡 WebSocket: Novo radar recebido durante ${isNavigatingRef.current ? 'navegação' : 'mapa'}:`, radar.id);
-              
+
+              console.log(
+                `📡 WebSocket: Novo radar recebido durante ${
+                  isNavigatingRef.current ? "navegação" : "mapa"
+                }:`,
+                radar.id
+              );
+
               // Sempre adicionar ao estado principal de radares
               setRadars((prev) => {
                 if (prev.some((r) => r.id === radar.id)) {
@@ -915,29 +938,39 @@ export default function Home({ onOpenEditor }: HomeProps) {
                 }
                 return [...prev, radar];
               });
-              
+
               // Durante navegação: filtrar pela rota e adicionar ao filteredRadars
               const nav = isNavigatingRef.current;
               const rd = routeDataRef.current;
               if (nav && rd?.route?.geometry?.coordinates) {
-                const routePoints = rd.route.geometry.coordinates.map((c: number[]) => ({ latitude: c[1], longitude: c[0] }));
+                const routePoints = rd.route.geometry.coordinates.map(
+                  (c: number[]) => ({ latitude: c[1], longitude: c[0] })
+                );
                 const near = filterRadarsNearRoute([radar], routePoints, 100);
                 if (near.length > 0) {
-                  console.log(`✅ Radar ${radar.id} está próximo à rota, adicionando ao filteredRadars`);
+                  console.log(
+                    `✅ Radar ${radar.id} está próximo à rota, adicionando ao filteredRadars`
+                  );
                   setFilteredRadars((prev) => {
                     if (prev.some((r) => r.id === radar.id)) {
                       return prev; // Já existe
                     }
                     const updated = [...prev, radar];
-                    console.log(`📊 filteredRadars atualizado: ${updated.length} radares`);
+                    console.log(
+                      `📊 filteredRadars atualizado: ${updated.length} radares`
+                    );
                     return updated;
                   });
                 } else {
-                  console.log(`⚠️ Radar ${radar.id} não está próximo à rota (distância > 100m)`);
+                  console.log(
+                    `⚠️ Radar ${radar.id} não está próximo à rota (distância > 100m)`
+                  );
                 }
               } else {
                 // Não está navegando: adicionar diretamente ao filteredRadars
-                console.log(`✅ Adicionando radar ao filteredRadars (não está navegando)`);
+                console.log(
+                  `✅ Adicionando radar ao filteredRadars (não está navegando)`
+                );
                 setFilteredRadars((prev) => {
                   if (prev.some((r) => r.id === radar.id)) {
                     return prev; // Já existe
@@ -954,29 +987,39 @@ export default function Home({ onOpenEditor }: HomeProps) {
                 type: payload.tipoRadar ?? "unknown",
                 situacao: payload.situacao ?? undefined,
               };
-              
+
               console.log(`📡 WebSocket: Radar atualizado:`, radar.id);
-              
+
               // Atualizar em ambos os estados
-              setRadars((prev) => prev.map((r) => (r.id === radar.id ? radar : r)));
+              setRadars((prev) =>
+                prev.map((r) => (r.id === radar.id ? radar : r))
+              );
               setFilteredRadars((prev) => {
-                const updated = prev.map((r) => (r.id === radar.id ? radar : r));
-                console.log(`📊 filteredRadars atualizado após update: ${updated.length} radares`);
+                const updated = prev.map((r) =>
+                  r.id === radar.id ? radar : r
+                );
+                console.log(
+                  `📊 filteredRadars atualizado após update: ${updated.length} radares`
+                );
                 return updated;
               });
             } else if (eventName === "radar:delete") {
               const radarId = payload.id;
               console.log(`📡 WebSocket: Radar deletado/inativado:`, radarId);
-              
+
               // Remover de ambos os estados
               setRadars((prev) => {
                 const updated = prev.filter((r) => r.id !== radarId);
-                console.log(`🗑️ Radar removido de radars: ${updated.length} radares restantes`);
+                console.log(
+                  `🗑️ Radar removido de radars: ${updated.length} radares restantes`
+                );
                 return updated;
               });
               setFilteredRadars((prev) => {
                 const updated = prev.filter((r) => r.id !== radarId);
-                console.log(`🗑️ Radar removido de filteredRadars: ${updated.length} radares restantes`);
+                console.log(
+                  `🗑️ Radar removido de filteredRadars: ${updated.length} radares restantes`
+                );
                 return updated;
               });
             } else if (eventName === "connected") {
@@ -994,13 +1037,18 @@ export default function Home({ onOpenEditor }: HomeProps) {
         ws.onclose = () => {
           console.log("WebSocket desconectado");
           ws = null;
-          
+
           // Tentar reconectar
           if (reconnectAttempts < maxReconnectAttempts) {
             reconnectAttempts++;
-            const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000); // Backoff exponencial, max 30s
+            const delay = Math.min(
+              1000 * Math.pow(2, reconnectAttempts),
+              30000
+            ); // Backoff exponencial, max 30s
             reconnectTimeout = setTimeout(() => {
-              console.log(`Tentando reconectar WebSocket (tentativa ${reconnectAttempts}/${maxReconnectAttempts})...`);
+              console.log(
+                `Tentando reconectar WebSocket (tentativa ${reconnectAttempts}/${maxReconnectAttempts})...`
+              );
               connectWebSocket();
             }, delay);
           }
@@ -1020,6 +1068,457 @@ export default function Home({ onOpenEditor }: HomeProps) {
       }
     };
   }, []);
+
+  // Memoizar conversão de Set para Array para evitar nova referência a cada render
+  const nearbyRadarIdsArray = useMemo(() => Array.from(nearbyRadarIds), [nearbyRadarIds]);
+
+  // Handler para mudança de localização (memoizado)
+  const handleLocationChange = useCallback((location: any) => {
+    // Verificação de null para evitar NullPointerException
+    if (
+      !location ||
+      location.latitude == null ||
+      location.longitude == null
+    ) {
+      return;
+    }
+
+    try {
+      const now = Date.now();
+
+      // Debounce de atualização de localização para evitar movimentos erráticos
+      if (locationUpdateDebounce.current) {
+        clearTimeout(locationUpdateDebounce.current);
+      }
+
+      // Aumentar debounce para 1 segundo para evitar atualizações muito frequentes
+      locationUpdateDebounce.current = setTimeout(() => {
+        try {
+          const newLocation = {
+            latitude: location.latitude,
+            longitude: location.longitude,
+          };
+
+          // Só atualizar se a localização mudou significativamente (mais de 20 metros)
+          if (currentLocation) {
+            const distance = calculateDistance(
+              currentLocation.latitude,
+              currentLocation.longitude,
+              newLocation.latitude,
+              newLocation.longitude
+            );
+
+            // Se a distância for muito pequena (< 20m), não atualizar
+            if (distance < 20) {
+              return;
+            }
+
+            // Verificar se a mudança é muito grande (possível erro do GPS)
+            // Se mudou mais de 100m em menos de 2 segundos, provavelmente é erro
+            if (
+              distance > 100 &&
+              now - lastLocationUpdate.current < 2000
+            ) {
+              console.warn(
+                "⚠️ Mudança de localização muito grande, ignorando (possível erro GPS)"
+              );
+              return;
+            }
+          }
+
+          setCurrentLocation(newLocation);
+          lastLocationUpdate.current = now;
+        } catch (error) {
+          console.error("Erro ao processar localização:", error);
+        }
+      }, 1000); 
+
+      // Buscar radares próximos durante navegação REMOVIDO por solicitação
+      // Apenas WebSocket ou carga inicial atualiza a lista
+
+
+      // Função auxiliar para esconder modal com animações
+      const hideModal = () => {
+        Animated.parallel([
+          Animated.timing(modalOpacity, {
+            toValue: 0,
+            duration: 300,
+            useNativeDriver: true,
+          }),
+          Animated.timing(modalScale, {
+            toValue: 0.8,
+            duration: 300,
+            useNativeDriver: true,
+          }),
+        ]).start(() => {
+          setNearestRadar(null);
+        });
+      };
+
+      // Verificar distância até cada radar e alertar (com debounce)
+      const checkRadarDistance = () => {
+        try {
+          if (
+            !location ||
+            location.latitude == null ||
+            location.longitude == null
+          ) {
+            return;
+          }
+
+          if (
+            !routeDataRef.current ||
+            !routeDataRef.current.route ||
+            !routeDataRef.current.route.geometry ||
+            !routeDataRef.current.route.geometry.coordinates
+          ) {
+            return;
+          }
+
+          if (filteredRadars.length > 0 && routeDataRef.current) {
+            const checkLocation = {
+              latitude: location.latitude,
+              longitude: location.longitude,
+            };
+
+            const coordinates =
+              routeDataRef.current.route.geometry.coordinates;
+            if (
+              !Array.isArray(coordinates) ||
+              coordinates.length === 0
+            ) {
+              return;
+            }
+
+            const routePoints: LatLng[] = coordinates
+              .map((coord: number[]) => {
+                if (!Array.isArray(coord) || coord.length < 2) {
+                  return null;
+                }
+                return {
+                  latitude: coord[1],
+                  longitude: coord[0],
+                };
+              })
+              .filter(
+                (point: LatLng | null): point is LatLng =>
+                  point !== null
+              );
+
+            if (routePoints.length === 0) {
+              return;
+            }
+
+            type NearestRadar = {
+              radar: Radar;
+              distance: number;
+              routeDistance: number;
+            };
+            let nearest: NearestRadar | null = null;
+            let minDistance = Infinity;
+
+            filteredRadars.forEach((radar) => {
+              if (passedRadarIds.current.has(radar.id)) {
+                return;
+              }
+
+              const radarPoint: LatLng = {
+                latitude: radar.latitude,
+                longitude: radar.longitude,
+              };
+              const routeDistance = calculateDistanceToRoute(
+                radarPoint,
+                routePoints
+              );
+              if (routeDistance > 100) {
+                return;
+              }
+
+              const routeDistanceResult =
+                calculateDistanceAlongRoute(
+                  checkLocation,
+                  radarPoint,
+                  routePoints
+                );
+
+              if (routeDistanceResult.hasPassed) {
+                passedRadarIds.current.add(radar.id);
+                return;
+              }
+
+              const distanceAlongRoute =
+                routeDistanceResult.distance;
+              if (
+                distanceAlongRoute < 0 ||
+                distanceAlongRoute >= 500
+              ) {
+                return;
+              }
+
+              if (distanceAlongRoute < minDistance) {
+                minDistance = distanceAlongRoute;
+                nearest = {
+                  radar,
+                  distance: roundDistanceTo10(distanceAlongRoute),
+                  routeDistance: Math.round(routeDistance),
+                };
+              }
+            });
+
+            if (nearest) {
+              const nearestData: NearestRadar = nearest;
+              const nearestDistance = nearestData.distance;
+              const nearestRadarObj = nearestData.radar;
+
+              if (
+                nearestDistance ===
+                  lastCalculatedDistance.current &&
+                lastCalculatedDistance.current > 0
+              ) {
+                return;
+              }
+              lastCalculatedDistance.current = nearestDistance;
+
+              if (modalTimerRef.current) {
+                clearTimeout(modalTimerRef.current);
+                modalTimerRef.current = null;
+              }
+
+              const nearbyIds = new Set([nearestRadarObj.id]);
+              setNearbyRadarIds(nearbyIds);
+
+              if (nearestDistance <= 300) {
+                if (nearestDistance < 10) {
+                  passedRadarIds.current.add(nearestRadarObj.id);
+
+                  if (radarZeroTimeRef2.current === null) {
+                    radarZeroTimeRef2.current = Date.now();
+                  }
+
+                  const timeSinceZero =
+                    Date.now() - (radarZeroTimeRef2.current || 0);
+                  if (timeSinceZero < 3000) {
+                    setNearestRadar({
+                      radar: nearestRadarObj,
+                      distance: 0,
+                    });
+
+                    Animated.parallel([
+                      Animated.spring(modalOpacity, {
+                        toValue: 1,
+                        tension: 50,
+                        friction: 7,
+                        useNativeDriver: true,
+                      }),
+                      Animated.spring(modalScale, {
+                        toValue: 1,
+                        tension: 50,
+                        friction: 7,
+                        useNativeDriver: true,
+                      }),
+                    ]).start();
+                  } else {
+                    radarZeroTimeRef2.current = null;
+                    hideModal();
+                  }
+                } else {
+                  radarZeroTimeRef2.current = null;
+
+                  setNearestRadar({
+                    radar: nearestRadarObj,
+                    distance: nearestDistance,
+                  });
+
+                  Animated.parallel([
+                    Animated.spring(modalOpacity, {
+                      toValue: 1,
+                      tension: 50,
+                      friction: 7,
+                      useNativeDriver: true,
+                    }),
+                    Animated.spring(modalScale, {
+                      toValue: 1,
+                      tension: 50,
+                      friction: 7,
+                      useNativeDriver: true,
+                    }),
+                  ]).start();
+                }
+              } else {
+                radarZeroTimeRef2.current = null;
+                hideModal();
+              }
+
+              const radarId = nearestRadarObj.id;
+
+              if (
+                !alertedRadarIds.current.has(radarId) &&
+                nearestDistance <= 300 &&
+                nearestDistance > 0
+              ) {
+                alertedRadarIds.current.add(radarId);
+
+                let message = "";
+                if (nearestDistance > 200) {
+                  message = `Radar a ${Math.round(
+                    nearestDistance
+                  )} metros`;
+                } else if (nearestDistance > 100) {
+                  message = `Atenção! Radar a ${Math.round(
+                    nearestDistance
+                  )} metros`;
+                } else if (nearestDistance > 30) {
+                  message = `Cuidado! Radar a ${Math.round(
+                    nearestDistance
+                  )} metros`;
+                } else {
+                  message = `Atenção! Radar próximo`;
+                }
+
+                const speedLimit = nearestRadarObj.speedLimit;
+                if (speedLimit) {
+                  message += `. Limite de velocidade ${speedLimit} quilômetros por hora`;
+                }
+
+                const Tts = getTts();
+                if (Tts && typeof Tts.speak === "function") {
+                  try {
+                    Tts.speak(message);
+                  } catch (error) {
+                  }
+                }
+              }
+            } else {
+              radarZeroTimeRef2.current = null;
+              lastCalculatedDistance.current = 0;
+              setNearbyRadarIds(new Set()); 
+              hideModal();
+            }
+          } else {
+          }
+        } catch (error) {
+        }
+      };
+
+      if (radarCheckDebounce.current) {
+        clearTimeout(radarCheckDebounce.current);
+      }
+
+      checkRadarDistance();
+      radarCheckDebounce.current = setTimeout(
+        checkRadarDistance,
+        500
+      );
+    } catch (error) {
+      console.error("Erro no callback onLocationChange:", error);
+    }
+  }, [filteredRadars, currentLocation, modalScale, modalOpacity]); // Dependências mínimas
+
+  // Handlers memoizados para evitar re-creates
+  const handleRouteProgressChange = useCallback((progress: any) => {
+    if (!progress) return;
+  }, []);
+
+  const handleArrive = useCallback(() => {
+    Alert.alert("Chegada", "Você chegou ao destino!");
+    if (locationUpdateDebounce.current) {
+      clearTimeout(locationUpdateDebounce.current);
+      locationUpdateDebounce.current = null;
+    }
+    passedRadarIds.current.clear();
+    alertedRadarIds.current.clear();
+    setNearestRadar(null);
+    setNearbyRadarIds(new Set());
+    setIsNavigating(false);
+    setIsPreparingNavigation(false);
+    setRouteData(null);
+    setRoute(null);
+  }, []);
+
+  const handleCancelNavigation = useCallback(() => {
+    if (locationUpdateDebounce.current) {
+      clearTimeout(locationUpdateDebounce.current);
+      locationUpdateDebounce.current = null;
+    }
+    passedRadarIds.current.clear();
+    alertedRadarIds.current.clear();
+    setNearestRadar(null);
+    setNearbyRadarIds(new Set());
+    setIsNavigating(false);
+    setIsPreparingNavigation(false);
+    setRouteData(null);
+    setRoute(null);
+  }, []);
+
+  const handleError = useCallback((error: any) => {
+    try {
+      if (!error) {
+        return;
+      }
+      console.error("Erro na navegação:", error);
+      const errorMessage =
+        error?.message ||
+        error?.toString() ||
+        "Erro na navegação";
+      Alert.alert("Erro", errorMessage);
+    } catch (e) {
+      console.error("Erro ao processar erro de navegação:", e);
+    }
+  }, []);
+
+  // Handler para selecionar rota alternativa (vinda do evento nativo)
+  const handleRouteAlternativeSelected = useCallback((event: any) => {
+     console.log("Rota alternativa selecionada via evento nativo!");
+     // Adicionar log visual ou toast se necessário
+  }, []);
+
+  useEffect(() => {
+    if (isNavigating && !isPreparingNavigation && mapboxRadars) {
+      // Pré-aquecer ou validar dados se necessário
+    }
+  }, [isNavigating, isPreparingNavigation, mapboxRadars]);
+
+  // Render do MapboxNavComponent com props memoizadas
+  // Simplificado para evitar erros de renderização
+  const navigationView = useMemo(() => {
+      if (!MapboxNavComponent || !isNavigating || !origin || !destination) return null;
+      
+      return (
+        <MapboxNavComponent
+          style={StyleSheet.absoluteFill}
+          startOrigin={{
+            latitude: origin.latitude,
+            longitude: origin.longitude,
+          }}
+          destination={{
+            latitude: destination.latitude,
+            longitude: destination.longitude,
+            title: destinationText || "Destino",
+          }}
+          distanceUnit="metric"
+          language="pt-BR"
+          // @ts-ignore
+          radars={mapboxRadars}
+          // @ts-ignore
+          nearbyRadarIds={nearbyRadarIdsArray}
+          // @ts-ignore
+          bottomPadding={
+            nearestRadar ? (Platform.OS === "ios" ? 180 : 240) : 0
+          }
+          onLocationChange={handleLocationChange}
+          onRouteProgressChange={handleRouteProgressChange}
+          onArrive={handleArrive}
+          onCancelNavigation={handleCancelNavigation}
+          onError={handleError}
+          // @ts-ignore
+          onRouteAlternativeSelected={handleRouteAlternativeSelected}
+        />
+      );
+  }, [
+    MapboxNavComponent, isNavigating, origin, destination, destinationText, 
+    mapboxRadars, nearbyRadarIdsArray, nearestRadar, 
+    handleLocationChange, handleRouteProgressChange, handleArrive, handleCancelNavigation, handleError, handleRouteAlternativeSelected
+  ]);
 
   return (
     <View style={styles.container}>
@@ -1078,558 +1577,28 @@ export default function Home({ onOpenEditor }: HomeProps) {
               <Text style={styles.loadingSubtext}>{mapboxNavError}</Text>
             </View>
           ) : MapboxNavComponent ? (
-          <>
-          <MapboxNavComponent
-            style={StyleSheet.absoluteFill}
-            startOrigin={{
-              latitude: origin.latitude,
-              longitude: origin.longitude,
-            }}
-            destination={{
-              latitude: destination.latitude,
-              longitude: destination.longitude,
-              title: destinationText || "Destino",
-            }}
-            distanceUnit="metric"
-            language="pt-BR"
-            // @ts-ignore - radars prop exists in MapboxNavigationProps
-            radars={mapboxRadars}
-            // @ts-ignore - nearbyRadarIds prop exists in MapboxNavigationProps
-            nearbyRadarIds={Array.from(nearbyRadarIds)}
-            // @ts-ignore - bottomPadding prop exists in MapboxNavigationProps
-            bottomPadding={
-              nearestRadar ? (Platform.OS === "ios" ? 180 : 240) : 0
-            }
-            onLocationChange={(location: any) => {
-              // Verificação de null para evitar NullPointerException
-              if (
-                !location ||
-                location.latitude == null ||
-                location.longitude == null
-              ) {
-                return;
-              }
+            <>
+              {navigationView}
 
-              try {
-                const now = Date.now();
-
-                // Debounce de atualização de localização para evitar movimentos erráticos
-                if (locationUpdateDebounce.current) {
-                  clearTimeout(locationUpdateDebounce.current);
-                }
-
-                // Aumentar debounce para 1 segundo para evitar atualizações muito frequentes
-                locationUpdateDebounce.current = setTimeout(() => {
-                  try {
-                    const newLocation = {
-                      latitude: location.latitude,
-                      longitude: location.longitude,
-                    };
-
-                    // Só atualizar se a localização mudou significativamente (mais de 20 metros)
-                    // Aumentado de 10 para 20 metros para evitar movimentos erráticos
-                    if (currentLocation) {
-                      const distance = calculateDistance(
-                        currentLocation.latitude,
-                        currentLocation.longitude,
-                        newLocation.latitude,
-                        newLocation.longitude,
-                      );
-
-                      // Se a distância for muito pequena (< 20m), não atualizar
-                      // Isso evita que a localização fique "pulando" por causa de ruído do GPS
-                      if (distance < 20) {
-                        return;
-                      }
-
-                      // Verificar se a mudança é muito grande (possível erro do GPS)
-                      // Se mudou mais de 100m em menos de 2 segundos, provavelmente é erro
-                      if (
-                        distance > 100 &&
-                        now - lastLocationUpdate.current < 2000
-                      ) {
-                        console.warn(
-                          "⚠️ Mudança de localização muito grande, ignorando (possível erro GPS)",
-                        );
-                        return;
-                      }
-                    }
-
-                    setCurrentLocation(newLocation);
-                    lastLocationUpdate.current = now;
-                  } catch (error) {
-                    console.error("Erro ao processar localização:", error);
-                  }
-                }, 1000); // Debounce de 1 segundo para evitar atualizações muito frequentes
-
-                // Buscar radares próximos durante navegação (atualizar conforme se move)
-                // Usar debounce para não fazer muitas requisições
-                if (
-                  !locationWatchRef.current?.lastRadarFetch ||
-                  now - locationWatchRef.current.lastRadarFetch > 30000 // 30 segundos
-                ) {
-                  getRadarsNearLocation(
-                    location.latitude,
-                    location.longitude,
-                    500, // raio de 500m durante navegação
-                  )
-                    .then((nearbyRadars) => {
-                      try {
-                        // Filtrar apenas radares próximos à rota
-                        if (
-                          routeData &&
-                          routeData.route?.geometry?.coordinates
-                        ) {
-                          const routePoints =
-                            routeData.route.geometry.coordinates.map(
-                              (coord: number[]) => ({
-                                latitude: coord[1],
-                                longitude: coord[0],
-                              }),
-                            );
-                          const filtered = filterRadarsNearRoute(
-                            nearbyRadars,
-                            routePoints,
-                            100,
-                          );
-                          // Mesclar com radares existentes da rota
-                          setRadars((prev) => {
-                            const existingIds = new Set(prev.map((r) => r.id));
-                            const newRadars = filtered.filter(
-                              (r) => !existingIds.has(r.id),
-                            );
-                            const merged =
-                              newRadars.length > 0
-                                ? [...prev, ...newRadars]
-                                : prev;
-                            // Re-filtrar todos os radares
-                            const allFiltered = filterRadarsNearRoute(
-                              merged,
-                              routePoints,
-                              100,
-                            );
-                            setFilteredRadars(allFiltered);
-                            return allFiltered;
-                          });
-                        }
-                      } catch (error) {
-                        console.error(
-                          "Erro ao processar radares próximos:",
-                          error,
-                        );
-                      }
-                    })
-                    .catch((error) => {
-                      console.error(
-                        "Erro ao buscar radares durante navegação:",
-                        error,
-                      );
-                    });
-
-                  if (!locationWatchRef.current) {
-                    locationWatchRef.current = { lastRadarFetch: now };
-                  } else {
-                    locationWatchRef.current.lastRadarFetch = now;
-                  }
-                }
-
-                // Função auxiliar para esconder modal com animações
-                const hideModal = () => {
-                  Animated.parallel([
-                    Animated.timing(modalOpacity, {
-                      toValue: 0,
-                      duration: 300,
-                      useNativeDriver: true,
-                    }),
-                    Animated.timing(modalScale, {
-                      toValue: 0.8,
-                      duration: 300,
-                      useNativeDriver: true,
-                    }),
-                  ]).start(() => {
-                    setNearestRadar(null);
-                  });
-                };
-
-                // Verificar distância até cada radar e alertar (com debounce)
-                // Usar debounce para evitar cálculos muito frequentes
-                const checkRadarDistance = () => {
-                  try {
-                    // Verificações de null para evitar NullPointerException
-                    if (
-                      !location ||
-                      location.latitude == null ||
-                      location.longitude == null
-                    ) {
-                      return;
-                    }
-
-                    if (
-                      !routeData ||
-                      !routeData.route ||
-                      !routeData.route.geometry ||
-                      !routeData.route.geometry.coordinates
-                    ) {
-                      return;
-                    }
-
-                    console.log(
-                      `🔍 Verificando radares: filteredRadars=${filteredRadars.length}, routeData=${!!routeData}`,
-                    );
-
-                    if (filteredRadars.length > 0 && routeData) {
-                      // Usar a localização do callback diretamente
-                      const checkLocation = {
-                        latitude: location.latitude,
-                        longitude: location.longitude,
-                      };
-
-                      // Obter pontos da rota para cálculo mais preciso
-                      const coordinates = routeData.route.geometry.coordinates;
-                      if (
-                        !Array.isArray(coordinates) ||
-                        coordinates.length === 0
-                      ) {
-                        return;
-                      }
-
-                      const routePoints: LatLng[] = coordinates
-                        .map((coord: number[]) => {
-                          if (!Array.isArray(coord) || coord.length < 2) {
-                            return null;
-                          }
-                          return {
-                            latitude: coord[1],
-                            longitude: coord[0],
-                          };
-                        })
-                        .filter(
-                          (point: LatLng | null): point is LatLng =>
-                            point !== null,
-                        );
-
-                      if (routePoints.length === 0) {
-                        return;
-                      }
-
-                      // Encontrar o radar mais próximo
-                      type NearestRadar = {
-                        radar: Radar;
-                        distance: number;
-                        routeDistance: number;
-                      };
-                      let nearest: NearestRadar | null = null;
-                      let minDistance = Infinity;
-
-                      filteredRadars.forEach((radar) => {
-                        if (passedRadarIds.current.has(radar.id)) {
-                          return;
-                        }
-
-                        const radarPoint: LatLng = {
-                          latitude: radar.latitude,
-                          longitude: radar.longitude,
-                        };
-                        const routeDistance = calculateDistanceToRoute(
-                          radarPoint,
-                          routePoints,
-                        );
-                        if (routeDistance > 100) {
-                          return;
-                        }
-
-                        const routeDistanceResult = calculateDistanceAlongRoute(
-                          checkLocation,
-                          radarPoint,
-                          routePoints,
-                        );
-
-                        if (routeDistanceResult.hasPassed) {
-                          passedRadarIds.current.add(radar.id);
-                          return;
-                        }
-
-                        const distanceAlongRoute = routeDistanceResult.distance;
-                        if (distanceAlongRoute < 0 || distanceAlongRoute >= 500) {
-                          return;
-                        }
-
-                        if (distanceAlongRoute < minDistance) {
-                          minDistance = distanceAlongRoute;
-                          nearest = {
-                            radar,
-                            distance: roundDistanceTo10(distanceAlongRoute),
-                            routeDistance: Math.round(routeDistance),
-                          };
-                        }
-                      });
-
-                      // Verificar se há radar próximo
-                      if (nearest) {
-                        // Type guard explícito para ajudar TypeScript
-                        const nearestData: NearestRadar = nearest;
-                        const nearestDistance = nearestData.distance;
-                        const nearestRadarObj = nearestData.radar;
-
-                        console.log(
-                          `📍 Radar próximo encontrado: ${nearestRadarObj.id}, distância: ${nearestDistance}m, routeDistance: ${nearestData.routeDistance}m`,
-                        );
-                        console.log(
-                          `📊 Modal será ${nearestDistance <= 200 ? "exibido" : "oculto"} (distância: ${nearestDistance}m)`,
-                        );
-
-                        // Atualizar só quando a distância (em blocos de 10m) mudar
-                        if (
-                          nearestDistance === lastCalculatedDistance.current &&
-                          lastCalculatedDistance.current > 0
-                        ) {
-                          return;
-                        }
-                        lastCalculatedDistance.current = nearestDistance;
-
-                        // Limpar timer anterior se existir
-                        if (modalTimerRef.current) {
-                          clearTimeout(modalTimerRef.current);
-                          modalTimerRef.current = null;
-                        }
-
-                        // Atualizar conjunto de radares próximos para animação no mapa
-                        // Isso vai atualizar o CircleLayer pulsante no MapboxNavigationView.kt
-                        const nearbyIds = new Set([nearestRadarObj.id]);
-                        setNearbyRadarIds(nearbyIds);
-
-                        // Atualizar propriedade isNearby no GeoJSON source do MapboxNavigation
-                        // Isso é feito automaticamente quando setRadars é chamado novamente
-                        // Por enquanto, apenas marcar como próximo para o filtro funcionar
-
-                        // Mostrar modal se estiver entre 300m e 0m ao longo da rota (distância em blocos de 10m)
-                        if (nearestDistance <= 300) {
-                          // Chegou no radar (0m ou último passo 10m): marcar passado e manter modal 3s
-                          if (nearestDistance < 10) {
-                            passedRadarIds.current.add(nearestRadarObj.id);
-
-                            if (radarZeroTimeRef2.current === null) {
-                              radarZeroTimeRef2.current = Date.now();
-                            }
-
-                            // Manter modal visível por 3 segundos após chegar a 0m
-                            const timeSinceZero =
-                              Date.now() - (radarZeroTimeRef2.current || 0);
-                            if (timeSinceZero < 3000) {
-                              // Ainda dentro dos 3 segundos, manter modal em 0m
-                              setNearestRadar({
-                                radar: nearestRadarObj,
-                                distance: 0,
-                              });
-
-                              // Animações normais (sem pulsação)
-                              Animated.parallel([
-                                Animated.spring(modalOpacity, {
-                                  toValue: 1,
-                                  tension: 50,
-                                  friction: 7,
-                                  useNativeDriver: true,
-                                }),
-                                Animated.spring(modalScale, {
-                                  toValue: 1,
-                                  tension: 50,
-                                  friction: 7,
-                                  useNativeDriver: true,
-                                }),
-                              ]).start();
-                            } else {
-                              // Passou 3 segundos, esconder modal
-                              radarZeroTimeRef2.current = null;
-                              hideModal();
-                            }
-                          } else {
-                            // Resetar contador se distância aumentou
-                            radarZeroTimeRef2.current = null;
-
-                            // Mostrar/atualizar modal com animações normais (sem pulsação)
-                            setNearestRadar({
-                              radar: nearestRadarObj,
-                              distance: nearestDistance,
-                            });
-
-                            // Animações de entrada/atualização
-                            Animated.parallel([
-                              Animated.spring(modalOpacity, {
-                                toValue: 1,
-                                tension: 50,
-                                friction: 7,
-                                useNativeDriver: true,
-                              }),
-                              Animated.spring(modalScale, {
-                                toValue: 1,
-                                tension: 50,
-                                friction: 7,
-                                useNativeDriver: true,
-                              }),
-                            ]).start();
-                          }
-                        } else {
-                          // Radar muito distante, esconder modal
-                          radarZeroTimeRef2.current = null;
-                          hideModal();
-                        }
-
-                        // Alerta de voz quando radar está próximo - APENAS UMA VEZ por radar
-                        const radarId = nearestRadarObj.id;
-
-                        // Verificar se este radar já foi alertado
-                        if (
-                          !alertedRadarIds.current.has(radarId) &&
-                          nearestDistance <= 300 &&
-                          nearestDistance > 0
-                        ) {
-                          // Marcar como alertado IMEDIATAMENTE para evitar repetição
-                          alertedRadarIds.current.add(radarId);
-
-                          let message = "";
-                          if (nearestDistance > 200) {
-                            message = `Radar a ${Math.round(nearestDistance)} metros`;
-                          } else if (nearestDistance > 100) {
-                            message = `Atenção! Radar a ${Math.round(nearestDistance)} metros`;
-                          } else if (nearestDistance > 30) {
-                            message = `Cuidado! Radar a ${Math.round(nearestDistance)} metros`;
-                          } else {
-                            message = `Atenção! Radar próximo`;
-                          }
-
-                          const speedLimit = nearestRadarObj.speedLimit;
-                          if (speedLimit) {
-                            message += `. Limite de velocidade ${speedLimit} quilômetros por hora`;
-                          }
-
-                          const Tts = getTts();
-                          if (Tts && typeof Tts.speak === "function") {
-                            try {
-                              Tts.speak(message);
-                              console.log(
-                                `🔊 Alerta de radar: ${message} (ID: ${radarId})`,
-                              );
-                            } catch (error) {
-                              console.error(
-                                "❌ Erro ao falar mensagem TTS:",
-                                error,
-                              );
-                            }
-                          }
-                        }
-                      } else {
-                        // Esconder modal se não houver radar próximo
-                        console.log(
-                          `❌ Nenhum radar próximo encontrado (filteredRadars: ${filteredRadars.length})`,
-                        );
-                        radarZeroTimeRef2.current = null;
-                        lastCalculatedDistance.current = 0;
-                        setNearbyRadarIds(new Set()); // Limpar radares próximos
-                        hideModal();
-                      }
-                    } else {
-                      console.log(
-                        `⚠️ Não há radares filtrados ou routeData não disponível`,
-                      );
-                    }
-                  } catch (error) {
-                    console.error(
-                      "Erro ao verificar distância dos radares:",
-                      error,
-                    );
-                  }
-                };
-
-                // Limpar timeout anterior se existir
-                if (locationUpdateDebounce.current) {
-                  clearTimeout(locationUpdateDebounce.current);
-                }
-
-                // Rodar uma vez imediatamente para atualização rápida do modal
-                checkRadarDistance();
-                // Agendar próximas verificações com debounce 500ms (contagem mais suave, menos pulos)
-                locationUpdateDebounce.current = setTimeout(
-                  checkRadarDistance,
-                  500,
-                );
-              } catch (error) {
-                console.error("Erro no callback onLocationChange:", error);
-              }
-            }}
-            onRouteProgressChange={(progress: any) => {
-              // Verificação de null para evitar NullPointerException
-              if (!progress) {
-                return;
-              }
-              try {
-                // Progresso da rota atualizado pelo SDK
-                // Logs removidos para evitar travamento - este callback é chamado muito frequentemente
-                // progress.speedLimit contém o limite de velocidade em km/h (se disponível)
-              } catch (error) {
-                console.error("Erro ao processar progresso da rota:", error);
-              }
-            }}
-            onArrive={() => {
-              Alert.alert("Chegada", "Você chegou ao destino!");
-              if (locationUpdateDebounce.current) {
-                clearTimeout(locationUpdateDebounce.current);
-                locationUpdateDebounce.current = null;
-              }
-              passedRadarIds.current.clear();
-              alertedRadarIds.current.clear();
-              setNearestRadar(null);
-              setNearbyRadarIds(new Set());
-              setIsNavigating(false);
-              setIsPreparingNavigation(false);
-              setRouteData(null);
-              setRoute(null);
-            }}
-            onCancelNavigation={() => {
-              if (locationUpdateDebounce.current) {
-                clearTimeout(locationUpdateDebounce.current);
-                locationUpdateDebounce.current = null;
-              }
-              passedRadarIds.current.clear();
-              alertedRadarIds.current.clear();
-              setNearestRadar(null);
-              setNearbyRadarIds(new Set());
-              setIsNavigating(false);
-              setIsPreparingNavigation(false);
-              setRouteData(null);
-              setRoute(null);
-            }}
-            onError={(error: any) => {
-              try {
-                if (!error) {
-                  console.error("Erro na navegação: erro desconhecido");
-                  return;
-                }
-                console.error("Erro na navegação:", error);
-                const errorMessage =
-                  error?.message || error?.toString() || "Erro na navegação";
-                Alert.alert("Erro", errorMessage);
-              } catch (e) {
-                console.error("Erro ao processar erro de navegação:", e);
-              }
-            }}
-          />
-
-          {/* Botão de reportar radar - abre modal com velocidade e tipo */}
-          <TouchableOpacity
-            style={styles.reportRadarButton}
-            onPress={() => setShowReportModal(true)}
-            disabled={isReportingRadar}
-            activeOpacity={0.7}
-          >
-            {isReportingRadar ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Text style={styles.reportRadarButtonText}>
-                <Image source={require("../assets/images/radar.png")} style={styles.reportRadarButtonImage} />
-              </Text>
-            )}
-          </TouchableOpacity>
-          </>
+              {/* Botão de reportar radar - abre modal com velocidade e tipo */}
+              <TouchableOpacity
+                style={styles.reportRadarButton}
+                onPress={() => setShowReportModal(true)}
+                disabled={isReportingRadar}
+                activeOpacity={0.7}
+              >
+                {isReportingRadar ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.reportRadarButtonText}>
+                    <Image
+                      source={require("../assets/images/radar.png")}
+                      style={styles.reportRadarButtonImage}
+                    />
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </>
           ) : (
             <View style={styles.loadingOverlay}>
               <ActivityIndicator size="large" color="#3b82f6" />
@@ -1639,7 +1608,18 @@ export default function Home({ onOpenEditor }: HomeProps) {
         </View>
       ) : (
         <View style={styles.mapContainer} pointerEvents="box-none">
-          <Suspense fallback={<View style={[styles.mapContainer, { justifyContent: "center", alignItems: "center" }]}><ActivityIndicator size="large" color="#3b82f6" /></View>}>
+          <Suspense
+            fallback={
+              <View
+                style={[
+                  styles.mapContainer,
+                  { justifyContent: "center", alignItems: "center" },
+                ]}
+              >
+                <ActivityIndicator size="large" color="#3b82f6" />
+              </View>
+            }
+          >
             <MapComponent
               radars={radars}
               route={route}
@@ -1656,7 +1636,9 @@ export default function Home({ onOpenEditor }: HomeProps) {
         nearestRadar &&
         (() => {
           console.log(
-            `🎯 Renderizando modal: isNavigating=${isNavigating}, nearestRadar=${!!nearestRadar}, distance=${nearestRadar.distance}m`,
+            `🎯 Renderizando modal: isNavigating=${isNavigating}, nearestRadar=${!!nearestRadar}, distance=${
+              nearestRadar.distance
+            }m`
           );
           return null;
         })()}
@@ -1689,8 +1671,8 @@ export default function Home({ onOpenEditor }: HomeProps) {
                   nearestRadar.distance <= 30
                     ? "rgba(255,255,255,1)" // Transparente quando muito próximo
                     : nearestRadar.distance <= 100
-                      ? "rgba(255,255,255,1)" // Transparente quando próximo
-                      : "rgba(255,255,255,1)", // Transparente quando distante
+                    ? "rgba(255,255,255,1)" // Transparente quando próximo
+                    : "rgba(255,255,255,1)", // Transparente quando distante
               },
             ]}
           >
@@ -1704,8 +1686,8 @@ export default function Home({ onOpenEditor }: HomeProps) {
                 {nearestRadar.distance <= 30
                   ? "Radar Muito Próximo!"
                   : nearestRadar.distance <= 100
-                    ? "Atenção! Radar Próximo"
-                    : "Radar Próximo"}
+                  ? "Atenção! Radar Próximo"
+                  : "Radar Próximo"}
               </Text>
               <Text style={styles.radarAlertDistance}>
                 {nearestRadar.distance < 10
@@ -1735,12 +1717,17 @@ export default function Home({ onOpenEditor }: HomeProps) {
           style={styles.reportModalOverlay}
           onPress={() => setShowReportModal(false)}
         >
-          <View style={styles.reportModalContent} onStartShouldSetResponder={() => true}>
+          <View
+            style={styles.reportModalContent}
+            onStartShouldSetResponder={() => true}
+          >
             <Text style={styles.reportModalTitle}>Reportar radar</Text>
             <Text style={styles.reportModalSubtitle}>
               Na sua localização atual
             </Text>
-            <Text style={styles.reportModalLabel}>Velocidade (km/h) — opcional</Text>
+            <Text style={styles.reportModalLabel}>
+              Velocidade (km/h) — obrigatório (máx. 120)
+            </Text>
             <TextInput
               style={styles.reportModalInput}
               placeholder="Ex: 60"
@@ -1755,16 +1742,22 @@ export default function Home({ onOpenEditor }: HomeProps) {
                   key={t.value}
                   style={[
                     styles.reportModalTypeCard,
-                    reportRadarType === t.value && styles.reportModalTypeCardActive,
+                    reportRadarType === t.value &&
+                      styles.reportModalTypeCardActive,
                   ]}
                   onPress={() => setReportRadarType(t.value)}
                   activeOpacity={0.8}
                 >
-                  <Image source={t.icon} style={styles.reportModalTypeIcon} resizeMode="contain" />
+                  <Image
+                    source={t.icon}
+                    style={styles.reportModalTypeIcon}
+                    resizeMode="contain"
+                  />
                   <Text
                     style={[
                       styles.reportModalTypeCardText,
-                      reportRadarType === t.value && styles.reportModalTypeCardTextActive,
+                      reportRadarType === t.value &&
+                        styles.reportModalTypeCardTextActive,
                     ]}
                     numberOfLines={2}
                   >
@@ -1793,6 +1786,73 @@ export default function Home({ onOpenEditor }: HomeProps) {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* Modal: Erro ao obter localização */}
+      <Modal
+        visible={showLocationErrorModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowLocationErrorModal(false)}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          style={styles.reportModalOverlay}
+          onPress={() => setShowLocationErrorModal(false)}
+        >
+          <View
+            style={[styles.reportModalContent, { maxWidth: 320 }]}
+            onStartShouldSetResponder={() => true}
+          >
+            <View style={{ alignItems: "center", marginBottom: 12 }}>
+              <Text style={{ fontSize: 48, marginBottom: 8 }}>📍</Text>
+              <Text style={[styles.reportModalTitle, { textAlign: "center", fontSize: 20 }]}>
+                Ops! Localização Indisponível
+              </Text>
+            </View>
+            <Text style={[styles.reportModalSubtitle, { textAlign: "center", fontSize: 14, lineHeight: 20, marginBottom: 20 }]}>
+              Não conseguimos obter sua posição atual. Por favor, verifique se o seu GPS está ligado e tente novamente.
+            </Text>
+            <TouchableOpacity
+              style={[styles.reportModalSubmit, { width: "100%", marginHorizontal: 0 }]}
+              onPress={() => {
+                setShowLocationErrorModal(false);
+                requestLocationPermission();
+              }}
+            >
+              <Text style={styles.reportModalSubmitText}>Tentar Novamente</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Modal: Sucesso ao reportar (auto-dismiss 5s) */}
+      <Modal
+        visible={showSuccessModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowSuccessModal(false)}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          style={styles.reportModalOverlay}
+          onPress={() => setShowSuccessModal(false)}
+        >
+          <View
+            style={[styles.reportModalContent, { maxWidth: 320 }]}
+            onStartShouldSetResponder={() => true}
+          >
+            <View style={{ alignItems: "center", marginBottom: 12 }}>
+              <Text style={{ fontSize: 48, marginBottom: 8 }}>🎉</Text>
+              <Text style={[styles.reportModalTitle, { textAlign: "center", fontSize: 20 }]}>
+                Obrigado!
+              </Text>
+            </View>
+            <Text style={[styles.reportModalSubtitle, { textAlign: "center", fontSize: 14, lineHeight: 20 }]}>
+              {successMessage}
+            </Text>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -1810,8 +1870,6 @@ const styles = StyleSheet.create({
     zIndex: 1000,
     elevation: 10,
     pointerEvents: "none",
-  
-    
   },
   radarAlertContent: {
     flexDirection: "row",
@@ -1825,7 +1883,6 @@ const styles = StyleSheet.create({
     elevation: 8,
     width: "80%",
     height: "auto",
-
   },
   radarAlertIcon: {
     fontSize: 24,

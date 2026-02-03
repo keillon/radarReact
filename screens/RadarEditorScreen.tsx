@@ -10,15 +10,15 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import Geolocation from "react-native-geolocation-service";
 import Map from "../components/Map";
 import {
   Radar,
+  deleteRadar,
   getRadarsNearLocation,
   reportRadar,
   updateRadar,
-  deleteRadar,
 } from "../services/api";
-import Geolocation from "react-native-geolocation-service";
 
 const DEFAULT_CENTER = { latitude: -23.5505, longitude: -46.6333 };
 const LOAD_RADIUS_M = 30000;
@@ -41,17 +41,35 @@ export default function RadarEditorScreen({
     latitude: number;
     longitude: number;
   } | null>(null);
-  const [radarType, setRadarType] = useState<"reportado" | "fixo" | "móvel" | "semaforo">("reportado");
+  const [radarType, setRadarType] = useState<
+    "reportado" | "fixo" | "móvel" | "semaforo"
+  >("reportado");
 
   const RADAR_TYPES: {
     value: "reportado" | "fixo" | "móvel" | "semaforo";
     label: string;
     icon: number;
   }[] = [
-    { value: "reportado", label: "Reportado", icon: require("../assets/images/radar.png") },
-    { value: "fixo", label: "Radar Fixo", icon: require("../assets/images/placa60.png") },
-    { value: "móvel", label: "Radar Móvel", icon: require("../assets/images/radarMovel.png") },
-    { value: "semaforo", label: "Semáforo c/ Radar", icon: require("../assets/images/radarSemaforico.png") },
+    {
+      value: "reportado",
+      label: "Reportado",
+      icon: require("../assets/images/radar.png"),
+    },
+    {
+      value: "fixo",
+      label: "Radar Fixo",
+      icon: require("../assets/images/placa60.png"),
+    },
+    {
+      value: "móvel",
+      label: "Radar Móvel",
+      icon: require("../assets/images/radarMovel.png"),
+    },
+    {
+      value: "semaforo",
+      label: "Semáforo c/ Radar",
+      icon: require("../assets/images/radarSemaforico.png"),
+    },
   ];
 
   const loadRadars = useCallback(async () => {
@@ -60,7 +78,7 @@ export default function RadarEditorScreen({
       const list = await getRadarsNearLocation(
         center.latitude,
         center.longitude,
-        LOAD_RADIUS_M,
+        LOAD_RADIUS_M
       );
       setRadars(list);
     } catch (e) {
@@ -84,7 +102,7 @@ export default function RadarEditorScreen({
         });
       },
       () => {},
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
     );
   }, []);
 
@@ -113,14 +131,14 @@ export default function RadarEditorScreen({
         setSaving(false);
         if (updated) {
           setRadars((prev) =>
-            prev.map((r) => (r.id === selectedRadar.id ? updated : r)),
+            prev.map((r) => (r.id === selectedRadar.id ? updated : r))
           );
           setSelectedRadar(updated);
           setMode("view");
         } else {
           Alert.alert(
             "Erro",
-            "Não foi possível mover o radar. O servidor pode não suportar edição.",
+            "Não foi possível mover o radar. O servidor pode não suportar edição."
           );
         }
       });
@@ -145,7 +163,10 @@ export default function RadarEditorScreen({
       setRadarType("reportado");
       setMode("view");
     } catch (e) {
-      Alert.alert("Erro", e instanceof Error ? e.message : "Não foi possível adicionar o radar.");
+      Alert.alert(
+        "Erro",
+        e instanceof Error ? e.message : "Não foi possível adicionar o radar."
+      );
     } finally {
       setSaving(false);
     }
@@ -159,13 +180,13 @@ export default function RadarEditorScreen({
     setSaving(false);
     if (updated) {
       setRadars((prev) =>
-        prev.map((r) => (r.id === selectedRadar.id ? updated : r)),
+        prev.map((r) => (r.id === selectedRadar.id ? updated : r))
       );
       setSelectedRadar(updated);
     } else {
       Alert.alert(
         "Erro",
-        "Não foi possível atualizar. O servidor pode não suportar edição.",
+        "Não foi possível atualizar. O servidor pode não suportar edição."
       );
     }
   };
@@ -189,18 +210,20 @@ export default function RadarEditorScreen({
             const ok = await deleteRadar(selectedRadar.id);
             setSaving(false);
             if (ok) {
-              setRadars((prev) => prev.filter((r) => r.id !== selectedRadar.id));
+              setRadars((prev) =>
+                prev.filter((r) => r.id !== selectedRadar.id)
+              );
               setSelectedRadar(null);
               setMode("view");
             } else {
               Alert.alert(
                 "Aviso",
-                "Não foi possível deletar. Tente inativar no servidor.",
+                "Não foi possível deletar. Tente inativar no servidor."
               );
             }
           },
         },
-      ],
+      ]
     );
   };
 
@@ -214,7 +237,9 @@ export default function RadarEditorScreen({
     if (updated) {
       setRadars((prev) =>
         prev.map((r) =>
-          r.id === selectedRadar.id ? { ...r, ...updated, situacao: "Inativo" } : r
+          r.id === selectedRadar.id
+            ? { ...r, ...updated, situacao: "Inativo" }
+            : r
         )
       );
       setSelectedRadar(updated);
@@ -230,7 +255,9 @@ export default function RadarEditorScreen({
     if (updated) {
       setRadars((prev) =>
         prev.map((r) =>
-          r.id === selectedRadar.id ? { ...r, ...updated, situacao: "Ativo" } : r
+          r.id === selectedRadar.id
+            ? { ...r, ...updated, situacao: "Ativo" }
+            : r
         )
       );
       setSelectedRadar(updated);
@@ -247,14 +274,22 @@ export default function RadarEditorScreen({
         <Text style={styles.title}>Editor de radares</Text>
         <View style={styles.headerActions}>
           <TouchableOpacity
-            style={[styles.headerButton, mode === "add" && styles.headerButtonActive]}
+            style={[
+              styles.headerButton,
+              mode === "add" && styles.headerButtonActive,
+            ]}
             onPress={() => {
               setMode("add");
               setSelectedRadar(null);
               setPendingAddCoords(null);
             }}
           >
-            <Text style={[styles.headerButtonText, mode === "add" && styles.headerButtonTextActive]}>
+            <Text
+              style={[
+                styles.headerButtonText,
+                mode === "add" && styles.headerButtonTextActive,
+              ]}
+            >
               + Adicionar
             </Text>
           </TouchableOpacity>
@@ -282,7 +317,8 @@ export default function RadarEditorScreen({
       {mode === "view" && !selectedRadar && !pendingAddCoords && (
         <View style={styles.hintBar}>
           <Text style={styles.hintText}>
-            Toque em um radar no mapa para editar ou mover • Use "+ Adicionar" para novo radar
+            Toque em um radar no mapa para editar ou mover • Use "+ Adicionar"
+            para novo radar
           </Text>
         </View>
       )}
@@ -323,10 +359,14 @@ export default function RadarEditorScreen({
             setRadarType("reportado");
           }}
         >
-          <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
+          <View
+            style={styles.modalContent}
+            onStartShouldSetResponder={() => true}
+          >
             <Text style={styles.panelTitle}>Reportar radar</Text>
             <Text style={styles.panelSubtitle}>
-              {pendingAddCoords?.latitude.toFixed(5)}, {pendingAddCoords?.longitude.toFixed(5)}
+              {pendingAddCoords?.latitude.toFixed(5)},{" "}
+              {pendingAddCoords?.longitude.toFixed(5)}
             </Text>
             <Text style={styles.modalLabel}>Velocidade (km/h) — opcional</Text>
             <TextInput
@@ -348,7 +388,11 @@ export default function RadarEditorScreen({
                   onPress={() => setRadarType(t.value)}
                   activeOpacity={0.8}
                 >
-                  <Image source={t.icon} style={styles.typeCardIcon} resizeMode="contain" />
+                  <Image
+                    source={t.icon}
+                    style={styles.typeCardIcon}
+                    resizeMode="contain"
+                  />
                   <Text
                     style={[
                       styles.typeCardText,
@@ -390,13 +434,20 @@ export default function RadarEditorScreen({
       {mode === "view" && selectedRadar && !pendingAddCoords && (
         <View style={styles.panel}>
           <Text style={styles.panelTitle}>Radar selecionado</Text>
-          {(selectedRadar.situacao === "Inativo" || selectedRadar.situacao === "inativo") && (
-            <Text style={[styles.panelSubtitle, { fontWeight: "600", color: "#6b7280" }]}>
+          {(selectedRadar.situacao === "Inativo" ||
+            selectedRadar.situacao === "inativo") && (
+            <Text
+              style={[
+                styles.panelSubtitle,
+                { fontWeight: "600", color: "#6b7280" },
+              ]}
+            >
               Inativo
             </Text>
           )}
           <Text style={styles.panelSubtitle}>
-            {selectedRadar.latitude.toFixed(5)}, {selectedRadar.longitude.toFixed(5)}
+            {selectedRadar.latitude.toFixed(5)},{" "}
+            {selectedRadar.longitude.toFixed(5)}
             {selectedRadar.speedLimit != null &&
               ` • ${selectedRadar.speedLimit} km/h`}
           </Text>
@@ -439,7 +490,8 @@ export default function RadarEditorScreen({
             >
               <Text style={styles.buttonSecondaryText}>Inativar</Text>
             </TouchableOpacity>
-            {(selectedRadar.situacao === "Inativo" || selectedRadar.situacao === "inativo") && (
+            {(selectedRadar.situacao === "Inativo" ||
+              selectedRadar.situacao === "inativo") && (
               <TouchableOpacity
                 style={[styles.button, { backgroundColor: "#10b981" }]}
                 onPress={handleActivate}

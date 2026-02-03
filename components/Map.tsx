@@ -9,7 +9,7 @@ import Mapbox, {
   UserLocation,
   UserTrackingMode,
 } from "@rnmapbox/maps";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   StyleSheet,
@@ -127,13 +127,28 @@ export default function Map({
     }
   };
 
-  const PLACA_SPEEDS = [20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160];
+  const PLACA_SPEEDS = [
+    20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160,
+  ];
   const getClosestPlacaName = (speed: number | undefined): string => {
     if (speed == null || speed <= 0) return "placa60";
     const closest = PLACA_SPEEDS.reduce((a, b) =>
       Math.abs(a - speed) <= Math.abs(b - speed) ? a : b
     );
     return `placa${closest}`;
+  };
+
+  /** Tamanhos de ícone por tipo (ajuste aqui para mudar no mapa). */
+  const RADAR_ICON_SIZES: Record<string, number> = {
+    radar: 0.05,
+    radarMovel: 0.05,
+    radarSemaforico: 0.05,
+    radarFixo: 0.05,
+    placa: 0.18,
+  };
+  const getIconSizeForIcon = (iconImage: string): number => {
+    if (iconImage.startsWith("placa")) return RADAR_ICON_SIZES.placa ?? 0.24;
+    return RADAR_ICON_SIZES[iconImage] ?? RADAR_ICON_SIZES.radar ?? 0.2;
   };
 
   /** Ícone no mapa: fixo usa placa por velocidade; demais por tipo. */
@@ -147,7 +162,8 @@ export default function Map({
       .replace(/[\u0300-\u036f]/g, "");
     if (t.includes("radar") && t.includes("fixo"))
       return getClosestPlacaName(radar.speedLimit);
-    if (t.includes("semaforo") && t.includes("camera")) return "radarSemaforico";
+    if (t.includes("semaforo") && t.includes("camera"))
+      return "radarSemaforico";
     if (t.includes("semaforo") && t.includes("radar")) return "radarSemaforico";
     if (t.includes("radar") && t.includes("movel")) return "radarMovel";
     return "radar";
@@ -176,7 +192,7 @@ export default function Map({
   };
 
   // Criar GeoJSON para radares com ícone por tipo (radar, radarFixo, radarMovel, radarSemaforico)
-  const radarsGeoJSON = {
+  const radarsGeoJSON = useMemo(() => ({
     type: "FeatureCollection" as const,
     features: (radars || [])
       .filter(
@@ -199,10 +215,11 @@ export default function Map({
           id: radar.id,
           type: radar.type || "default",
           iconImage: getRadarIconForMap(radar),
+          iconSize: getIconSizeForIcon(getRadarIconForMap(radar)),
           isNearby: nearbyRadarIds?.has(radar.id) ? 1 : 0,
         },
       })),
-  };
+  }), [radars, nearbyRadarIds]);
 
   // Debug (apenas em desenvolvimento): log de radares recebidos
   useEffect(() => {
@@ -490,7 +507,7 @@ export default function Map({
                 filter={["!", ["has", "point_count"]]}
                 style={{
                   iconImage: ["coalesce", ["get", "iconImage"], "radar"],
-                  iconSize: 0.05,
+                  iconSize: ["coalesce", ["get", "iconSize"], 0.2],
                   iconAllowOverlap: true,
                   iconIgnorePlacement: true,
                 }}

@@ -4,8 +4,10 @@
   "private": true,
   "scripts": {
     "start": "react-native start",
-    "preandroid": "npx patch-package @pawan-pk/react-native-mapbox-navigation",
-    "apply-patch": "npx patch-package @pawan-pk/react-native-mapbox-navigation",
+    "postinstall": "patch-package",
+    "patch:save": "npx rimraf node_modules/@pawan-pk/react-native-mapbox-navigation/android/build && npx patch-package @pawan-pk/react-native-mapbox-navigation",
+    "preandroid": "patch-package",
+    "apply-patch": "patch-package",
     "build:release": "npm run apply-patch && cd android && ./gradlew assembleRelease",
     "android": "react-native run-android",
     "android:build": "cd android && gradlew.bat assembleDebug && cd ..",
@@ -14,8 +16,7 @@
     "android:start": "npm start & timeout /t 5 >nul & npm run android",
     "android:bundle": "react-native bundle --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
-    "postinstall": "patch-package || echo \"AVISO: patches falharam. Para corrigir: apague node_modules e rode npm install de novo.\""
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@pawan-pk/react-native-mapbox-navigation": "^0.5.2",

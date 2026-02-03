@@ -24,9 +24,9 @@ export default function App() {
     lat: number;
     lng: number;
   } | null>(null);
-  const [radarType, setRadarType] = useState<"reportado" | "fixo" | "móvel" | "semaforo">(
-    "reportado"
-  );
+  const [radarType, setRadarType] = useState<
+    "reportado" | "fixo" | "móvel" | "semaforo"
+  >("reportado");
   const [error, setError] = useState<string | null>(null);
   const loadTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -365,7 +365,9 @@ export default function App() {
             <select
               value={radarType}
               onChange={(e) =>
-                setRadarType(e.target.value as "reportado" | "fixo" | "móvel" | "semaforo")
+                setRadarType(
+                  e.target.value as "reportado" | "fixo" | "móvel" | "semaforo"
+                )
               }
               style={{
                 width: "100%",

@@ -13,7 +13,9 @@ const CLUSTER_LAYER_ID = "radars-clusters";
 const CLUSTER_COUNT_LAYER_ID = "radars-cluster-count";
 
 /** Velocidades disponíveis para placas (radar fixo). */
-const PLACA_SPEEDS = [20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160];
+const PLACA_SPEEDS = [
+  20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160,
+];
 
 function getClosestPlacaName(speed: number | undefined): string {
   if (speed == null || speed <= 0) return "placa60";
@@ -52,6 +54,19 @@ function getRadarIconForMap(r: { type?: string; speedLimit?: number }): string {
   return getRadarIconName(type);
 }
 
+/** Tamanhos de ícone por tipo (ajuste aqui no admin). */
+const RADAR_ICON_SIZES: Record<string, number> = {
+  radar: 0.05,
+  radarMovel: 0.05,
+  radarSemaforico: 0.055,
+  radarFixo: 0.06,
+  placa: 0.2,
+};
+function getIconSizeForIcon(iconName: string): number {
+  if (iconName.startsWith("placa")) return RADAR_ICON_SIZES.placa ?? 0.06;
+  return RADAR_ICON_SIZES[iconName] ?? RADAR_ICON_SIZES.radar ?? 0.05;
+}
+
 const ICON_NAMES = [
   "radar",
   "radarFixo",
@@ -85,6 +100,7 @@ function radarsToGeoJSON(radars: Radar[]): GeoJSON.FeatureCollection {
         id: r.id,
         inactive: r.situacao === "Inativo" || r.situacao === "inativo",
         icon: getRadarIconForMap(r),
+        iconSize: getIconSizeForIcon(getRadarIconForMap(r)),
       },
     })),
   };
@@ -216,7 +232,7 @@ function Map({
             filter: ["!", ["has", "point_count"]],
             layout: {
               "icon-image": ["coalesce", ["get", "icon"], "radar"],
-              "icon-size": ICON_SIZE,
+              "icon-size": ["coalesce", ["get", "iconSize"], ICON_SIZE],
               "icon-allow-overlap": true,
               "icon-ignore-placement": true,
             },

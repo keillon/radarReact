@@ -684,7 +684,10 @@ export async function radarRoutes(fastify: FastifyInstance) {
     if (body.tipoRadar && !tiposValidos.includes(body.tipoRadar)) {
       return reply
         .code(400)
-        .send({ error: "tipoRadar deve ser 'reportado', 'fixo', 'móvel' ou 'semaforo'" });
+        .send({
+          error:
+            "tipoRadar deve ser 'reportado', 'fixo', 'móvel' ou 'semaforo'",
+        });
     }
 
     try {
