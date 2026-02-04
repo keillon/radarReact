@@ -54,6 +54,7 @@ export const radarImages: Record<string, any> = {
   placa140: require("../assets/images/placa140.png"),
   placa150: require("../assets/images/placa150.png"),
   placa160: require("../assets/images/placa160.png"),
+  target_icon: require("../assets/images/target_icon.png"),
 };
 
 interface MapProps {
@@ -174,13 +175,21 @@ export default function Map({
   }, [userLocation, currentLocation, isNavigating, hasInitialized]);
 
   const focusOnUserLocation = () => {
-    if (userLocation && cameraRef.current) {
-      setIsTracking(true); // Enable tracking
-      cameraRef.current.setCamera({
-        centerCoordinate: [userLocation.longitude, userLocation.latitude],
-        zoomLevel: 16,
-        animationDuration: 500,
-      });
+    // Priority for GPS center: use local state or prop fallback
+    const target = userLocation || currentLocation;
+    if (target && cameraRef.current) {
+      // Toggle tracking to force Mapbox camera to refocus
+      setIsTracking(false);
+      setTimeout(() => {
+        setIsTracking(true);
+        if (cameraRef.current) {
+          cameraRef.current.setCamera({
+            centerCoordinate: [target.longitude, target.latitude],
+            zoomLevel: 16,
+            animationDuration: 1000,
+          });
+        }
+      }, 50);
     }
   };
 
@@ -299,14 +308,20 @@ export default function Map({
           }
         }}
         onCameraChanged={(event) => {
-          if (isTracking) setIsTracking(false);
+          // Define isUserInteraction strictly
+          const props = (event.properties || {}) as any;
+          const isUserInteraction = props.isUserInteraction === true;
+
+          if (isTracking && isUserInteraction) {
+            setIsTracking(false);
+          }
 
           if (onCameraChanged) {
             // Robust extraction for v10+ (center array is [lng, lat])
             const center = event.properties?.center || (event as any).geometry?.coordinates;
             if (center && Array.isArray(center)) {
               const [lng, lat] = center;
-              // Always use fresh primitives to avoid hidden corrupted properties
+              // Always use fresh primitives to ensure name consistency and clean data
               const coords = { latitude: Number(lat), longitude: Number(lng) };
               onCameraChanged(coords);
             }
@@ -325,6 +340,7 @@ export default function Map({
               ? UserTrackingMode.FollowWithCourse
               : (isTracking ? UserTrackingMode.Follow : undefined)
           }
+          {...(isTracking ? { followZoomLevel: 16 } : {})}
           animationDuration={1000}
         />
 
@@ -332,10 +348,10 @@ export default function Map({
         {interactive && (
           <UserLocation
             visible={true}
+            androidRenderMode="gps"
             onUpdate={(location) => {
               if (location?.coords) {
                 // SÓ atualizamos o estado de localização se NÃO estivermos no modo picker
-                // Isso evita o "pulo" do marcador e garante estabilidade no reporte
                 if (!onCameraChanged) {
                   setUserLocation({
                     latitude: location.coords.latitude,
@@ -557,17 +573,16 @@ export default function Map({
             </ShapeSource>
           )}
       </MapView>
-      {!isNavigating && userLocation && (
+      {!isNavigating && (userLocation || currentLocation) && (
         <TouchableOpacity
-          style={styles.locationButton}
+          style={[styles.locationButton, { zIndex: 999 }]}
           onPress={focusOnUserLocation}
           activeOpacity={0.7}
         >
           <Image
-            source={require('../assets/images/target_icon.png')}
+            source={radarImages.target_icon}
             style={styles.locationButtonImage}
             resizeMode="contain"
-
           />
         </TouchableOpacity>
       )}
