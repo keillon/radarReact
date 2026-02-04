@@ -33,10 +33,9 @@ function getRadarIconName(type: string | undefined): string {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
-  if (t.includes("semaforo") && t.includes("camera")) return "radarSemaforico";
-  if (t.includes("semaforo") && t.includes("radar")) return "radarSemaforico";
-  if (t.includes("radar") && t.includes("fixo")) return "radarFixo";
-  if (t.includes("radar") && t.includes("movel")) return "radarMovel";
+  if (t.includes("semaforo") || t.includes("camera") || t.includes("fotografica")) return "radarSemaforico";
+  if (t.includes("movel") || t.includes("mobile")) return "radarMovel";
+  if (t.includes("fixo") || t.includes("placa")) return "radarFixo"; // speed limit logic is handled in getRadarIconForMap
   return "radar";
 }
 

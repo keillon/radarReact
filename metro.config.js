@@ -20,6 +20,7 @@ const config = {
   },
   resolver: {
     assetExts: [...assetExts, "css"],
+    blockList: [/node_modules\/.*\/android\/\.cxx\/.*/],
   },
 };
 

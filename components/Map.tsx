@@ -12,15 +12,49 @@ import Mapbox, {
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
+  Image,
   StyleSheet,
-  Text,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import { Radar } from "../services/api";
 import { MAPBOX_TOKEN, NavigationStep, RouteFeature } from "../services/mapbox";
 
 Mapbox.setAccessToken(MAPBOX_TOKEN);
+
+export const PLACA_SPEEDS = [
+  20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160,
+];
+
+export const getClosestPlacaName = (speed: number | undefined): string => {
+  if (speed == null || speed <= 0) return "placa60";
+  const closest = PLACA_SPEEDS.reduce((a, b) =>
+    Math.abs(a - speed) <= Math.abs(b - speed) ? a : b
+  );
+  return `placa${closest}`;
+};
+
+export const radarImages: Record<string, any> = {
+  radar: require("../assets/images/radar.png"),
+  radarFixo: require("../assets/images/radarFixo.png"),
+  radarMovel: require("../assets/images/radarMovel.png"),
+  radarSemaforico: require("../assets/images/radarSemaforico.png"),
+  placa20: require("../assets/images/placa20.png"),
+  placa30: require("../assets/images/placa30.png"),
+  placa40: require("../assets/images/placa40.png"),
+  placa50: require("../assets/images/placa50.png"),
+  placa60: require("../assets/images/placa60.png"),
+  placa70: require("../assets/images/placa70.png"),
+  placa80: require("../assets/images/placa80.png"),
+  placa90: require("../assets/images/placa90.png"),
+  placa100: require("../assets/images/placa100.png"),
+  placa110: require("../assets/images/placa110.png"),
+  placa120: require("../assets/images/placa120.png"),
+  placa130: require("../assets/images/placa130.png"),
+  placa140: require("../assets/images/placa140.png"),
+  placa150: require("../assets/images/placa150.png"),
+  placa160: require("../assets/images/placa160.png"),
+};
 
 interface MapProps {
   radars: Radar[];
@@ -33,6 +67,7 @@ interface MapProps {
   currentStep?: NavigationStep | null;
   interactive?: boolean; // Se false, desativa interação do mapa (útil para overlay)
   nearbyRadarIds?: Set<string>; // IDs dos radares próximos para animação pulsante
+  onCameraChanged?: (coords: { latitude: number; longitude: number }) => void;
 }
 
 export default function Map({
@@ -45,11 +80,13 @@ export default function Map({
   currentStep,
   interactive = true,
   nearbyRadarIds = new Set(),
+  onCameraChanged,
 }: MapProps) {
   const [userLocation, setUserLocation] = useState<{
     latitude: number;
     longitude: number;
   } | null>(null);
+  const [isTracking, setIsTracking] = useState(false); // Add tracking state
   const [hasInitialized, setHasInitialized] = useState(false);
   const cameraRef = useRef<any>(null);
   const pulseAnimation = useRef(new Animated.Value(1)).current;
@@ -80,7 +117,13 @@ export default function Map({
   // Atualizar userLocation quando currentLocation mudar
   useEffect(() => {
     if (currentLocation) {
-      setUserLocation(currentLocation);
+      // Se estamos em modo "picker" (onCameraChanged presente), NÃO atualizamos o userLocation local
+      // baseado no GPS. Isso evita que o blue dot ou atualizações de GPS "sequestrem" o centro do mapa
+      // enquanto o usuário está tentando marcar um local manualmente.
+      if (!onCameraChanged) {
+        setUserLocation(currentLocation);
+      }
+
       // Se não é interativo (overlay), atualizar câmera para sincronizar com navegação
       if (!interactive && cameraRef.current) {
         // Usar requestAnimationFrame para evitar atualizações muito frequentes
@@ -99,26 +142,40 @@ export default function Map({
         return () => clearTimeout(timeoutId);
       }
     }
-  }, [currentLocation, interactive]);
+  }, [currentLocation, interactive, onCameraChanged]);
 
-  // Focar na localização quando ela for obtida pela primeira vez
+  // Focar na localização quando ela for obtida pela primeira vez ou quando um currentLocation inicial é provido
   useEffect(() => {
-    if (userLocation && cameraRef.current && !isNavigating && !hasInitialized) {
-      setTimeout(() => {
-        if (cameraRef.current) {
-          cameraRef.current.setCamera({
-            centerCoordinate: [userLocation.longitude, userLocation.latitude],
-            zoomLevel: 14,
-            animationDuration: 1000,
-          });
-          setHasInitialized(true);
-        }
-      }, 500);
+    if (cameraRef.current && !isNavigating && !hasInitialized) {
+      const targetLocation = currentLocation || userLocation;
+      if (targetLocation && targetLocation.latitude !== 0) {
+        // Se já temos uma localização (via prop ou GPS inicial), focamos nela
+        cameraRef.current.setCamera({
+          centerCoordinate: [targetLocation.longitude, targetLocation.latitude],
+          zoomLevel: 14,
+          animationDuration: currentLocation ? 0 : 1000, // Instantâneo se for prop (picker), suave se for GPS
+        });
+        setHasInitialized(true);
+      } else {
+        // Fallback: aguardar um pouco para ver se o GPS chega
+        const timeoutId = setTimeout(() => {
+          if (cameraRef.current && userLocation && !hasInitialized) {
+            cameraRef.current.setCamera({
+              centerCoordinate: [userLocation.longitude, userLocation.latitude],
+              zoomLevel: 14,
+              animationDuration: 1000,
+            });
+            setHasInitialized(true);
+          }
+        }, 800);
+        return () => clearTimeout(timeoutId);
+      }
     }
-  }, [userLocation, isNavigating, hasInitialized]);
+  }, [userLocation, currentLocation, isNavigating, hasInitialized]);
 
   const focusOnUserLocation = () => {
     if (userLocation && cameraRef.current) {
+      setIsTracking(true); // Enable tracking
       cameraRef.current.setCamera({
         centerCoordinate: [userLocation.longitude, userLocation.latitude],
         zoomLevel: 16,
@@ -127,16 +184,8 @@ export default function Map({
     }
   };
 
-  const PLACA_SPEEDS = [
-    20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160,
-  ];
-  const getClosestPlacaName = (speed: number | undefined): string => {
-    if (speed == null || speed <= 0) return "placa60";
-    const closest = PLACA_SPEEDS.reduce((a, b) =>
-      Math.abs(a - speed) <= Math.abs(b - speed) ? a : b
-    );
-    return `placa${closest}`;
-  };
+  // Removido onMapDrag redundante
+
 
   /** Tamanhos de ícone por tipo (ajuste aqui para mudar no mapa). */
   const RADAR_ICON_SIZES: Record<string, number> = {
@@ -168,27 +217,6 @@ export default function Map({
     return "radar";
   };
 
-  const radarImages = {
-    radar: require("../assets/images/radar.png"),
-    radarFixo: require("../assets/images/radarFixo.png"),
-    radarMovel: require("../assets/images/radarMovel.png"),
-    radarSemaforico: require("../assets/images/radarSemaforico.png"),
-    placa20: require("../assets/images/placa20.png"),
-    placa30: require("../assets/images/placa30.png"),
-    placa40: require("../assets/images/placa40.png"),
-    placa50: require("../assets/images/placa50.png"),
-    placa60: require("../assets/images/placa60.png"),
-    placa70: require("../assets/images/placa70.png"),
-    placa80: require("../assets/images/placa80.png"),
-    placa90: require("../assets/images/placa90.png"),
-    placa100: require("../assets/images/placa100.png"),
-    placa110: require("../assets/images/placa110.png"),
-    placa120: require("../assets/images/placa120.png"),
-    placa130: require("../assets/images/placa130.png"),
-    placa140: require("../assets/images/placa140.png"),
-    placa150: require("../assets/images/placa150.png"),
-    placa160: require("../assets/images/placa160.png"),
-  };
 
   // Criar GeoJSON para radares com ícone por tipo (radar, radarFixo, radarMovel, radarSemaforico)
   const radarsGeoJSON = useMemo(() => ({
@@ -220,8 +248,7 @@ export default function Map({
       })),
   }), [radars, nearbyRadarIds]);
 
-  // Debug (apenas em desenvolvimento): log de radares recebidos
-  useEffect(() => {
+  /* useEffect(() => {
     if (!__DEV__) return;
     const validRadars = radars || [];
     if (validRadars.length > 0 && validRadars[0] != null) {
@@ -231,10 +258,10 @@ export default function Map({
         typeof firstRadar.latitude === "number" &&
         typeof firstRadar.longitude === "number"
       ) {
-        console.log(`🗺️ Map: ${validRadars.length} radares para renderizar`);
+        console.log(`MAP RENDER: ${validRadars.length} radars`);
       }
     }
-  }, [radars?.length || 0]);
+  }, [radars?.length || 0]); */
 
   return (
     <View style={styles.container} pointerEvents="box-none">
@@ -271,20 +298,32 @@ export default function Map({
             onMapPress({ latitude: lat, longitude: lng });
           }
         }}
+        onCameraChanged={(event) => {
+          if (isTracking) setIsTracking(false);
+
+          if (onCameraChanged) {
+            // Robust extraction for v10+ (center array is [lng, lat])
+            const center = event.properties?.center || (event as any).geometry?.coordinates;
+            if (center && Array.isArray(center)) {
+              const [lng, lat] = center;
+              // Always use fresh primitives to avoid hidden corrupted properties
+              const coords = { latitude: Number(lat), longitude: Number(lng) };
+              onCameraChanged(coords);
+            }
+          }
+        }}
       >
         <Camera
           ref={cameraRef}
           defaultSettings={{
-            centerCoordinate: userLocation
-              ? [userLocation.longitude, userLocation.latitude]
-              : [-46.6333, -23.5505], // São Paulo como padrão
-            zoomLevel: isNavigating ? 16 : 14,
+            centerCoordinate: [-46.6333, -23.5505], // São Paulo como padrão
+            zoomLevel: 14,
           }}
-          followUserLocation={isNavigating && interactive}
+          followUserLocation={isNavigating || (interactive && isTracking)}
           followUserMode={
-            isNavigating && interactive
+            isNavigating
               ? UserTrackingMode.FollowWithCourse
-              : undefined
+              : (isTracking ? UserTrackingMode.Follow : undefined)
           }
           animationDuration={1000}
         />
@@ -295,10 +334,14 @@ export default function Map({
             visible={true}
             onUpdate={(location) => {
               if (location?.coords) {
-                setUserLocation({
-                  latitude: location.coords.latitude,
-                  longitude: location.coords.longitude,
-                });
+                // SÓ atualizamos o estado de localização se NÃO estivermos no modo picker
+                // Isso evita o "pulo" do marcador e garante estabilidade no reporte
+                if (!onCameraChanged) {
+                  setUserLocation({
+                    latitude: location.coords.latitude,
+                    longitude: location.coords.longitude,
+                  });
+                }
               }
             }}
           />
@@ -320,16 +363,16 @@ export default function Map({
                   lineJoin: "round",
                   lineGradient: isNavigating
                     ? [
-                        "interpolate",
-                        ["linear"],
-                        ["line-progress"],
-                        0,
-                        "#3b82f6",
-                        0.5,
-                        "#60a5fa",
-                        1,
-                        "#93c5fd",
-                      ]
+                      "interpolate",
+                      ["linear"],
+                      ["line-progress"],
+                      0,
+                      "#3b82f6",
+                      0.5,
+                      "#60a5fa",
+                      1,
+                      "#93c5fd",
+                    ]
                     : undefined,
                 }}
               />
@@ -493,7 +536,7 @@ export default function Map({
                 id="radarClusterCount"
                 filter={["has", "point_count"]}
                 style={{
-                  textField: "{point_count_abbreviated}",
+                  textField: "{point_count}",
                   textFont: ["Open Sans Regular", "Arial Unicode MS Regular"],
                   textSize: 12,
                   textColor: "#fff",
@@ -520,7 +563,12 @@ export default function Map({
           onPress={focusOnUserLocation}
           activeOpacity={0.7}
         >
-          <Text style={styles.locationButtonText}>📍</Text>
+          <Image
+            source={require('../assets/images/target_icon.png')}
+            style={styles.locationButtonImage}
+            resizeMode="contain"
+
+          />
         </TouchableOpacity>
       )}
     </View>
@@ -553,5 +601,11 @@ const styles = StyleSheet.create({
   },
   locationButtonText: {
     fontSize: 24,
+  },
+  locationButtonImage: {
+    width: 30,
+    height: 30,
+    flex: 1,
+
   },
 });

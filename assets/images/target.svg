@@ -1,0 +1,13 @@
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <!-- Círculo externo -->
+  <circle cx="128" cy="128" r="100" stroke="black" stroke-width="24" fill="none"/>
+
+  <!-- Círculo interno -->
+  <circle cx="128" cy="128" r="48" stroke="black" stroke-width="24" fill="none"/>
+
+  <!-- Linha vertical -->
+  <line x1="128" y1="0" x2="128" y2="256" stroke="black" stroke-width="24"/>
+
+  <!-- Linha horizontal -->
+  <line x1="0" y1="128" x2="256" y2="128" stroke="black" stroke-width="24"/>
+</svg>
