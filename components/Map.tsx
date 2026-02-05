@@ -308,23 +308,30 @@ export default function Map({
           }
         }}
         onCameraChanged={(event) => {
-          // Define isUserInteraction strictly
-          const props = (event.properties || {}) as any;
-          const isUserInteraction = props.isUserInteraction === true;
+          try {
+            // Define isUserInteraction strictly
+            const props = (event.properties || {}) as any;
+            const isUserInteraction = props.isUserInteraction === true;
 
-          if (isTracking && isUserInteraction) {
-            setIsTracking(false);
-          }
-
-          if (onCameraChanged) {
-            // Robust extraction for v10+ (center array is [lng, lat])
-            const center = event.properties?.center || (event as any).geometry?.coordinates;
-            if (center && Array.isArray(center)) {
-              const [lng, lat] = center;
-              // Always use fresh primitives to ensure name consistency and clean data
-              const coords = { latitude: Number(lat), longitude: Number(lng) };
-              onCameraChanged(coords);
+            if (isTracking && isUserInteraction) {
+              setIsTracking(false);
             }
+
+            if (onCameraChanged) {
+              // Robust extraction for v10+ (center array is [lng, lat])
+              const center = event.properties?.center || (event as any).geometry?.coordinates;
+              if (center && Array.isArray(center) && center.length >= 2) {
+                const [lng, lat] = center;
+                // Always use fresh primitives to ensure name consistency and clean data
+                const coords = { latitude: Number(lat), longitude: Number(lng) };
+                // Simple validation to avoid passing NaN
+                if (!isNaN(coords.latitude) && !isNaN(coords.longitude)) {
+                  onCameraChanged(coords);
+                }
+              }
+            }
+          } catch (e) {
+            console.error("Error in onCameraChanged:", e);
           }
         }}
       >
@@ -503,7 +510,7 @@ export default function Map({
                   ) {
                     const feature = event.features[0];
                     if (feature != null) {
-                      const radarId = feature.properties?.id || feature.id;
+                      const radarId = feature.properties?.id || feature.id; // Check properties first
                       if (radarId != null && radars != null) {
                         const radar = radars.find(
                           (r) => r != null && r.id === radarId

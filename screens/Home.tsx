@@ -126,7 +126,8 @@ const getDistanceFromLine = (pt: any, v: any, w: any) => {
 const isRadarOnRoute = (radar: Radar, route: any) => {
   if (!route || !route.geometry || !route.geometry.coordinates) return true;
 
-  const MAX_DIST_DEG = 0.0003; // ~30m
+  // Reduced from 0.0003 (~30m) to 0.00015 (~15m) to filter parallel streets
+  const MAX_DIST_DEG = 0.00015;
   const coordinates = route.geometry.coordinates;
   const radarPt = [radar.longitude, radar.latitude];
 
@@ -966,8 +967,8 @@ export default function Home({ onOpenEditor }: HomeProps) {
       id: r.id,
       latitude: r.latitude,
       longitude: r.longitude,
-      speedLimit: r.speedLimit,
-      type: r.type, // Passar tipo do radar para o componente nativo
+      speedLimit: r.speedLimit || 0, // Default to 0 if undefined
+      type: r.type || "unknown", // Default to "unknown"
     }));
   }, [filteredRadars, radars]);
 
@@ -1511,9 +1512,107 @@ export default function Home({ onOpenEditor }: HomeProps) {
     }
   }, [filteredRadars, currentLocation, modalScale, modalOpacity, routeData]);
 
+  // Callback para quando a rota for recalculada (ex: saiu da rota)
+  const handleRouteChanged = useCallback(async (event: any) => {
+    try {
+      if (!event) return;
+      // Defensive parsing for geometry
+      const geometry = event.geometry || (event.items && event.items.length > 0 ? event.items[0].geometry : null);
+
+      if (!geometry) {
+        console.log("Evento routeChanged sem geometria válida:", event);
+        return;
+      }
+
+      console.log("🛣️ Rota recalculada! Atualizando radares...");
+
+      let coordinates = [];
+      try {
+        // O evento pode vir como string JSON (nossa conversão nativa) ou objeto direto
+        // Tentamos parsear se for string, senão assumimos que é objeto ou array
+        if (typeof geometry === 'string') {
+          // Verificar se é Polyline (não começa com { ou [) - Fallback se a conversão nativa falhou
+          if (!geometry.trim().startsWith("{") && !geometry.trim().startsWith("[")) {
+            console.warn("⚠️ Recebido Polyline em vez de GeoJSON. A conversão nativa pode ter falhado.");
+            // Aqui idealmente decodificaríamos Polyline no JS, mas melhor garantir o nativo.
+            // A modificação no MapboxNavigationView.kt deve garantir que isso venha como GeoJSON.
+            return;
+          }
+          const lineString = JSON.parse(geometry);
+          coordinates = lineString.coordinates || lineString;
+        } else {
+          coordinates = geometry.coordinates || geometry;
+        }
+      } catch (e) {
+        console.warn("Erro ao parsear geometria da rota:", e);
+        return;
+      }
+
+      if (!Array.isArray(coordinates) || coordinates.length === 0) return;
+
+      const newRoutePoints = coordinates.map((coord: number[]) => {
+        if (Array.isArray(coord) && coord.length >= 2) {
+          return {
+            latitude: coord[1],
+            longitude: coord[0],
+          };
+        }
+        return null;
+      }).filter((p): p is LatLng => p !== null);
+
+      if (newRoutePoints.length === 0) return;
+
+      // Atualizar dados da rota com type safety
+      setRouteData(prev => {
+        if (!prev || !prev.route) return prev;
+
+        return {
+          ...prev,
+          route: {
+            ...prev.route,
+            type: "Feature",
+            geometry: {
+              ...prev.route.geometry,
+              coordinates: coordinates
+            }
+          }
+        };
+      });
+
+      // Refiltrar radares para a nova rota
+      // Buscar radares próximos ao novo caminho (usando API se necessário ou cache local)
+      const nearbyRadars = await getRadarsNearLocation(
+        newRoutePoints[0].latitude,
+        newRoutePoints[0].longitude,
+        5000 // Busca ampla inicial
+      );
+
+      const filtered = filterRadarsNearRoute(nearbyRadars, newRoutePoints, 250);
+
+      console.log(`✅ ${filtered.length} radares encontrados na nova rota`);
+
+      setFilteredRadars(filtered);
+
+      // Atualizar lista principal também para garantir consistência
+      setRadars(prev => {
+        const existingIds = new Set(prev.map(r => r.id));
+        const newRadars = filtered.filter(r => !existingIds.has(r.id));
+        return [...newRadars, ...prev];
+      });
+
+    } catch (error) {
+      console.error("Erro ao processar mudança de rota:", error);
+    }
+  }, []);
+
   // Handlers memoizados para evitar re-creates
   const handleRouteProgressChange = useCallback((progress: any) => {
-    if (!progress) return;
+    try {
+      if (!progress) return;
+      // Implement logic if needed, currently empty
+    } catch (e) {
+      console.error("Erro em handleRouteProgressChange:", e);
+    }
   }, []);
 
   const handleArrive = useCallback(() => {
@@ -1565,8 +1664,12 @@ export default function Home({ onOpenEditor }: HomeProps) {
 
   // Handler para selecionar rota alternativa (vinda do evento nativo)
   const handleRouteAlternativeSelected = useCallback((event: any) => {
-    console.log("Rota alternativa selecionada via evento nativo!");
-    // Adicionar log visual ou toast se necessário
+    try {
+      if (!event) return;
+      console.log("Rota alternativa selecionada via evento nativo!");
+    } catch (e) {
+      console.error("Erro em handleRouteAlternativeSelected:", e);
+    }
   }, []);
 
   useEffect(() => {
@@ -1607,8 +1710,8 @@ export default function Home({ onOpenEditor }: HomeProps) {
         onArrive={handleArrive}
         onCancelNavigation={handleCancelNavigation}
         onError={handleError}
-        // @ts-ignore
         onRouteAlternativeSelected={handleRouteAlternativeSelected}
+        onRouteChanged={handleRouteChanged}
       />
     );
   }, [

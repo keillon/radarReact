@@ -108,8 +108,8 @@ function radarsToGeoJSON(radars: Radar[]): GeoJSON.FeatureCollection {
 function Map({
   radars = [],
   selectedId = null,
-  onSelectRadar = () => {},
-  onMapClick = () => {},
+  onSelectRadar = () => { },
+  onMapClick = () => { },
   center = [-46.6333, -23.5505] as [number, number],
   zoom = 10,
   onCenterChange,
