@@ -49,7 +49,7 @@ import {
   getRadarsNearRoute,
   getRecentRadars,
   Radar,
-  reportRadar,
+  reportRadar
 } from "../services/api";
 import {
   geocodeAddress,
@@ -369,6 +369,21 @@ export default function Home({ onOpenEditor }: HomeProps) {
     useState<LatLng | null>(null);
   const [showMapPicker, setShowMapPicker] = useState(false);
   const [mapPickerCenter, setMapPickerCenter] = useState<LatLng | null>(null);
+  const [modalConfig, setModalConfig] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    type: "info" | "success" | "error" | "confirm";
+    onConfirm?: () => void;
+    onCancel?: () => void;
+    confirmText?: string;
+    cancelText?: string;
+  }>({
+    visible: false,
+    title: "",
+    message: "",
+    type: "info",
+  });
 
   const lastSyncTimeRef = useRef<number>(Date.now());
 
@@ -418,6 +433,14 @@ export default function Home({ onOpenEditor }: HomeProps) {
   const isNavigatingRef = useRef(false);
   const routeDataRef = useRef<RouteResponse | null>(null);
   const radarCheckDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mapPickerDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const filteredRadarsRef = useRef<Radar[]>([]);
+  const currentLocationRef = useRef<any>(null);
+  const lastRadarFetchRef = useRef<LatLng | null>(null);
+  const isMountedRef = useRef(true);
+  const audioPlayerRef = useRef<any>(null);
+  const isPlayingRadarSound = useRef(false);
+  const postPassTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null); // Timer para modal pós-passagem
 
   useEffect(() => {
     initMapbox();
@@ -470,6 +493,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
           // Ignorar erro ao parar TTS
         }
       }
+      isMountedRef.current = false;
     };
   }, []);
 
@@ -661,26 +685,39 @@ export default function Home({ onOpenEditor }: HomeProps) {
     }
   };
 
-  // Buscar radares quando a localização muda (mapa normal)
+  // Buscar radares quando a localização muda (mapa normal) - OTIMIZADO com debounce e threshold
   useEffect(() => {
     if (!currentLocation || isNavigating) return;
 
-    // Buscar radares próximos à localização atual
-    const fetchRadars = async () => {
+    // Verificar se moveu mais de 100 metros desde a última busca
+    const lastFetch = lastRadarFetchRef.current;
+    if (lastFetch) {
+      const distance = calculateDistance(
+        lastFetch.latitude,
+        lastFetch.longitude,
+        currentLocation.latitude,
+        currentLocation.longitude
+      );
+      if (distance < 100) return; // Só busca se mover mais de 100m
+    }
+
+    const timeoutId = setTimeout(async () => {
       try {
         const nearbyRadars = await getRadarsNearLocation(
           currentLocation.latitude,
           currentLocation.longitude,
           1000 // raio de 1km
         );
+        if (!isMountedRef.current) return;
         setRadars(nearbyRadars);
+        lastRadarFetchRef.current = currentLocation;
         console.log(`✅ ${nearbyRadars.length} radares encontrados próximos`);
       } catch (error) {
         console.error("Erro ao buscar radares:", error);
       }
-    };
+    }, 2000); // 2 segundos de debounce
 
-    fetchRadars();
+    return () => clearTimeout(timeoutId);
   }, [currentLocation?.latitude, currentLocation?.longitude, isNavigating]);
 
   // Monitorar localização apenas quando não está navegando (o SDK cuida durante navegação)
@@ -754,108 +791,64 @@ export default function Home({ onOpenEditor }: HomeProps) {
       return;
     }
 
-    setIsReportingRadar(true);
     setShowReportModal(false);
 
-    try {
-      // Define precisely which coordinate to use
-      let reportCoords: LatLng | null = null;
-
-      console.log("📍 [Report] Iniciando reporte. Modo:", reportLocationMode);
-
-      if (reportLocationMode === "map") {
-        if (reportCustomLocation) {
-          reportCoords = reportCustomLocation;
-          console.log("📍 [Report] USANDO PIN DO MAPA:", reportCoords);
-        } else {
-          Alert.alert("Erro", "Por favor, selecione uma localização no mapa primeiro");
-          setIsReportingRadar(false);
-          return;
-        }
+    // Determinar coordenadas de forma Síncrona
+    let reportCoords: LatLng | null = null;
+    if (reportLocationMode === "map") {
+      if (reportCustomLocation) {
+        reportCoords = reportCustomLocation;
       } else {
-        // Modo padrão: localização atual
-        if (currentLocation) {
-          reportCoords = { latitude: currentLocation.latitude, longitude: currentLocation.longitude };
-          console.log("📍 [Report] USANDO GPS ATUAL:", reportCoords);
-        } else {
-          Alert.alert("Erro", "Sua localização atual não está disponível. Tente marcar no mapa.");
-          setIsReportingRadar(false);
-          return;
-        }
-      }
-
-      if (!reportCoords) {
-        Alert.alert("Erro", "Localização inválida para o reporte.");
-        setIsReportingRadar(false);
+        setModalConfig({ visible: true, title: "Erro", message: "Selecione uma localização no mapa", type: "error" });
         return;
       }
-
-      console.log(`📡 [Report] Enviando para API: Tipo=${type}, Velocidade=${speedLimit}, Lat=${reportCoords.latitude}, Lon=${reportCoords.longitude}`);
-
-      const newRadar = await reportRadar({
-        latitude: reportCoords.latitude,
-        longitude: reportCoords.longitude,
-        speedLimit: speedLimit,
-        type,
-      });
-
-      // Verificar se é um radar temporário (salvo localmente)
-      const isLocalRadar = newRadar.id.startsWith("temp_");
-
-      // Adicionar o radar reportado à lista local imediatamente (PREPOR para prioridade)
-      setRadars((prev) => {
-        // Verificar se já existe para evitar duplicatas
-        const exists = prev.some((r) => r.id === newRadar.id);
-        if (exists) return prev;
-        return [newRadar, ...prev];
-      });
-
-      // Se estiver navegando, também adicionar aos radares filtrados (PREPOR para prioridade)
-      if (isNavigating && routeData) {
-        setFilteredRadars((prev) => {
-          const exists = prev.some((r) => r.id === newRadar.id);
-          if (exists) return prev;
-          return [newRadar, ...prev];
-        });
-      }
-
-      // Mostrar modal de sucesso (auto-dismiss 5s)
-      if (isLocalRadar) {
-        setSuccessMessage("Radar salvo localmente! ✅\n\nEle aparecerá no mapa e será sincronizado quando o servidor estiver disponível.");
+    } else {
+      if (currentLocation) {
+        reportCoords = { latitude: currentLocation.latitude, longitude: currentLocation.longitude };
       } else {
-        setSuccessMessage("Radar reportado com sucesso! ✅\n\nOutros usuários já podem vê-lo no mapa.");
-      }
-      setShowSuccessModal(true);
-
-      // Auto-dismiss após 5 segundos
-      setTimeout(() => {
-        setShowSuccessModal(false);
-      }, 5000);
-
-      setReportSpeedLimit("");
-      setReportRadarType("móvel" as const);
-    } catch (error: any) {
-      console.error("Erro ao reportar radar:", error);
-
-      // Radares somente via API - sem fallback local
-      if (
-        error?.message?.includes("404") ||
-        error?.message?.includes("Network")
-      ) {
-        Alert.alert(
-          "Servidor indisponível",
-          "Não foi possível reportar o radar. Verifique sua conexão e tente novamente."
-        );
+        setModalConfig({ visible: true, title: "Erro", message: "Localização atual indisponível", type: "error" });
         return;
       }
-
-      Alert.alert(
-        "Erro",
-        error.message || "Não foi possível reportar o radar. Tente novamente."
-      );
-    } finally {
-      setIsReportingRadar(false);
     }
+
+    // OTIMIZAÇÃO: Reporte OTIMISTA (Instantâneo)
+    const tempRadar: Radar = {
+      id: `temp_${Date.now()}`,
+      latitude: reportCoords.latitude,
+      longitude: reportCoords.longitude,
+      speedLimit: speedLimit,
+      type: type,
+    };
+
+    // UI Updates Síncronos
+    setSuccessMessage("Radar reportado com sucesso! ✅\n\n obrigado por ajudar!");
+    setShowSuccessModal(true);
+    setRadars(prev => [tempRadar, ...prev]);
+    if (isNavigating) {
+      setFilteredRadars(prev => [tempRadar, ...prev]);
+    }
+    setReportSpeedLimit("");
+    setReportRadarType("móvel");
+
+    // Auto-dismiss
+    setTimeout(() => {
+      if (isMountedRef.current) setShowSuccessModal(false);
+    }, 4000);
+
+    // API em background
+    reportRadar({
+      latitude: reportCoords.latitude,
+      longitude: reportCoords.longitude,
+      speedLimit: speedLimit,
+      type,
+    }).then(realRadar => {
+      if (!isMountedRef.current) return;
+      if (realRadar.id !== tempRadar.id) {
+        setRadars(prev => prev.map(r => r.id === tempRadar.id ? realRadar : r));
+      }
+    }).catch(err => {
+      console.error("Erro no reporte background:", err);
+    });
   };
 
   // Sincronizar radares reportados recentemente (em tempo real)
@@ -939,7 +932,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
         clearInterval(syncIntervalRef.current);
       }
     };
-  }, [isNavigating, syncRecentRadars]);
+  }, [isNavigating]); // REMOVIDO syncRecentRadars para evitar loop infinito
 
   // Carregar MapboxNavigation só quando entrar em navegação (evita "Requiring unknown module 'undefined'" no bundle)
   useEffect(() => {
@@ -955,9 +948,11 @@ export default function Home({ onOpenEditor }: HomeProps) {
     }
   }, [isNavigating, MapboxNavComponent]);
 
-  // Manter refs atualizados para o handler do Socket.IO (evitar closure obsoleta durante navegação)
+  // Manter refs atualizados para os handlers (evitar closure obsoleta)
   isNavigatingRef.current = isNavigating;
   routeDataRef.current = routeData;
+  filteredRadarsRef.current = filteredRadars;
+  currentLocationRef.current = currentLocation;
 
   // Preparar radares para o MapboxNavigation (sempre calcular, mesmo quando não está navegando)
   const mapboxRadars = useMemo(() => {
@@ -972,185 +967,77 @@ export default function Home({ onOpenEditor }: HomeProps) {
     }));
   }, [filteredRadars, radars]);
 
-  // WebSocket nativo: radares em tempo real para todos (mapa e navegação), inclusive durante navegação
+  // WebSocket nativo: radares em tempo real (Sincronização entre usuários/dispositivos)
   useEffect(() => {
     let ws: WebSocket | null = null;
-    let reconnectTimeout: NodeJS.Timeout | null = null;
-    let reconnectAttempts = 0;
-    const maxReconnectAttempts = 5;
+    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 
-    const connectWebSocket = () => {
+    const connect = () => {
       try {
-        const wsUrl = API_BASE_URL.replace(/^https?:\/\//, "").replace(
-          /\/$/,
-          ""
-        );
-        const protocol = API_BASE_URL.startsWith("https") ? "wss" : "ws";
-        ws = new WebSocket(`${protocol}://${wsUrl}/ws`);
+        // ws://72.60.247.18:3000/ws
+        const wsUrl = API_BASE_URL.replace("http://", "ws://") + "/ws";
+        console.log(`🔌 Conectando ao WebSocket: ${wsUrl}`);
+        ws = new WebSocket(wsUrl);
 
         ws.onopen = () => {
-          console.log(
-            "WebSocket conectado para alertas de radares em tempo real"
-          );
-          reconnectAttempts = 0;
+          console.log("✅ WebSocket conectado");
         };
 
-        ws.onmessage = (event) => {
+        ws.onmessage = (e) => {
+          if (!isMountedRef.current) return;
           try {
-            const message = JSON.parse(event.data);
-            const { event: eventName, data: payload } = message;
+            const { event, data } = JSON.parse(e.data);
+            console.log(`📡 WebSocket Evento: ${event}`, data);
 
-            if (eventName === "radar:new") {
-              const radar: Radar = {
-                id: payload.id,
-                latitude: payload.latitude,
-                longitude: payload.longitude,
-                speedLimit: payload.velocidadeLeve ?? undefined,
-                type: payload.tipoRadar ?? "unknown",
-                situacao: payload.situacao ?? undefined,
-              };
-
-              /* console.log(
-                `📡 WebSocket: Novo radar recebido durante ${isNavigatingRef.current ? "navegação" : "mapa"
-                }:`,
-                radar.id
-              ); */
-
-              // Sempre adicionar ao estado principal de radares
-              setRadars((prev) => {
-                if (prev.some((r) => r.id === radar.id)) {
-                  return prev; // Já existe, não adicionar novamente
-                }
-                return [...prev, radar];
-              });
-
-              // Durante navegação: filtrar pela rota e adicionar ao filteredRadars
-              const nav = isNavigatingRef.current;
-              const rd = routeDataRef.current;
-              if (nav && rd?.route?.geometry?.coordinates) {
-                const routePoints = rd.route.geometry.coordinates.map(
-                  (c: number[]) => ({ latitude: c[1], longitude: c[0] })
-                );
-                const near = filterRadarsNearRoute([radar], routePoints, 100);
-                if (near.length > 0) {
-                  /* console.log(
-                    `✅ Radar ${radar.id} está próximo à rota, adicionando ao filteredRadars`
-                  ); */
-                  setFilteredRadars((prev) => {
-                    if (prev.some((r) => r.id === radar.id)) {
-                      return prev; // Já existe
-                    }
-                    const updated = [...prev, radar];
-                    /* console.log(
-                      `📊 filteredRadars atualizado: ${updated.length} radares`
-                    ); */
-                    return updated;
-                  });
-                } else {
-                  /* console.log(
-                    `⚠️ Radar ${radar.id} não está próximo à rota (distância > 100m)`
-                  ); */
-                }
-              } else {
-                // Não está navegando: adicionar diretamente ao filteredRadars
-                /* console.log(
-                  `✅ Adicionando radar ao filteredRadars (não está navegando)`
-                ); */
-                setFilteredRadars((prev) => {
-                  if (prev.some((r) => r.id === radar.id)) {
-                    return prev; // Já existe
-                  }
-                  return [...prev, radar];
+            switch (event) {
+              case "radar:new":
+                setRadars((prev) => {
+                  if (prev.some((r) => r.id === data.id)) return prev;
+                  return [data, ...prev];
                 });
-              }
-            } else if (eventName === "radar:update") {
-              const radar: Radar = {
-                id: payload.id,
-                latitude: payload.latitude,
-                longitude: payload.longitude,
-                speedLimit: payload.velocidadeLeve ?? undefined,
-                type: payload.tipoRadar ?? "unknown",
-                situacao: payload.situacao ?? undefined,
-              };
-
-              // console.log(`📡 WebSocket: Radar atualizado:`, radar.id);
-
-              // Atualizar em ambos os estados
-              setRadars((prev) =>
-                prev.map((r) => (r.id === radar.id ? radar : r))
-              );
-              setFilteredRadars((prev) => {
-                const updated = prev.map((r) =>
-                  r.id === radar.id ? radar : r
-                );
-                /* console.log(
-                  `📊 filteredRadars atualizado após update: ${updated.length} radares`
-                ); */
-                return updated;
-              });
-            } else if (eventName === "radar:delete") {
-              const radarId = payload.id;
-              // console.log(`📡 WebSocket: Radar deletado/inativado:`, radarId);
-
-              // Remover de ambos os estados
-              setRadars((prev) => {
-                const updated = prev.filter((r) => r.id !== radarId);
-                /* console.log(
-                  `🗑️ Radar removido de radars: ${updated.length} radares restantes`
-                ); */
-                return updated;
-              });
-              setFilteredRadars((prev) => {
-                const updated = prev.filter((r) => r.id !== radarId);
-                /* console.log(
-                  `🗑️ Radar removido de filteredRadars: ${updated.length} radares restantes`
-                ); */
-                return updated;
-              });
-            } else if (eventName === "connected") {
-              console.log("✅ WebSocket conectado:", payload.message);
+                break;
+              case "radar:update":
+                setRadars((prev) => prev.map((r) => (r.id === data.id ? data : r)));
+                setFilteredRadars((prev) => prev.map((r) => (r.id === data.id ? data : r)));
+                break;
+              case "radar:delete":
+                setRadars((prev) => prev.filter((r) => r.id !== data.id));
+                setFilteredRadars((prev) => prev.filter((r) => r.id !== data.id));
+                setNearbyRadarIds((prev) => {
+                  if (prev.has(data.id)) {
+                    const newSet = new Set(prev);
+                    newSet.delete(data.id);
+                    return newSet;
+                  }
+                  return prev;
+                });
+                break;
             }
-          } catch (e) {
-            console.warn("Erro ao processar mensagem WebSocket:", e);
+          } catch (err) {
+            console.error("Erro ao processar mensagem WebSocket:", err);
           }
-        };
-
-        ws.onerror = (error) => {
-          console.warn("Erro WebSocket:", error);
         };
 
         ws.onclose = () => {
-          console.log("WebSocket desconectado");
-          ws = null;
-
-          // Tentar reconectar
-          if (reconnectAttempts < maxReconnectAttempts) {
-            reconnectAttempts++;
-            const delay = Math.min(
-              1000 * Math.pow(2, reconnectAttempts),
-              30000
-            ); // Backoff exponencial, max 30s
-            reconnectTimeout = setTimeout(() => {
-              console.log(
-                `Tentando reconectar WebSocket (tentativa ${reconnectAttempts}/${maxReconnectAttempts})...`
-              );
-              connectWebSocket();
-            }, delay);
+          console.log("❌ WebSocket desconectado");
+          if (isMountedRef.current) {
+            reconnectTimeout = setTimeout(connect, 5000);
           }
         };
-      } catch (e) {
-        console.warn("WebSocket não disponível para alertas em tempo real:", e);
+
+        ws.onerror = (e) => {
+          console.error("❌ Erro no WebSocket:", e);
+        };
+      } catch (err) {
+        console.error("Erro ao iniciar WebSocket:", err);
       }
     };
 
-    connectWebSocket();
+    connect();
 
     return () => {
+      if (ws) ws.close();
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
-      if (ws) {
-        ws.close();
-        ws = null;
-      }
     };
   }, []);
 

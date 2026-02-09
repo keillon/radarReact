@@ -1,23 +1,9 @@
 export const API_BASE_URL = "http://72.60.247.18:3000";
 
-export interface Radar {
-  id: string;
-  latitude: number;
-  longitude: number;
-  speedLimit?: number;
-  type?: string;
-  situacao?: string | null;
-}
+import { createTempRadar, saveReportedRadarLocally } from "./reportedRadars";
+import type { NearRouteRequest, Radar } from "./types";
+export type { LatLng, NearRouteRequest, Radar } from "./types";
 
-export interface RoutePoint {
-  latitude: number;
-  longitude: number;
-}
-
-export interface NearRouteRequest {
-  route: RoutePoint[];
-  radius?: number; // em metros, padrão 100
-}
 
 // Interface para a resposta da API (formato real retornado)
 interface ApiRadarResponse {
@@ -274,16 +260,8 @@ export const reportRadar = async (
 
     const radar = mapApiRadarToRadar(data.radar || data);
 
-    // Salvar também localmente para backup
-    try {
-      const { saveReportedRadarLocally } = await import("./reportedRadars");
-      await saveReportedRadarLocally(radar);
-    } catch (localError) {
-      console.warn(
-        "Erro ao salvar radar localmente (não crítico):",
-        localError,
-      );
-    }
+    // Salvar localmente em BACKGROUND (não bloquear retorno)
+    saveReportedRadarLocally(radar).catch(e => console.warn("Erro no backup local:", e));
 
     return radar;
   } catch (error: any) {
@@ -291,29 +269,22 @@ export const reportRadar = async (
     if (
       error?.message?.includes("Network") ||
       error?.message?.includes("timeout") ||
-      error?.message?.includes("Failed to fetch")
+      error?.message?.includes("Failed to fetch") ||
+      error?.message?.includes("Indisponível")
     ) {
       console.log(`⚠️ Erro de rede ao reportar radar, criando localmente`);
 
-      try {
-        const { createTempRadar, saveReportedRadarLocally } =
-          await import("./reportedRadars");
+      const tempRadar = createTempRadar({
+        latitude: request.latitude,
+        longitude: request.longitude,
+        speedLimit: request.speedLimit,
+        type: request.type || "reportado",
+      });
 
-        const tempRadar = createTempRadar({
-          latitude: request.latitude,
-          longitude: request.longitude,
-          speedLimit: request.speedLimit,
-          type: request.type || "reportado",
-        });
-
-        await saveReportedRadarLocally(tempRadar);
-        console.log(
-          `✅ Radar criado localmente devido a erro de rede: ${tempRadar.id}`,
-        );
-        return tempRadar;
-      } catch (localError) {
-        console.error("Erro ao criar radar localmente:", localError);
-      }
+      // Salvar localmente em background
+      saveReportedRadarLocally(tempRadar).catch(e => console.warn("Erro no save local fallback:", e));
+      
+      return tempRadar;
     }
 
     const errorDetails = {

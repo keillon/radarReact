@@ -17,8 +17,8 @@ import {
   TouchableOpacity,
   View
 } from "react-native";
-import { Radar } from "../services/api";
 import { MAPBOX_TOKEN, NavigationStep, RouteFeature } from "../services/mapbox";
+import { Radar } from "../services/types";
 
 Mapbox.setAccessToken(MAPBOX_TOKEN);
 

@@ -13,11 +13,12 @@ import {
 import Geolocation from "react-native-geolocation-service";
 import Map from "../components/Map";
 import {
+  API_BASE_URL,
   Radar,
   deleteRadar,
   getRadarsNearLocation,
   reportRadar,
-  updateRadar,
+  updateRadar
 } from "../services/api";
 
 const DEFAULT_CENTER = { latitude: -23.5505, longitude: -46.6333 };
@@ -50,27 +51,27 @@ export default function RadarEditorScreen({
     label: string;
     icon: number;
   }[] = [
-    {
-      value: "reportado",
-      label: "Reportado",
-      icon: require("../assets/images/radar.png"),
-    },
-    {
-      value: "fixo",
-      label: "Radar Fixo",
-      icon: require("../assets/images/placa60.png"),
-    },
-    {
-      value: "móvel",
-      label: "Radar Móvel",
-      icon: require("../assets/images/radarMovel.png"),
-    },
-    {
-      value: "semaforo",
-      label: "Semáforo c/ Radar",
-      icon: require("../assets/images/radarSemaforico.png"),
-    },
-  ];
+      {
+        value: "reportado",
+        label: "Reportado",
+        icon: require("../assets/images/radar.png"),
+      },
+      {
+        value: "fixo",
+        label: "Radar Fixo",
+        icon: require("../assets/images/placa60.png"),
+      },
+      {
+        value: "móvel",
+        label: "Radar Móvel",
+        icon: require("../assets/images/radarMovel.png"),
+      },
+      {
+        value: "semaforo",
+        label: "Semáforo c/ Radar",
+        icon: require("../assets/images/radarSemaforico.png"),
+      },
+    ];
 
   const loadRadars = useCallback(async () => {
     setLoading(true);
@@ -101,9 +102,65 @@ export default function RadarEditorScreen({
           longitude: pos.coords.longitude,
         });
       },
-      () => {},
+      () => { },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
     );
+  }, []);
+
+  // WebSocket sync para o editor
+  useEffect(() => {
+    let ws: WebSocket | null = null;
+    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+    let isMounted = true;
+
+    const connect = () => {
+      try {
+        const wsUrl = API_BASE_URL.replace("http://", "ws://") + "/ws";
+        console.log(`🔌 Editor WebSocket: ${wsUrl}`);
+        ws = new WebSocket(wsUrl);
+
+        ws.onmessage = (e) => {
+          if (!isMounted) return;
+          try {
+            const { event, data } = JSON.parse(e.data);
+            switch (event) {
+              case "radar:new":
+                setRadars((prev) => {
+                  if (prev.some((r) => r.id === data.id)) return prev;
+                  return [data, ...prev];
+                });
+                break;
+              case "radar:update":
+                setRadars((prev) => prev.map((r) => (r.id === data.id ? data : r)));
+                // No editor local, não queremos resetar o selecionado se for só update de campo,
+                // mas se mudou o objeto inteiro, atualizamos.
+                break;
+              case "radar:delete":
+                setRadars((prev) => prev.filter((r) => r.id !== data.id));
+                break;
+            }
+          } catch (err) {
+            console.error("Erro no WebSocket do Editor:", err);
+          }
+        };
+
+        ws.onclose = () => {
+          if (isMounted) {
+            reconnectTimeout = setTimeout(connect, 5000);
+          }
+        };
+      } catch (err) {
+        console.error("Erro ao iniciar WebSocket no Editor:", err);
+      }
+    };
+
+    connect();
+
+    return () => {
+      isMounted = false;
+      if (ws) ws.close();
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+    };
   }, []);
 
   const handleRadarPress = (radar: Radar) => {
@@ -436,15 +493,15 @@ export default function RadarEditorScreen({
           <Text style={styles.panelTitle}>Radar selecionado</Text>
           {(selectedRadar.situacao === "Inativo" ||
             selectedRadar.situacao === "inativo") && (
-            <Text
-              style={[
-                styles.panelSubtitle,
-                { fontWeight: "600", color: "#6b7280" },
-              ]}
-            >
-              Inativo
-            </Text>
-          )}
+              <Text
+                style={[
+                  styles.panelSubtitle,
+                  { fontWeight: "600", color: "#6b7280" },
+                ]}
+              >
+                Inativo
+              </Text>
+            )}
           <Text style={styles.panelSubtitle}>
             {selectedRadar.latitude.toFixed(5)},{" "}
             {selectedRadar.longitude.toFixed(5)}
@@ -492,14 +549,14 @@ export default function RadarEditorScreen({
             </TouchableOpacity>
             {(selectedRadar.situacao === "Inativo" ||
               selectedRadar.situacao === "inativo") && (
-              <TouchableOpacity
-                style={[styles.button, { backgroundColor: "#10b981" }]}
-                onPress={handleActivate}
-                disabled={saving}
-              >
-                <Text style={styles.buttonPrimaryText}>Ativar</Text>
-              </TouchableOpacity>
-            )}
+                <TouchableOpacity
+                  style={[styles.button, { backgroundColor: "#10b981" }]}
+                  onPress={handleActivate}
+                  disabled={saving}
+                >
+                  <Text style={styles.buttonPrimaryText}>Ativar</Text>
+                </TouchableOpacity>
+              )}
           </View>
           <TouchableOpacity
             style={[styles.button, styles.buttonSecondary, { marginTop: 8 }]}

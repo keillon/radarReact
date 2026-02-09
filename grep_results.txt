@@ -1,0 +1,233 @@
+38:      throw new Error("react-native-geolocation-service não disponível");
+61:// TTS: carregar só no primeiro uso para evitar "Requiring unknown module 'undefined'" no startup
+62:let TtsCache: any = undefined; // undefined = ainda não tentou; null = tentou e falhou
+69:    console.warn("react-native-tts não está disponível:", error);
+93:// Função para calcular distância entre dois pontos (Haversine)
+101:  const φ1 = (lat1 * Math.PI) / 180;
+102:  const φ2 = (lat2 * Math.PI) / 180;
+103:  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+104:  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+107:    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+108:    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+114:// Função auxiliar para calcular distância ponto-reta (Cross-Track Distance)
+125:// OTIMIZAÇÃO: Função de filtro espacial (Grid) para evitar O(N*M)
+127:const GRID_SIZE = 0.01; // ~1.1km por célula
+135:// Função para checar se o radar está na rota de forma eficiente
+146:  // OTIMIZAÇÃO: Checar apenas segmentos próximos ao ponto do radar (Bounding Box simples)
+147:  // Como agora o radar vem de um set já filtrado espacialmente na rota de forma global,
+177:// Função para calcular distância perpendicular de um ponto a um segmento de linha
+209:// Função para calcular distância de um ponto até a rota (distância perpendicular mais próxima)
+215:    // Se não há rota, retornar distância grande
+221:  // Verificar distância perpendicular para cada segmento da rota
+235:// --- Lógica robusta estilo Waze: distância ao longo da rota com projeção contínua ---
+237:/** Distâncias cumulativas desde o início da rota (em metros). cumulative[0]=0, cumulative[i]=soma dos segmentos 0..i-1 */
+254: * Projeta um ponto na rota e retorna a distância cumulativa (em metros) até essa projeção.
+255: * Usa projeção no segmento mais próximo (não só vértices).
+296: * Distância ao longo da rota do usuário até o radar (em metros).
+297: * Positiva = radar à frente; negativa ou zero = já passou.
+298: * Estilo Waze: projeção contínua + cumulativas.
+316:  // Histerese 5m: marcar "passou" quando < 5m para evitar flicker por ruído do GPS
+324:/** Arredonda distância para múltiplo de 10m (ex.: 287 -> 290, 283 -> 280), mínimo 0. */
+330:// Função OTIMIZADA para filtrar radares próximos à rota usando Indexação Espacial (Grid)
+331:// O(N + M) ao invés de O(N * M)
+354:  // Usamos um grid de 0.01 (~1km), então apenas as células vizinhas bastam
+357:  // 2. Percorrer a rota e checar apenas células do Grid afetadas (O(M))
+361:    // Checar célula atual e vizinhas (3x3 grid around point)
+375:            // Filtro rápido de Bounding Box antes do cálculo de distância real
+379:              // Se tivermos um próximo ponto na rota, checamos distância ao segmento
+391:                // Último ponto da rota, checamos distância simples
+406:  console.log(`⏱️ Filtro de rota otimizado: ${endT - startT}ms para ${radars.length} radares e ${routePoints.length} pontos.`);
+429:  // OTIMIZAÇÃO: VisibleRadars removido por solicitação do usuário.
+431:  // pois o Cluster nativo e as camadas persistentes já garantem a fluidez.
+438:  const [nearbyRadarIds, setNearbyRadarIds] = useState<Set<string>>(new Set()); // IDs dos radares próximos para animação
+460:    "reportado" | "fixo" | "móvel" | "semaforo"
+461:  >("móvel");
+480:    value: "reportado" | "fixo" | "móvel" | "semaforo";
+495:        value: "móvel",
+496:        label: "Radar Móvel",
+501:        label: "Semáforo c/ Radar",
+513:  const alertedRadarIds = useRef<Set<string>>(new Set()); // Rastrear radares já alertados (apenas uma vez)
+514:  const passedRadarIds = useRef<Set<string>>(new Set()); // Rastrear radares que já foram passados
+522:  const postPassTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null); // Timer para modal pós-passagem
+526:  const audioPlayerRef = useRef<any>(null); // Referência para áudio nativo do Android/iOS
+527:  const isPlayingRadarSound = useRef(false); // Flag para controle de reprodução
+528:  const [showingPassedRadar, setShowingPassedRadar] = useState(false); // Estado pós-passagem
+536:    // Configurar TTS se disponível (aguardar inicialização do módulo nativo) — carregado sob demanda
+574:    // Limpar áudio ao desmontar (não precisa carregar nada, só limpar)
+585:      // Parar qualquer áudio que esteja tocando
+601:            title: "Permissão negada",
+602:            message: "É necessário permitir acesso à localização para usar o app",
+615:          console.log(`📍 Localização obtida:`, loc);
+617:          setOrigin(loc); // Origem sempre será a localização atual
+619:          // Buscar radares imediatamente quando obtém localização
+623:                `✅ ${nearbyRadars.length} radares encontrados na inicialização`
+628:              console.error("Erro ao buscar radares na inicialização:", error);
+632:          console.error("Erro ao obter localização:", error);
+642:      console.error("Erro ao solicitar permissão:", error);
+650:        title: "Localização",
+651:        message: "Aguardando localização atual...",
+661:        message: "Por favor, digite um endereço de destino",
+672:    // Animação de entrada do loading (simplificada)
+680:      // Se já temos coordenadas de destino (selecionado do autocomplete), usar diretamente
+681:      // Caso contrário, fazer geocode do texto digitado
+688:      // Buscar rota com instruções (o SDK vai calcular a rota internamente, mas buscamos para obter os pontos para radares)
+701:      // Limpar estado de radares para nova navegação (cada viagem começa "limpa")
+707:      // Iniciar navegação IMEDIATAMENTE (não esperar radares)
+710:      // NOVIDADE: Filtrar imediatamente os radares que já temos na memória para mostrar algo instantâneo
+726:      // Buscar radares em BACKGROUND (não bloqueia navegação)
+732:          // Filtrar radares que estão realmente próximos da rota
+735:          // UNIR: Manter o que já temos localmente (especialmente reportes recentes) e adicionar os novos
+749:            `✅ ${filteredFromApi.length} radares da API injetados na lista (total filtrado)`
+753:          // Fallback simples: usar localização atual se busca falhar
+764:              console.log(`✅ ${filtered.length} radares (fallback)`);
+772:      // Resetar animação em caso de erro
+784:        message: error.message || "Não foi possível calcular a rota. Verifique o endereço digitado.",
+793:  // Buscar radares quando a localização muda (mapa normal)
+797:    // Buscar radares próximos à localização atual
+806:        console.log(`✅ ${nearbyRadars.length} radares encontrados próximos`);
+815:  // Monitorar localização apenas quando não está navegando (o SDK cuida durante navegação)
+833:        console.error("Erro ao monitorar localização:", error);
+865:  // Reportar radar na localização atual (modal: velocidade + tipo).
+866:  // Futuro: mesma lógica pode ser usada para reportar acidentes, trânsito, etc. (estilo Waze) — por ora só radar.
+869:    type?: "reportado" | "fixo" | "móvel" | "semaforo";
+876:    // Validação: velocidade obrigatória e máximo 120 km/h
+878:      Alert.alert("Atenção", "Por favor, selecione a velocidade do radar");
+882:      Alert.alert("Atenção", "A velocidade máxima permitida é 120 km/h");
+893:      console.log("📍 [Report] Iniciando reporte. Modo:", reportLocationMode);
+898:          console.log("📍 [Report] USANDO PIN DO MAPA:", reportCoords);
+900:          Alert.alert("Erro", "Por favor, selecione uma localização no mapa primeiro");
+905:        // Modo padrão: localização atual
+908:          console.log("📍 [Report] USANDO GPS ATUAL:", reportCoords);
+910:          Alert.alert("Erro", "Sua localização atual não está disponível. Tente marcar no mapa.");
+917:        Alert.alert("Erro", "Localização inválida para o reporte.");
+922:      console.log(`📡 [Report] Enviando para API: Tipo=${type}, Velocidade=${speedLimit}, Lat=${reportCoords.latitude}, Lon=${reportCoords.longitude}`);
+924:      // OTIMIZAÇÃO: Reporte OTIMISTA (Instantâneo)
+934:      setSuccessMessage("Radar reportado com sucesso! ✅\n\n obrigado por ajudar a melhorar o App!");
+937:      // Auto-dismiss após 4 segundos
+946:      // 3. Resetar formulário
+948:      setReportRadarType("móvel");
+951:      // 4. Chamar API em background (não bloquear UI)
+958:        // Substituir o temporário pelo real se o ID mudou
+967:        // Opcional: remover do mapa se falhar miseravelmente, mas melhor deixar visível localmente
+970:      return; // Sair mais cedo, o trabalho já foi feito de forma otimista
+981:          "Servidor indisponível",
+982:          "Não foi possível reportar o radar. Verifique sua conexão e tente novamente."
+989:        error.message || "Não foi possível reportar o radar. Tente novamente."
+1004:        console.log(`🔄 ${recentRadars.length} novos radares sincronizados`);
+1006:        // Adicionar novos radares à lista
+1017:        // Se estiver navegando, também adicionar aos radares filtrados
+1054:  // Iniciar sincronização em tempo real quando começar a navegar
+1065:      // Parar sincronização quando parar de navegar
+1079:  // Carregar MapboxNavigation só quando entrar em navegação (evita "Requiring unknown module 'undefined'" no bundle)
+1089:      console.warn("MapboxNavigation não disponível:", e);
+1093:  // Manter refs atualizados para o handler do Socket.IO (evitar closure obsoleta durante navegação)
+1097:  // Preparar radares para o MapboxNavigation (sempre calcular, mesmo quando não está navegando)
+1099:    // Usar lista COMPLETA por solicitação do usuário.
+1110:  // WebSocket nativo: radares em tempo real para todos (mapa e navegação), inclusive durante navegação
+1149:                `📡 WebSocket: Novo radar recebido durante ${isNavigatingRef.current ? "navegação" : "mapa"
+1157:                  return prev; // Já existe, não adicionar novamente
+1162:              // Durante navegação: filtrar pela rota e adicionar ao filteredRadars
+1172:                    `✅ Radar ${radar.id} está próximo à rota, adicionando ao filteredRadars`
+1176:                      return prev; // Já existe
+1180:                      `📊 filteredRadars atualizado: ${updated.length} radares`
+1186:                    `⚠️ Radar ${radar.id} não está próximo à rota (distância > 100m)`
+1190:                // Não está navegando: adicionar diretamente ao filteredRadars
+1192:                  `✅ Adicionando radar ao filteredRadars (não está navegando)`
+1196:                    return prev; // Já existe
+1211:              // console.log(`📡 WebSocket: Radar atualizado:`, radar.id);
+1222:                  `📊 filteredRadars atualizado após update: ${updated.length} radares`
+1228:              // console.log(`📡 WebSocket: Radar deletado/inativado:`, radarId);
+1234:                  `🗑️ Radar removido de radars: ${updated.length} radares restantes`
+1241:                  `🗑️ Radar removido de filteredRadars: ${updated.length} radares restantes`
+1246:              console.log("✅ WebSocket conectado:", payload.message);
+1277:        console.warn("WebSocket não disponível para alertas em tempo real:", e);
+1292:  // Memoizar conversão de Set para Array para evitar nova referência a cada render
+1295:  // Handler para mudança de localização (memoizado)
+1297:    // Verificação de null para evitar NullPointerException
+1309:      // Debounce de atualização de localização para evitar movimentos erráticos
+1314:      // Aumentar debounce para 1 segundo para evitar atualizações muito frequentes
+1322:          // Só atualizar se a localização mudou significativamente (mais de 20 metros)
+1331:            // Se a distância for muito pequena (< 20m), não atualizar
+1336:            // Verificar se a mudança é muito grande (possível erro do GPS)
+1337:            // Se mudou mais de 100m em menos de 2 segundos, provavelmente é erro
+1343:                "⚠️ Mudança de localização muito grande, ignorando (possível erro GPS)"
+1352:          console.error("Erro ao processar localização:", error);
+1356:      // Buscar radares próximos durante navegação REMOVIDO por solicitação
+1360:      // Função auxiliar para esconder modal com animações
+1386:      // Verificar distância até cada radar e alertar (com debounce)
+1449:              // Já passou deste radar? Ignorar
+1459:              // ✅ CHECK 1: Radar deve estar EXATAMENTE na linha da rota (≤ 5m perpendicular)
+1462:                // console.log(`❌ Radar ${radar.id} rejeitado - não está na linha da rota`);
+1463:                return; // Rejeitar - não está na linha traçada
+1466:              // ✅ CHECK 2: Distância perpendicular à rota deve ser ≤ 5m
+1473:                // console.log(`❌ Radar ${radar.id} rejeitado - ${routeDistance.toFixed(1)}m perpendicular (máx 5m)`);
+1477:              // ✅ CHECK 3: Calcular distância AO LONGO da rota (projeção)
+1484:              // Se já passou, marcar e ignorar
+1487:                // console.log(`✅ Radar ${radar.id} marcado como passado`);
+1493:              // ✅ CHECK 4: Radar deve estar à frente (> 0m) e dentro do alcance de alerta (< 500m)
+1495:                // console.log(`❌ Radar ${radar.id} rejeitado - ${distanceAlongRoute.toFixed(0)}m ao longo da rota (deve estar entre 0-500m)`);
+1496:                return; // Muito longe ou atrás
+1499:              // ✅ CHECK 5: Selecionar o radar mais próximo AO LONGO da rota
+1501:                // console.log(`✅ Radar ${radar.id} selecionado - ${distanceAlongRoute.toFixed(0)}m ao longo da rota, ${routeDistance.toFixed(1)}m perpendicular`);
+1586:                          // Esconder modal após 5 segundos
+1591:                      // Guardar referência para limpeza
+1638:                  radarType = "Radar Semafórico";
+1640:                  radarType = "Radar Móvel";
+1651:                  message = `Atenção! ${radarType} a ${Math.round(
+1659:                  message = `Atenção! ${radarType} muito próximo`;
+1664:                  message += `. Limite ${speedLimit} quilômetros por hora`;
+1676:              // Controlar reprodução de som baseado na distância
+1677:              // Usar TTS para fazer "beep" de alerta ao invés de arquivo MP3
+1679:                // Tocar som de alerta quando está entre 0m e 20m
+1693:                      console.log('🔊 Alerta sonoro de radar iniciado');
+1703:                  console.log('🔇 Alerta sonoro de radar parado');
+1740:        console.log("Evento routeChanged sem geometria válida:", event);
+1744:      console.log("🛣️ Rota recalculada! Atualizando radares...");
+1748:        // O evento pode vir como string JSON (nossa conversão nativa) ou objeto direto
+1749:        // Tentamos parsear se for string, senão assumimos que é objeto ou array
+1751:          // Verificar se é Polyline (não começa com { ou [) - Fallback se a conversão nativa falhou
+1753:            console.warn("⚠️ Recebido Polyline em vez de GeoJSON. A conversão nativa pode ter falhado.");
+1754:            // Aqui idealmente decodificaríamos Polyline no JS, mas melhor garantir o nativo.
+1755:            // A modificação no MapboxNavigationView.kt deve garantir que isso venha como GeoJSON.
+1800:      // Buscar radares próximos ao novo caminho (usando API se necessário ou cache local)
+1809:      console.log(`✅ ${filtered.length} radares encontrados na nova rota`);
+1813:      // Atualizar lista principal também para garantir consistência
+1821:      console.error("Erro ao processar mudança de rota:", error);
+1839:      message: "Você chegou ao destino!",
+1875:      title: "Cancelar Navegação",
+1879:      cancelText: "Não",
+1894:      console.error("Erro na navegação:", error);
+1898:        "Erro na navegação";
+1899:      setModalConfig({ visible: true, title: "Erro de Navegação", message: errorMessage, type: "error" });
+1901:      console.error("Erro ao processar erro de navegação:", e);
+1917:      // Pré-aquecer ou validar dados se necessário
+1922:  // Simplificado para evitar erros de renderização
+1988:      {/* Animação de loading durante preparação da navegação */}
+2007:            <Text style={styles.loadingText}>Preparando navegação...</Text>
+2017:              <Text style={styles.loadingText}>Erro ao carregar navegação</Text>
+2024:              {/* Botão de reportar radar - abre modal com velocidade e tipo */}
+2047:              <Text style={styles.loadingText}>Carregando navegação...</Text>
+2081:            `🎯 Renderizando modal: isNavigating=${isNavigating}, nearestRadar=${!!nearestRadar}, distance=${nearestRadar.distance
+2113:                    ? "rgba(255,255,255,1)" // Transparente quando muito próximo
+2115:                      ? "rgba(255,255,255,1)" // Transparente quando próximo
+2145:                  if (type.includes("semaforo")) typeName = "Radar Semafórico";
+2146:                  else if (type.includes("movel")) typeName = "Radar Móvel";
+2150:                    ? `${typeName} Próximo!`
+2166:                        {" • "}
+2187:          setReportRadarType("móvel");
+2218:              {reportStep === 1 && "O que você está vendo?"}
+2220:              {reportStep === 3 && "Onde está localizado?"}
+2226:              {reportStep === 3 && "Escolha a localização"}
+2321:                      Usar Localização Atual
+2368:                  <Text style={styles.reportModalCancelText}>← Voltar</Text>
+2384:                  <Text style={styles.reportModalSubmitText}>Próximo →</Text>
+2393:                    {isReportingRadar ? "Enviando..." : "✓ Reportar"}
+2417:                    console.log("🗺️ [Home-MapPicker] Novo centro capturado:", coords);
+2443:                      console.log("🗺️ [Home-MapPicker] Confirmando localização:", mapPickerCenter);
+2449:                    <Text style={{ fontSize: 16, fontWeight: "600", color: "#fff" }}>Confirmar Localização</Text>
+2458:      {/* Modal: Erro ao obter localização */}
+2477:                Ops! Localização Indisponível
+2481:              Não conseguimos obter sua posição atual. Por favor, verifique se o seu GPS está ligado e tente novamente.
+2525:      {/* Modal Customizado para Mensagens e Confirmações */}
+2570:                    <Text style={styles.customModalCancelButtonText}>{modalConfig.cancelText || "Não"}</Text>
+2607:    // Acima do trip progress: quando o radar aparece a câmera sobe e o trip progress fica embaixo
