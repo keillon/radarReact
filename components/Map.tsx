@@ -35,7 +35,7 @@ export const getClosestPlacaName = (speed: number | undefined): string => {
 };
 
 export const radarImages: Record<string, any> = {
-  radar: require("../assets/images/radar.png"),
+  // radar: require("../assets/images/radar.png"), // Removed usage
   radarFixo: require("../assets/images/radarFixo.png"),
   radarMovel: require("../assets/images/radarMovel.png"),
   radarSemaforico: require("../assets/images/radarSemaforico.png"),
@@ -198,7 +198,6 @@ export default function Map({
 
   /** Tamanhos de ícone por tipo (ajuste aqui para mudar no mapa). */
   const RADAR_ICON_SIZES: Record<string, number> = {
-    radar: 0.05,
     radarMovel: 0.05,
     radarSemaforico: 0.05,
     radarFixo: 0.05,
@@ -206,13 +205,13 @@ export default function Map({
   };
   const getIconSizeForIcon = (iconImage: string): number => {
     if (iconImage.startsWith("placa")) return RADAR_ICON_SIZES.placa ?? 0.24;
-    return RADAR_ICON_SIZES[iconImage] ?? RADAR_ICON_SIZES.radar ?? 0.2;
+    return RADAR_ICON_SIZES[iconImage] ?? RADAR_ICON_SIZES.radarMovel ?? 0.2;
   };
 
   /** Ícone no mapa: fixo usa placa por velocidade; demais por tipo. */
   const getRadarIconForMap = (radar: Radar): string => {
     const type = radar?.type;
-    if (!type) return "radar";
+    if (!type) return "radarMovel";
     const t = String(type)
       .trim()
       .toLowerCase()
@@ -223,7 +222,7 @@ export default function Map({
     if (t.includes("semaforo") || t.includes("camera"))
       return "radarSemaforico";
     if (t.includes("movel") || t.includes("mobile")) return "radarMovel";
-    return "radar";
+    return "radarMovel";
   };
 
 
@@ -571,7 +570,7 @@ export default function Map({
                 id="radarMarkers"
                 filter={["!", ["has", "point_count"]]}
                 style={{
-                  iconImage: ["coalesce", ["get", "iconImage"], "radar"],
+                  iconImage: ["coalesce", ["get", "iconImage"], "radarMovel"],
                   iconSize: ["coalesce", ["get", "iconSize"], 0.2],
                   iconAllowOverlap: true,
                   iconIgnorePlacement: true,

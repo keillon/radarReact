@@ -32,17 +32,17 @@ function getRadarIconForMap(radar: Radar): string {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
-  if (t.includes("radar") && t.includes("fixo"))
+  if (t.includes("fixo") || t.includes("placa"))
     return getClosestPlacaName(radar.speedLimit);
   if (t.includes("semaforo") && t.includes("camera")) return "radarSemaforico";
   if (t.includes("semaforo") && t.includes("radar")) return "radarSemaforico";
-  if (t.includes("radar") && t.includes("movel")) return "radarMovel";
-  return "radar";
+  if (t.includes("movel") || t.includes("mobile")) return "radarMovel";
+  return "radarMovel";
 }
 
 /** Tamanhos de ícone por tipo (ajuste aqui para mudar no overlay de navegação). */
 const RADAR_ICON_SIZES: Record<string, number> = {
-  radar: 0.2,
+  // radar: 0.2, // Removed
   radarMovel: 0.2,
   radarSemaforico: 0.22,
   radarFixo: 0.24,
@@ -50,12 +50,12 @@ const RADAR_ICON_SIZES: Record<string, number> = {
 };
 function getIconSizeForIcon(iconImage: string): number {
   if (iconImage.startsWith("placa")) return RADAR_ICON_SIZES.placa ?? 0.24;
-  return RADAR_ICON_SIZES[iconImage] ?? RADAR_ICON_SIZES.radar ?? 0.2;
+  return RADAR_ICON_SIZES[iconImage] ?? RADAR_ICON_SIZES.radarMovel ?? 0.2;
 }
 
 const radarImages = {
-  radar: require("../assets/images/radar.png"),
-  radarFixo: require("../assets/images/radarFixo.png"),
+  // radar: require("../assets/images/radar.png"), // Removed usage
+  // radarFixo removed as requested
   radarMovel: require("../assets/images/radarMovel.png"),
   radarSemaforico: require("../assets/images/radarSemaforico.png"),
   placa20: require("../assets/images/placa20.png"),

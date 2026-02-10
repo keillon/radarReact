@@ -126,8 +126,8 @@ const getDistanceFromLine = (pt: any, v: any, w: any) => {
 const isRadarOnRoute = (radar: Radar, route: any) => {
   if (!route || !route.geometry || !route.geometry.coordinates) return true;
 
-  // Reduced from 0.0003 (~30m) to 0.00015 (~15m) to filter parallel streets
-  const MAX_DIST_DEG = 0.00015;
+  // Reduced from 0.00015 (~15m) to 0.00012 (~13m) to STRICTLY filter parallel streets
+  const MAX_DIST_DEG = 0.00012;
   const coordinates = route.geometry.coordinates;
   const radarPt = [radar.longitude, radar.latitude];
 
@@ -139,7 +139,6 @@ const isRadarOnRoute = (radar: Radar, route: any) => {
   }
   return false;
 };
-
 
 // Função para calcular distância perpendicular de um ponto a um segmento de linha
 const distanceToLineSegment = (
@@ -344,7 +343,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
     radar: Radar;
     distance: number;
   } | null>(null);
-  const [filteredRadars, setFilteredRadars] = useState<Radar[]>([]);
+  // REMOVED: filteredRadars - agora mostramos TODOS os radares sem filtro
   const [nearbyRadarIds, setNearbyRadarIds] = useState<Set<string>>(new Set()); // IDs dos radares próximos para animação
   const [isReportingRadar, setIsReportingRadar] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
@@ -434,7 +433,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
   const routeDataRef = useRef<RouteResponse | null>(null);
   const radarCheckDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mapPickerDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const filteredRadarsRef = useRef<Radar[]>([]);
+  // REMOVED: filteredRadarsRef - não mais necessário
   const currentLocationRef = useRef<any>(null);
   const lastRadarFetchRef = useRef<LatLng | null>(null);
   const isMountedRef = useRef(true);
@@ -497,6 +496,8 @@ export default function Home({ onOpenEditor }: HomeProps) {
     };
   }, []);
 
+
+
   const requestLocationPermission = async () => {
     try {
       if (Platform.OS === "android") {
@@ -528,7 +529,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
               console.log(
                 `✅ ${nearbyRadars.length} radares encontrados na inicialização`
               );
-              setRadars(nearbyRadars);
+              setRadars(nearbyRadars.slice(0, 1000));
             })
             .catch((error) => {
               console.error("Erro ao buscar radares na inicialização:", error);
@@ -603,11 +604,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
       // Iniciar navegação IMEDIATAMENTE (não esperar radares)
       setIsNavigating(true);
 
-      // NOVIDADE: Filtrar imediatamente os radares que já temos na memória para mostrar algo instantâneo
-      const localFiltered = filterRadarsNearRoute(radars, routePoints, 200);
-      if (localFiltered.length > 0) {
-        setFilteredRadars(localFiltered);
-      }
+      // TODOS os radares já estão visíveis - não filtramos mais
 
       // Fechar loading rapidamente
       Animated.timing(loadingOpacity, {
@@ -625,24 +622,15 @@ export default function Home({ onOpenEditor }: HomeProps) {
         radius: 250, // Aumentado para 250m para ser mais abrangente
       })
         .then((nearbyRadars) => {
-          // Filtrar radares que estão realmente próximos da rota
-          const filteredFromApi = filterRadarsNearRoute(nearbyRadars, routePoints, 250);
-
           // UNIR: Manter o que já temos localmente (especialmente reportes recentes) e adicionar os novos
           setRadars((prev) => {
             const existingIds = new Set(prev.map(r => r.id));
-            const newRadars = filteredFromApi.filter(r => !existingIds.has(r.id));
-            return [...newRadars, ...prev]; // Prepor novos para prioridade, mas manter locais
-          });
-
-          setFilteredRadars((prev) => {
-            const existingIds = new Set(prev.map(r => r.id));
-            const newFiltered = filteredFromApi.filter(r => !existingIds.has(r.id));
-            return [...newFiltered, ...prev];
+            const newRadars = nearbyRadars.filter(r => !existingIds.has(r.id));
+            return [...newRadars, ...prev].slice(0, 1000); // CAP: 1000 radares
           });
 
           console.log(
-            `✅ ${filteredFromApi.length} radares da API injetados na lista (total filtrado)`
+            `✅ ${nearbyRadars.length} radares da API injetados na lista`
           );
         })
         .catch((error: any) => {
@@ -650,14 +638,8 @@ export default function Home({ onOpenEditor }: HomeProps) {
           console.warn("Erro ao buscar radares na rota, usando fallback:", error);
           getRadarsNearLocation(origin.latitude, origin.longitude, 1000)
             .then((fallbackRadars) => {
-              const filtered = filterRadarsNearRoute(
-                fallbackRadars,
-                routePoints,
-                250
-              );
-              setRadars(prev => [...filtered.filter(r => !prev.some(p => p.id === r.id)), ...prev]);
-              setFilteredRadars(prev => [...filtered.filter(r => !prev.some(p => p.id === r.id)), ...prev]);
-              console.log(`✅ ${filtered.length} radares (fallback)`);
+              setRadars(prev => [...fallbackRadars.filter(r => !prev.some(p => p.id === r.id)), ...prev].slice(0, 1000));
+              console.log(`✅ ${fallbackRadars.length} radares (fallback)`);
             })
             .catch((err) => {
               console.error("Erro no fallback de radares:", err);
@@ -709,7 +691,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
           1000 // raio de 1km
         );
         if (!isMountedRef.current) return;
-        setRadars(nearbyRadars);
+        setRadars(nearbyRadars.slice(0, 1000));
         lastRadarFetchRef.current = currentLocation;
         console.log(`✅ ${nearbyRadars.length} radares encontrados próximos`);
       } catch (error) {
@@ -824,9 +806,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
     setSuccessMessage("Radar reportado com sucesso! ✅\n\n obrigado por ajudar!");
     setShowSuccessModal(true);
     setRadars(prev => [tempRadar, ...prev]);
-    if (isNavigating) {
-      setFilteredRadars(prev => [tempRadar, ...prev]);
-    }
+    // Radar adicionado a lista principal - sem filtro
     setReportSpeedLimit("");
     setReportRadarType("móvel");
 
@@ -867,40 +847,11 @@ export default function Home({ onOpenEditor }: HomeProps) {
           const newRadars = recentRadars.filter((r) => !existingIds.has(r.id));
 
           if (newRadars.length > 0) {
-            return [...prev, ...newRadars];
+            return [...prev, ...newRadars].slice(0, 1000);
           }
           return prev;
         });
 
-        // Se estiver navegando, também adicionar aos radares filtrados
-        if (routeData && routeData.route?.geometry?.coordinates) {
-          const routePoints = routeData.route.geometry.coordinates.map(
-            (coord: number[]) => ({
-              latitude: coord[1],
-              longitude: coord[0],
-            })
-          );
-
-          const filtered = filterRadarsNearRoute(
-            recentRadars,
-            routePoints,
-            100
-          );
-
-          if (filtered.length > 0) {
-            setFilteredRadars((prev) => {
-              const existingIds = new Set(prev.map((r) => r.id));
-              const newFiltered = filtered.filter(
-                (r) => !existingIds.has(r.id)
-              );
-
-              if (newFiltered.length > 0) {
-                return [...prev, ...newFiltered];
-              }
-              return prev;
-            });
-          }
-        }
       }
 
       lastSyncTimeRef.current = Date.now();
@@ -951,21 +902,20 @@ export default function Home({ onOpenEditor }: HomeProps) {
   // Manter refs atualizados para os handlers (evitar closure obsoleta)
   isNavigatingRef.current = isNavigating;
   routeDataRef.current = routeData;
-  filteredRadarsRef.current = filteredRadars;
+  // REMOVED: filteredRadarsRef - não mais necessário
   currentLocationRef.current = currentLocation;
 
   // Preparar radares para o MapboxNavigation (sempre calcular, mesmo quando não está navegando)
   const mapboxRadars = useMemo(() => {
-    // Se filteredRadars estiver vazio (ex: carregando rota), usar radars globais como fallback instantâneo
-    const list = filteredRadars.length > 0 ? filteredRadars : radars;
-    return list.map((r) => ({
+    // Usar todos os radares sem filtro
+    return radars.map((r: any) => ({
       id: r.id,
       latitude: r.latitude,
       longitude: r.longitude,
-      speedLimit: r.speedLimit || 0, // Default to 0 if undefined
-      type: r.type || "unknown", // Default to "unknown"
+      speedLimit: r.speedLimit ?? r.velocidadeLeve ?? 0,
+      type: r.type ?? r.tipoRadar ?? "unknown",
     }));
-  }, [filteredRadars, radars]);
+  }, [radars]);
 
   // WebSocket nativo: radares em tempo real (Sincronização entre usuários/dispositivos)
   useEffect(() => {
@@ -974,8 +924,14 @@ export default function Home({ onOpenEditor }: HomeProps) {
 
     const connect = () => {
       try {
-        // ws://72.60.247.18:3000/ws
-        const wsUrl = API_BASE_URL.replace("http://", "ws://") + "/ws";
+        if (!API_BASE_URL) {
+          console.warn("⚠️ WebSocket: API_BASE_URL não definida, aguardando...");
+          reconnectTimeout = setTimeout(connect, 2000);
+          return;
+        }
+
+        // Converter http://72.60.247.18:3000 para ws://72.60.247.18:3000/ws
+        const wsUrl = API_BASE_URL.replace(/^http/, "ws") + "/ws";
         console.log(`🔌 Conectando ao WebSocket: ${wsUrl}`);
         ws = new WebSocket(wsUrl);
 
@@ -993,16 +949,14 @@ export default function Home({ onOpenEditor }: HomeProps) {
               case "radar:new":
                 setRadars((prev) => {
                   if (prev.some((r) => r.id === data.id)) return prev;
-                  return [data, ...prev];
+                  return [data, ...prev].slice(0, 1000);
                 });
                 break;
               case "radar:update":
                 setRadars((prev) => prev.map((r) => (r.id === data.id ? data : r)));
-                setFilteredRadars((prev) => prev.map((r) => (r.id === data.id ? data : r)));
                 break;
               case "radar:delete":
                 setRadars((prev) => prev.filter((r) => r.id !== data.id));
-                setFilteredRadars((prev) => prev.filter((r) => r.id !== data.id));
                 setNearbyRadarIds((prev) => {
                   if (prev.has(data.id)) {
                     const newSet = new Set(prev);
@@ -1063,7 +1017,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
         clearTimeout(locationUpdateDebounce.current);
       }
 
-      // Aumentar debounce para 1 segundo para evitar atualizações muito frequentes
+      // Aumentar debounce para 100ms (throttle effect) para resposta mais rápida
       locationUpdateDebounce.current = setTimeout(() => {
         try {
           const newLocation = {
@@ -1071,24 +1025,23 @@ export default function Home({ onOpenEditor }: HomeProps) {
             longitude: location.longitude,
           };
 
-          // Só atualizar se a localização mudou significativamente (mais de 20 metros)
-          if (currentLocation) {
+          // Só atualizar se a localização mudou significativamente (mais de 5 metros)
+          if (currentLocationRef.current) {
             const distance = calculateDistance(
-              currentLocation.latitude,
-              currentLocation.longitude,
+              currentLocationRef.current.latitude,
+              currentLocationRef.current.longitude,
               newLocation.latitude,
               newLocation.longitude
             );
 
-            // Se a distância for muito pequena (< 20m), não atualizar
-            if (distance < 20) {
+            // Se a distância for muito pequena (< 5m), não atualizar
+            if (distance < 5) {
               return;
             }
 
             // Verificar se a mudança é muito grande (possível erro do GPS)
-            // Se mudou mais de 100m em menos de 2 segundos, provavelmente é erro
             if (
-              distance > 100 &&
+              distance > 200 &&
               now - lastLocationUpdate.current < 2000
             ) {
               console.warn(
@@ -1103,7 +1056,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
         } catch (error) {
           console.error("Erro ao processar localização:", error);
         }
-      }, 1000);
+      }, 100);
 
       // Buscar radares próximos durante navegação REMOVIDO por solicitação
       // Apenas WebSocket ou carga inicial atualiza a lista
@@ -1147,7 +1100,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
             return;
           }
 
-          if (filteredRadars.length > 0 && routeDataRef.current) {
+          if (radars.length > 0 && routeDataRef.current) {
             const checkLocation = {
               latitude: location.latitude,
               longitude: location.longitude,
@@ -1155,10 +1108,8 @@ export default function Home({ onOpenEditor }: HomeProps) {
 
             const coordinates =
               routeDataRef.current.route.geometry.coordinates;
-            if (
-              !Array.isArray(coordinates) ||
-              coordinates.length === 0
-            ) {
+            // Defensive check for coordinates array
+            if (!Array.isArray(coordinates) || coordinates.length === 0) {
               return;
             }
 
@@ -1172,10 +1123,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
                   longitude: coord[0],
                 };
               })
-              .filter(
-                (point: LatLng | null): point is LatLng =>
-                  point !== null
-              );
+              .filter((point: LatLng | null): point is LatLng => point !== null);
 
             if (routePoints.length === 0) {
               return;
@@ -1189,7 +1137,8 @@ export default function Home({ onOpenEditor }: HomeProps) {
             let nearest: NearestRadar | null = null;
             let minDistance = Infinity;
 
-            filteredRadars.forEach((radar) => {
+            radars.forEach((radar) => {
+              // Optimization: Skip if already passed
               if (passedRadarIds.current.has(radar.id)) {
                 return;
               }
@@ -1198,14 +1147,33 @@ export default function Home({ onOpenEditor }: HomeProps) {
                 latitude: radar.latitude,
                 longitude: radar.longitude,
               };
-              const routeDistance = calculateDistanceToRoute(
+
+              // OTIMIZAÇÃO CRÍTICA: Pré-filtro espacial (Ignorar radares a mais de 2km)
+              // Isso reduz drasticamente o processamento de 16.000 para ~50 radares por ciclo
+              const distanceToUser = calculateDistance(
+                checkLocation.latitude,
+                checkLocation.longitude,
+                radarPoint.latitude,
+                radarPoint.longitude
+              );
+              if (distanceToUser > 2000) return;
+
+              // 1. STRICT Filtering: Distance from route LINE (Cross-track error)
+              // Reduced to ~13m (0.00012 deg) in isRadarOnRoute, but here we can check meters
+              const routeDistMeters = calculateDistanceToRoute(
                 radarPoint,
                 routePoints
               );
-              if (routeDistance > 100) {
+
+              // If radar is > 30m away from the route line, ignore it (Parallel street filter)
+              if (routeDistMeters > 30) {
                 return;
               }
 
+              // Double check with geometry function
+              if (!isRadarOnRoute(radar, routeDataRef.current)) return;
+
+              // 2. Distance ALONG route (Projected)
               const routeDistanceResult =
                 calculateDistanceAlongRoute(
                   checkLocation,
@@ -1220,6 +1188,8 @@ export default function Home({ onOpenEditor }: HomeProps) {
 
               const distanceAlongRoute =
                 routeDistanceResult.distance;
+
+              // Only consider radars ahead (0 to 500m)
               if (
                 distanceAlongRoute < 0 ||
                 distanceAlongRoute >= 500
@@ -1227,15 +1197,13 @@ export default function Home({ onOpenEditor }: HomeProps) {
                 return;
               }
 
+              // Find the CLOSEST radar along the route
               if (distanceAlongRoute < minDistance) {
-                // Verificar se está realmente na linha da rota (filtrar paralelas)
-                if (!isRadarOnRoute(radar, routeData)) return;
-
                 minDistance = distanceAlongRoute;
                 nearest = {
                   radar,
                   distance: roundDistanceTo10(distanceAlongRoute),
-                  routeDistance: Math.round(routeDistance),
+                  routeDistance: Math.round(routeDistMeters),
                 };
               }
             });
@@ -1245,12 +1213,14 @@ export default function Home({ onOpenEditor }: HomeProps) {
               const nearestDistance = nearestData.distance;
               const nearestRadarObj = nearestData.radar;
 
+              // Dedup specific check:
               if (
                 nearestDistance ===
                 lastCalculatedDistance.current &&
-                lastCalculatedDistance.current > 0
+                lastCalculatedDistance.current > 0 &&
+                nearestRadarObj.id === (nearestRadar?.radar?.id) // Check ID too
               ) {
-                return;
+                // If distance didn't change enough, we skip UI update.
               }
               lastCalculatedDistance.current = nearestDistance;
 
@@ -1259,64 +1229,55 @@ export default function Home({ onOpenEditor }: HomeProps) {
                 modalTimerRef.current = null;
               }
 
-              const nearbyIds = new Set([nearestRadarObj.id]);
-              setNearbyRadarIds(nearbyIds);
+              // GROUPING ALERTS LOGIC (Prevent spam)
+              let suppressAlert = false;
+              const alertGroupRadius = 200; // meters
+
+              // Check if we recently alerted ANY radar close to this one
+              alertedRadarIds.current.forEach(alertedId => {
+                if (alertedId === nearestRadarObj.id) return; // Self is fine
+                const alertedRadar = radars.find(r => r.id === alertedId);
+                if (alertedRadar) {
+                  const dist = calculateDistance(
+                    nearestRadarObj.latitude, nearestRadarObj.longitude,
+                    alertedRadar.latitude, alertedRadar.longitude
+                  );
+                  if (dist < alertGroupRadius) {
+                    suppressAlert = true;
+                  }
+                }
+              });
+
+              setNearbyRadarIds(new Set([nearestRadarObj.id]));
 
               if (nearestDistance <= 300) {
                 if (nearestDistance < 10) {
+                  // PASSED
                   passedRadarIds.current.add(nearestRadarObj.id);
-
+                  // Timestamp when passed
                   if (radarZeroTimeRef2.current === null) {
                     radarZeroTimeRef2.current = Date.now();
                   }
-
-                  const timeSinceZero =
-                    Date.now() - (radarZeroTimeRef2.current || 0);
+                  const timeSinceZero = Date.now() - (radarZeroTimeRef2.current || 0);
                   if (timeSinceZero < 3000) {
-                    setNearestRadar({
-                      radar: nearestRadarObj,
-                      distance: 0,
-                    });
-
+                    setNearestRadar({ radar: nearestRadarObj, distance: 0 });
+                    // Show modal
                     Animated.parallel([
-                      Animated.spring(modalOpacity, {
-                        toValue: 1,
-                        tension: 50,
-                        friction: 7,
-                        useNativeDriver: true,
-                      }),
-                      Animated.spring(modalScale, {
-                        toValue: 1,
-                        tension: 50,
-                        friction: 7,
-                        useNativeDriver: true,
-                      }),
+                      Animated.spring(modalOpacity, { toValue: 1, tension: 50, friction: 7, useNativeDriver: true }),
+                      Animated.spring(modalScale, { toValue: 1, tension: 50, friction: 7, useNativeDriver: true })
                     ]).start();
                   } else {
                     radarZeroTimeRef2.current = null;
                     hideModal();
                   }
                 } else {
+                  // APPROACHING
                   radarZeroTimeRef2.current = null;
-
-                  setNearestRadar({
-                    radar: nearestRadarObj,
-                    distance: nearestDistance,
-                  });
+                  setNearestRadar({ radar: nearestRadarObj, distance: nearestDistance });
 
                   Animated.parallel([
-                    Animated.spring(modalOpacity, {
-                      toValue: 1,
-                      tension: 50,
-                      friction: 7,
-                      useNativeDriver: true,
-                    }),
-                    Animated.spring(modalScale, {
-                      toValue: 1,
-                      tension: 50,
-                      friction: 7,
-                      useNativeDriver: true,
-                    }),
+                    Animated.spring(modalOpacity, { toValue: 1, tension: 50, friction: 7, useNativeDriver: true }),
+                    Animated.spring(modalScale, { toValue: 1, tension: 50, friction: 7, useNativeDriver: true })
                   ]).start();
                 }
               } else {
@@ -1324,15 +1285,17 @@ export default function Home({ onOpenEditor }: HomeProps) {
                 hideModal();
               }
 
+              // TTS Handling
               const radarId = nearestRadarObj.id;
-
               if (
                 !alertedRadarIds.current.has(radarId) &&
                 nearestDistance <= 300 &&
-                nearestDistance > 0
+                nearestDistance > 0 &&
+                !suppressAlert // Suppress TTS if grouped/too close to previous
               ) {
                 alertedRadarIds.current.add(radarId);
 
+                // Construct Message
                 let radarType = "Radar";
                 const type = nearestRadarObj.type ? nearestRadarObj.type.toLowerCase() : "";
                 if (type.includes("semaforo") || type.includes("camera") || type.includes("fotografica")) {
@@ -1345,17 +1308,11 @@ export default function Home({ onOpenEditor }: HomeProps) {
 
                 let message = "";
                 if (nearestDistance > 200) {
-                  message = `${radarType} a ${Math.round(
-                    nearestDistance
-                  )} metros`;
+                  message = `${radarType} a ${Math.round(nearestDistance)} metros`;
                 } else if (nearestDistance > 100) {
-                  message = `Atenção! ${radarType} a ${Math.round(
-                    nearestDistance
-                  )} metros`;
+                  message = `Atenção! ${radarType} a ${Math.round(nearestDistance)} metros`;
                 } else if (nearestDistance > 30) {
-                  message = `Cuidado! ${radarType} a ${Math.round(
-                    nearestDistance
-                  )} metros`;
+                  message = `Cuidado! ${radarType} a ${Math.round(nearestDistance)} metros`;
                 } else {
                   message = `Atenção! ${radarType} muito próximo`;
                 }
@@ -1369,19 +1326,21 @@ export default function Home({ onOpenEditor }: HomeProps) {
                 if (Tts && typeof Tts.speak === "function") {
                   try {
                     Tts.speak(message);
-                  } catch (error) {
-                  }
+                  } catch (error) { }
                 }
               }
             } else {
+              // No nearest radar
               radarZeroTimeRef2.current = null;
               lastCalculatedDistance.current = 0;
               setNearbyRadarIds(new Set());
               hideModal();
             }
           } else {
+            // No radars or route
           }
         } catch (error) {
+          console.error("CheckRadarDistance Error", error);
         }
       };
 
@@ -1397,17 +1356,18 @@ export default function Home({ onOpenEditor }: HomeProps) {
     } catch (error) {
       console.error("Erro no callback onLocationChange:", error);
     }
-  }, [filteredRadars, currentLocation, modalScale, modalOpacity, routeData]);
+  }, [radars, currentLocation, modalScale, modalOpacity, routeData]);
 
   // Callback para quando a rota for recalculada (ex: saiu da rota)
   const handleRouteChanged = useCallback(async (event: any) => {
     try {
       if (!event) return;
-      // Defensive parsing for geometry
-      const geometry = event.geometry || (event.items && event.items.length > 0 ? event.items[0].geometry : null);
+      // Corrigir acesso ao nativeEvent (RN Bridge envia dentro de nativeEvent)
+      const nativeEvent = event.nativeEvent || event;
+      const geometry = nativeEvent.geometry || (nativeEvent.items && nativeEvent.items.length > 0 ? nativeEvent.items[0].geometry : null);
 
       if (!geometry) {
-        console.log("Evento routeChanged sem geometria válida:", event);
+        console.log("Evento routeChanged sem geometria válida:", JSON.stringify(nativeEvent).substring(0, 200));
         return;
       }
 
@@ -1478,13 +1438,14 @@ export default function Home({ onOpenEditor }: HomeProps) {
 
       console.log(`✅ ${filtered.length} radares encontrados na nova rota`);
 
-      setFilteredRadars(filtered);
+      // Filtered deprecated - using all radars
+      // setFilteredRadars(filtered);
 
       // Atualizar lista principal também para garantir consistência
       setRadars(prev => {
         const existingIds = new Set(prev.map(r => r.id));
         const newRadars = filtered.filter(r => !existingIds.has(r.id));
-        return [...newRadars, ...prev];
+        return [...newRadars, ...prev].slice(0, 1000); // CAP: 1000 radares
       });
 
     } catch (error) {
@@ -1714,8 +1675,32 @@ export default function Home({ onOpenEditor }: HomeProps) {
               isNavigating={false}
               currentLocation={currentLocation}
               nearbyRadarIds={nearbyRadarIds}
+              onMapPress={(coords: any) => {
+                // Ao tocar no mapa, podemos sugerir reportar radar ali
+                setReportCustomLocation(coords);
+                setReportLocationMode("map");
+                setShowReportModal(true);
+              }}
             />
           </Suspense>
+
+          {/* Botão de reportar em modo mapa livre */}
+          <TouchableOpacity
+            style={[styles.reportRadarButton, { bottom: 100 }]}
+            onPress={() => setShowReportModal(true)}
+            disabled={isReportingRadar}
+            activeOpacity={0.7}
+          >
+            {isReportingRadar ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Image
+                source={require("../assets/images/reportIcon.png")}
+                style={styles.reportRadarButtonImage}
+                resizeMode="contain"
+              />
+            )}
+          </TouchableOpacity>
         </View>
       )}
 
@@ -1875,7 +1860,11 @@ export default function Home({ onOpenEditor }: HomeProps) {
                     activeOpacity={0.7}
                   >
                     <Image
-                      source={t.icon}
+                      source={
+                        t.value === "fixo"
+                          ? radarImages[getClosestPlacaName(reportSelectedSpeed || 60)]
+                          : t.icon
+                      }
                       style={styles.reportModalTypeIcon}
                       resizeMode="contain"
                     />

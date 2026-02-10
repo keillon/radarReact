@@ -11,7 +11,7 @@ import {
   View,
 } from "react-native";
 import Geolocation from "react-native-geolocation-service";
-import Map from "../components/Map";
+import Map, { getClosestPlacaName, radarImages } from "../components/Map";
 import {
   API_BASE_URL,
   Radar,
@@ -131,7 +131,7 @@ export default function RadarEditorScreen({
                 });
                 break;
               case "radar:update":
-                setRadars((prev) => prev.map((r) => (r.id === data.id ? data : r)));
+                setRadars((prev) => prev.map((r) => (r.id === data.id ? { ...r, ...data } : r)));
                 // No editor local, não queremos resetar o selecionado se for só update de campo,
                 // mas se mudou o objeto inteiro, atualizamos.
                 break;
@@ -188,9 +188,9 @@ export default function RadarEditorScreen({
         setSaving(false);
         if (updated) {
           setRadars((prev) =>
-            prev.map((r) => (r.id === selectedRadar.id ? updated : r))
+            prev.map((r) => (r.id === selectedRadar.id ? { ...r, ...updated } : r))
           );
-          setSelectedRadar(updated);
+          setSelectedRadar({ ...selectedRadar, ...updated });
           setMode("view");
         } else {
           Alert.alert(
@@ -237,9 +237,9 @@ export default function RadarEditorScreen({
     setSaving(false);
     if (updated) {
       setRadars((prev) =>
-        prev.map((r) => (r.id === selectedRadar.id ? updated : r))
+        prev.map((r) => (r.id === selectedRadar.id ? { ...r, ...updated } : r))
       );
-      setSelectedRadar(updated);
+      setSelectedRadar({ ...selectedRadar, ...updated });
     } else {
       Alert.alert(
         "Erro",
@@ -446,7 +446,15 @@ export default function RadarEditorScreen({
                   activeOpacity={0.8}
                 >
                   <Image
-                    source={t.icon}
+                    source={
+                      t.value === "fixo"
+                        ? radarImages[
+                        getClosestPlacaName(
+                          newSpeedLimit ? parseInt(newSpeedLimit, 10) : 60
+                        )
+                        ]
+                        : t.icon
+                    }
                     style={styles.typeCardIcon}
                     resizeMode="contain"
                   />

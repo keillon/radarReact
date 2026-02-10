@@ -35,7 +35,8 @@ function getRadarIconName(type: string | undefined): string {
     .replace(/[\u0300-\u036f]/g, "");
   if (t.includes("semaforo") || t.includes("camera") || t.includes("fotografica")) return "radarSemaforico";
   if (t.includes("movel") || t.includes("mobile")) return "radarMovel";
-  if (t.includes("fixo") || t.includes("placa")) return "radarFixo"; // speed limit logic is handled in getRadarIconForMap
+  if (t.includes("fixo") || t.includes("placa"))
+    return "radar";
   return "radar";
 }
 
@@ -48,7 +49,7 @@ function getRadarIconForMap(r: { type?: string; speedLimit?: number }): string {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
-  if (t.includes("radar") && t.includes("fixo"))
+  if (t.includes("fixo") || t.includes("placa"))
     return getClosestPlacaName(r.speedLimit);
   return getRadarIconName(type);
 }
@@ -58,7 +59,7 @@ const RADAR_ICON_SIZES: Record<string, number> = {
   radar: 0.05,
   radarMovel: 0.05,
   radarSemaforico: 0.055,
-  radarFixo: 0.06,
+  // radarFixo: 0.06, // Removed as requested
   placa: 0.2,
 };
 function getIconSizeForIcon(iconName: string): number {
@@ -68,7 +69,7 @@ function getIconSizeForIcon(iconName: string): number {
 
 const ICON_NAMES = [
   "radar",
-  "radarFixo",
+  // "radarFixo", // Removed
   "radarMovel",
   "radarSemaforico",
   ...PLACA_SPEEDS.map((s) => `placa${s}` as const),

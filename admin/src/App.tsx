@@ -9,7 +9,6 @@ import {
 } from "./api";
 
 const DEFAULT_CENTER: [number, number] = [-46.6333, -23.5505]; // [lng, lat] São Paulo
-const LOAD_RADIUS = 50000; // 50km
 
 export default function App() {
   const [radars, setRadars] = useState<Radar[]>([]);
@@ -79,6 +78,92 @@ export default function App() {
     };
   }, [center, zoom, loadRadars, getRadiusForZoom]);
 
+  // WebSocket Connection for Real-time Updates
+  useEffect(() => {
+    let ws: WebSocket | null = null;
+    let reconnectTimeout: any = null;
+    const API_URL = import.meta.env.VITE_API_URL || "http://72.60.247.18:3000";
+    const WS_URL = API_URL.replace("http://", "ws://").replace("https://", "wss://") + "/ws";
+
+    const connect = () => {
+      try {
+        if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+          return;
+        }
+
+        console.log(`🔌 Admin: Conectando ao WebSocket: ${WS_URL}`);
+        ws = new WebSocket(WS_URL);
+
+        ws.onopen = () => {
+          console.log("✅ Admin: WebSocket conectado!");
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const message = JSON.parse(event.data);
+
+            if (message.event === "radar:new") {
+              const newRadar = message.data;
+              if (newRadar && newRadar.id) {
+                console.log("📩 Admin: Novo radar recebido via WS:", newRadar.id);
+                setRadars((prev) => {
+                  if (prev.find((r) => r.id === newRadar.id)) return prev;
+                  return [...prev, newRadar];
+                });
+              }
+            } else if (message.event === "radar:update") {
+              const updatedRadar = message.data;
+              if (updatedRadar && updatedRadar.id) {
+                console.log("📩 Admin: Radar atualizado via WS:", updatedRadar.id);
+                setRadars((prev) =>
+                  prev.map((r) => r.id === updatedRadar.id ? { ...r, ...updatedRadar } : r)
+                );
+                // Atualizar seleção se for o radar atual
+                setSelected((prev) =>
+                  prev && prev.id === updatedRadar.id ? { ...prev, ...updatedRadar } : prev
+                );
+              }
+            } else if (message.event === "radar:delete") {
+              const { id } = message.data;
+              if (id) {
+                console.log("📩 Admin: Radar deletado via WS:", id);
+                setRadars((prev) => prev.filter((r) => r.id !== id));
+                setSelected((prev) => (prev && prev.id === id ? null : prev));
+              }
+            }
+          } catch (error) {
+            console.error("❌ Admin: Erro ao processar mensagem do WebSocket:", error);
+          }
+        };
+
+        ws.onerror = () => {
+          console.log("❌ Admin: Erro no WebSocket");
+        };
+
+        ws.onclose = () => {
+          console.log("❌ Admin: WebSocket desconectado. Tentando reconectar em 5s...");
+          ws = null;
+          reconnectTimeout = setTimeout(connect, 5000);
+        };
+      } catch (err) {
+        console.error("Admin: Erro ao iniciar WebSocket:", err);
+        reconnectTimeout = setTimeout(connect, 5000);
+      }
+    };
+
+    connect();
+
+    return () => {
+      if (ws) {
+        ws.close();
+        ws = null;
+      }
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+      }
+    };
+  }, []);
+
   const handleSelectRadar = useCallback((radar: Radar) => {
     setSelected(radar);
     setSpeedLimit(radar.speedLimit != null ? String(radar.speedLimit) : "");
@@ -101,9 +186,9 @@ export default function App() {
           .then((updated) => {
             if (updated) {
               setRadars((prev) =>
-                prev.map((r) => (r.id === selected.id ? updated : r))
+                prev.map((r) => (r.id === selected.id ? { ...r, ...updated } : r))
               );
-              setSelected(updated);
+              setSelected({ ...selected, ...updated });
               setMode("view");
             } else {
               setError("Servidor não suporta edição (PATCH /radars/:id)");
@@ -148,9 +233,9 @@ export default function App() {
     setSaving(false);
     if (updated) {
       setRadars((prev) =>
-        prev.map((r) => (r.id === selected.id ? updated : r))
+        prev.map((r) => (r.id === selected.id ? { ...r, ...updated } : r))
       );
-      setSelected(updated);
+      setSelected({ ...selected, ...updated });
     } else {
       setError("Servidor não suporta edição (PATCH /radars/:id)");
     }
@@ -187,7 +272,7 @@ export default function App() {
           r.id === selected.id ? { ...r, ...updated, situacao: "Inativo" } : r
         )
       );
-      setSelected(updated);
+      setSelected({ ...selected, ...updated, situacao: "Inativo" });
       setMode("view");
     } else {
       setError("Servidor não suporta inativar (PATCH situacao)");
@@ -206,7 +291,7 @@ export default function App() {
           r.id === selected.id ? { ...r, ...updated, situacao: "Ativo" } : r
         )
       );
-      setSelected(updated);
+      setSelected({ ...selected, ...updated, situacao: "Ativo" });
       setMode("view");
     } else {
       setError("Servidor não suporta ativar (PATCH situacao)");
@@ -522,17 +607,17 @@ export default function App() {
               </h3>
               {(selected.situacao === "Inativo" ||
                 selected.situacao === "inativo") && (
-                <p
-                  style={{
-                    margin: "0 0 8px",
-                    fontSize: 12,
-                    color: "#6b7280",
-                    fontWeight: 600,
-                  }}
-                >
-                  Inativo
-                </p>
-              )}
+                  <p
+                    style={{
+                      margin: "0 0 8px",
+                      fontSize: 12,
+                      color: "#6b7280",
+                      fontWeight: 600,
+                    }}
+                  >
+                    Inativo
+                  </p>
+                )}
               <p style={{ margin: "0 0 8px", fontSize: 13, color: "#6b7280" }}>
                 {selected.latitude.toFixed(5)}, {selected.longitude.toFixed(5)}
                 {selected.speedLimit != null &&
@@ -614,23 +699,23 @@ export default function App() {
                 </button>
                 {(selected.situacao === "Inativo" ||
                   selected.situacao === "inativo") && (
-                  <button
-                    type="button"
-                    onClick={handleActivate}
-                    disabled={saving}
-                    style={{
-                      padding: 10,
-                      background: "#10b981",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: 8,
-                      cursor: saving ? "not-allowed" : "pointer",
-                      fontWeight: 600,
-                    }}
-                  >
-                    Ativar
-                  </button>
-                )}
+                    <button
+                      type="button"
+                      onClick={handleActivate}
+                      disabled={saving}
+                      style={{
+                        padding: 10,
+                        background: "#10b981",
+                        color: "#fff",
+                        border: "none",
+                        borderRadius: 8,
+                        cursor: saving ? "not-allowed" : "pointer",
+                        fontWeight: 600,
+                      }}
+                    >
+                      Ativar
+                    </button>
+                  )}
                 <button
                   type="button"
                   onClick={() => setSelected(null)}
