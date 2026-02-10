@@ -519,12 +519,12 @@ export default function Home({ onOpenEditor }: HomeProps) {
           setOrigin(loc); // Origem sempre será a localização atual
 
           // Buscar radares imediatamente quando obtém localização
-          getRadarsNearLocation(loc.latitude, loc.longitude, 1000)
+          getRadarsNearLocation(loc.latitude, loc.longitude, 50000)
             .then((nearbyRadars) => {
               console.log(
                 `✅ ${nearbyRadars.length} radares encontrados na inicialização`
               );
-              setRadars(nearbyRadars.slice(0, 1000));
+              setRadars(nearbyRadars);
             })
             .catch((error) => {
               console.error("Erro ao buscar radares na inicialização:", error);
@@ -621,7 +621,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
           setRadars((prev) => {
             const existingIds = new Set(prev.map(r => r.id));
             const newRadars = nearbyRadars.filter(r => !existingIds.has(r.id));
-            return [...newRadars, ...prev].slice(0, 1000); // CAP: 1000 radares
+            return [...newRadars, ...prev];
           });
 
           console.log(
@@ -631,9 +631,9 @@ export default function Home({ onOpenEditor }: HomeProps) {
         .catch((error: any) => {
           // Fallback simples: usar localização atual se busca falhar
           console.warn("Erro ao buscar radares na rota, usando fallback:", error);
-          getRadarsNearLocation(origin.latitude, origin.longitude, 1000)
+          getRadarsNearLocation(origin.latitude, origin.longitude, 50000)
             .then((fallbackRadars) => {
-              setRadars(prev => [...fallbackRadars.filter(r => !prev.some(p => p.id === r.id)), ...prev].slice(0, 1000));
+              setRadars(prev => [...fallbackRadars.filter(r => !prev.some(p => p.id === r.id)), ...prev]);
               console.log(`✅ ${fallbackRadars.length} radares (fallback)`);
             })
             .catch((err) => {
@@ -683,10 +683,10 @@ export default function Home({ onOpenEditor }: HomeProps) {
         const nearbyRadars = await getRadarsNearLocation(
           currentLocation.latitude,
           currentLocation.longitude,
-          1000 // raio de 1km
+          50000 // raio de 50km
         );
         if (!isMountedRef.current) return;
-        setRadars(nearbyRadars.slice(0, 1000));
+        setRadars(nearbyRadars);
         lastRadarFetchRef.current = currentLocation;
         console.log(`✅ ${nearbyRadars.length} radares encontrados próximos`);
       } catch (error) {
@@ -842,7 +842,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
           const newRadars = recentRadars.filter((r) => !existingIds.has(r.id));
 
           if (newRadars.length > 0) {
-            return [...prev, ...newRadars].slice(0, 1000);
+            return [...prev, ...newRadars];
           }
           return prev;
         });
@@ -944,7 +944,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
               case "radar:new":
                 setRadars((prev) => {
                   if (prev.some((r) => r.id === data.id)) return prev;
-                  return [data, ...prev].slice(0, 1000);
+                  return [data, ...prev];
                 });
                 break;
               case "radar:update":
@@ -1440,7 +1440,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
       setRadars(prev => {
         const existingIds = new Set(prev.map(r => r.id));
         const newRadars = filtered.filter(r => !existingIds.has(r.id));
-        return [...newRadars, ...prev].slice(0, 1000); // CAP: 1000 radares
+        return [...newRadars, ...prev];
       });
 
     } catch (error) {
