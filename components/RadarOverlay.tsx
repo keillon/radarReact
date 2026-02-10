@@ -26,13 +26,13 @@ function getClosestPlacaName(speed: number | undefined): string {
 /** Ícone no mapa: fixo usa placa por velocidade; demais por tipo. */
 function getRadarIconForMap(radar: Radar): string {
   const type = radar?.type;
-  if (!type) return "radar";
+  if (!type) return "radarMovel";
   const t = String(type)
     .trim()
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
-  if (t.includes("fixo") || t.includes("placa"))
+  if (t.includes("fixo") || t.includes("placa") || t.includes("velocidade"))
     return getClosestPlacaName(radar.speedLimit);
   if (t.includes("semaforo") && t.includes("camera")) return "radarSemaforico";
   if (t.includes("semaforo") && t.includes("radar")) return "radarSemaforico";
@@ -158,7 +158,7 @@ export default function RadarOverlay({
           <SymbolLayer
             id="radars-overlay-icons"
             style={{
-              iconImage: ["coalesce", ["get", "iconImage"], "radar"],
+              iconImage: ["coalesce", ["get", "iconImage"], "radarMovel"],
               iconSize: ["coalesce", ["get", "iconSize"], DEFAULT_ICON_SIZE],
               iconAllowOverlap: true,
               iconIgnorePlacement: true,

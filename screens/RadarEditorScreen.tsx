@@ -43,24 +43,14 @@ export default function RadarEditorScreen({
     longitude: number;
   } | null>(null);
   const [radarType, setRadarType] = useState<
-    "reportado" | "fixo" | "móvel" | "semaforo"
-  >("reportado");
+    "móvel" | "semaforo" | "placa"
+  >("placa");
 
   const RADAR_TYPES: {
-    value: "reportado" | "fixo" | "móvel" | "semaforo";
+    value: "móvel" | "semaforo" | "placa";
     label: string;
     icon: number;
   }[] = [
-      {
-        value: "reportado",
-        label: "Reportado",
-        icon: require("../assets/images/radar.png"),
-      },
-      {
-        value: "fixo",
-        label: "Radar Fixo",
-        icon: require("../assets/images/placa60.png"),
-      },
       {
         value: "móvel",
         label: "Radar Móvel",
@@ -70,6 +60,11 @@ export default function RadarEditorScreen({
         value: "semaforo",
         label: "Semáforo c/ Radar",
         icon: require("../assets/images/radarSemaforico.png"),
+      },
+      {
+        value: "placa",
+        label: "Placa de Velocidade",
+        icon: require("../assets/images/placa60.png"),
       },
     ];
 
@@ -175,7 +170,7 @@ export default function RadarEditorScreen({
     if (mode === "add") {
       setPendingAddCoords(coords);
       setNewSpeedLimit("");
-      setRadarType("reportado");
+      setRadarType("placa");
       setSelectedRadar(null);
       return;
     }
@@ -217,7 +212,7 @@ export default function RadarEditorScreen({
       setRadars((prev) => [...prev, radar]);
       setPendingAddCoords(null);
       setNewSpeedLimit("");
-      setRadarType("reportado");
+      setRadarType("placa");
       setMode("view");
     } catch (e) {
       Alert.alert(
@@ -404,7 +399,7 @@ export default function RadarEditorScreen({
         onRequestClose={() => {
           setPendingAddCoords(null);
           setNewSpeedLimit("");
-          setRadarType("reportado");
+          setRadarType("placa");
         }}
       >
         <TouchableOpacity
@@ -413,7 +408,7 @@ export default function RadarEditorScreen({
           onPress={() => {
             setPendingAddCoords(null);
             setNewSpeedLimit("");
-            setRadarType("reportado");
+            setRadarType("placa");
           }}
         >
           <View
@@ -447,7 +442,7 @@ export default function RadarEditorScreen({
                 >
                   <Image
                     source={
-                      t.value === "fixo"
+                      t.value === "placa"
                         ? radarImages[
                         getClosestPlacaName(
                           newSpeedLimit ? parseInt(newSpeedLimit, 10) : 60
@@ -476,7 +471,7 @@ export default function RadarEditorScreen({
                 onPress={() => {
                   setPendingAddCoords(null);
                   setNewSpeedLimit("");
-                  setRadarType("reportado");
+                  setRadarType("placa");
                 }}
               >
                 <Text style={styles.buttonSecondaryText}>Cancelar</Text>

@@ -352,8 +352,8 @@ export default function Home({ onOpenEditor }: HomeProps) {
   const [successMessage, setSuccessMessage] = useState("");
   const [reportSpeedLimit, setReportSpeedLimit] = useState("");
   const [reportRadarType, setReportRadarType] = useState<
-    "reportado" | "fixo" | "móvel" | "semaforo"
-  >("móvel");
+    "móvel" | "semaforo" | "placa"
+  >("placa");
   const [MapboxNavComponent, setMapboxNavComponent] =
     useState<React.ComponentType<any> | null>(null);
   const [mapboxNavError, setMapboxNavError] = useState<string | null>(null);
@@ -387,20 +387,10 @@ export default function Home({ onOpenEditor }: HomeProps) {
   const lastSyncTimeRef = useRef<number>(Date.now());
 
   const REPORT_RADAR_TYPES: {
-    value: "reportado" | "fixo" | "móvel" | "semaforo";
+    value: "móvel" | "semaforo" | "placa";
     label: string;
     icon: number;
   }[] = [
-      {
-        value: "reportado",
-        label: "Reportado",
-        icon: require("../assets/images/radar.png"),
-      },
-      {
-        value: "fixo",
-        label: "Radar Fixo",
-        icon: require("../assets/images/placa60.png"),
-      },
       {
         value: "móvel",
         label: "Radar Móvel",
@@ -410,6 +400,11 @@ export default function Home({ onOpenEditor }: HomeProps) {
         value: "semaforo",
         label: "Semáforo c/ Radar",
         icon: require("../assets/images/radarSemaforico.png"),
+      },
+      {
+        value: "placa",
+        label: "Placa de Velocidade",
+        icon: require("../assets/images/placa60.png"),
       },
     ];
   const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -756,7 +751,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
   // Futuro: mesma lógica pode ser usada para reportar acidentes, trânsito, etc. (estilo Waze) — por ora só radar.
   const handleReportRadar = async (opts?: {
     speedLimit?: number;
-    type?: "reportado" | "fixo" | "móvel" | "semaforo";
+    type?: "móvel" | "semaforo" | "placa";
   }) => {
 
     const speedLimit =
@@ -1751,14 +1746,14 @@ export default function Home({ onOpenEditor }: HomeProps) {
             <View style={styles.radarIconContainer}>
               {(() => {
                 const type = nearestRadar.radar.type ? nearestRadar.radar.type.toLowerCase() : "";
-                let iconSource = radarImages.radar;
+                let iconSource = radarImages.radarMovel; // DEFAULT FALLBACK TO PREVENT NULL
 
                 if (type.includes("semaforo") || type.includes("camera") || type.includes("fotografica")) {
                   iconSource = radarImages.radarSemaforico;
                 } else if (type.includes("movel") || type.includes("mobile")) {
                   iconSource = radarImages.radarMovel;
-                } else if (type.includes("fixo") || type.includes("placa")) {
-                  iconSource = radarImages[getClosestPlacaName(nearestRadar.radar.speedLimit)];
+                } else if (type.includes("fixo") || type.includes("placa") || type.includes("velocidade")) {
+                  iconSource = radarImages[getClosestPlacaName(nearestRadar.radar.speedLimit)] || radarImages.placa60;
                 }
 
                 return <Image source={iconSource} style={styles.radarAlertIconLarge} />;
@@ -1771,7 +1766,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
                   let typeName = "Radar";
                   if (type.includes("semaforo")) typeName = "Radar Semafórico";
                   else if (type.includes("movel")) typeName = "Radar Móvel";
-                  else if (type.includes("fixo") || type.includes("placa")) typeName = "Radar Fixo";
+                  else if (type.includes("fixo") || type.includes("placa")) typeName = "Placa de Velocidade";
 
                   return nearestRadar.distance <= 30
                     ? `${typeName} Próximo!`
@@ -1803,7 +1798,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
           setShowReportModal(false);
           setReportStep(1);
           setReportSelectedSpeed(null);
-          setReportRadarType("móvel");
+          setReportRadarType("placa");
         }}
       >
         <TouchableOpacity
@@ -1861,7 +1856,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
                   >
                     <Image
                       source={
-                        t.value === "fixo"
+                        t.value === "placa"
                           ? radarImages[getClosestPlacaName(reportSelectedSpeed || 60)]
                           : t.icon
                       }

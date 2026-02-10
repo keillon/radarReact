@@ -680,13 +680,13 @@ export async function radarRoutes(fastify: FastifyInstance) {
     }
 
     // Validar tipoRadar se fornecido (reportado, fixo, móvel, semaforo)
-    const tiposValidos = ["móvel", "fixo", "reportado", "semaforo"];
+    const tiposValidos = ["móvel", "fixo", "reportado", "semaforo", "placa"];
     if (body.tipoRadar && !tiposValidos.includes(body.tipoRadar)) {
       return reply
         .code(400)
         .send({
           error:
-            "tipoRadar deve ser 'reportado', 'fixo', 'móvel' ou 'semaforo'",
+            "tipoRadar deve ser 'reportado', 'fixo', 'móvel', 'semaforo' ou 'placa'",
         });
     }
 

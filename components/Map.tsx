@@ -217,7 +217,7 @@ export default function Map({
       .toLowerCase()
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "");
-    if (t.includes("fixo") || t.includes("placa"))
+    if (t.includes("fixo") || t.includes("placa") || t.includes("velocidade"))
       return getClosestPlacaName(radar.speedLimit);
     if (t.includes("semaforo") || t.includes("camera"))
       return "radarSemaforico";
