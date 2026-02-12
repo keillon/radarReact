@@ -111,7 +111,7 @@ export default function Map({
     }
 
     if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) return;
-    onCameraChanged({ latitude: lat, longitude: lng });
+        onCameraChanged({ latitude: lat, longitude: lng });
   };
 
   // Picker mode: fallback robusto para sempre capturar o centro real do pin.
@@ -393,6 +393,21 @@ export default function Map({
             console.error("Error in onCameraChanged:", e);
           }
         }}
+        onRegionDidChange={(event: any) => {
+          if (!onCameraChanged) return;
+          const centerCandidate =
+            event?.geometry?.coordinates ??
+            event?.properties?.center ??
+            event?.properties?.visibleBounds?.[0];
+          emitCameraCenter(centerCandidate);
+        }}
+        onMapIdle={(event: any) => {
+          if (!onCameraChanged) return;
+          const centerCandidate =
+            event?.properties?.center ??
+            event?.geometry?.coordinates;
+          emitCameraCenter(centerCandidate);
+        }}
       >
         <Camera
           ref={cameraRef}
@@ -400,7 +415,9 @@ export default function Map({
             centerCoordinate: [-46.6333, -23.5505], // São Paulo como padrão
             zoomLevel: 14,
           }}
-          followUserLocation={isNavigating || (interactive && isTracking)}
+          followUserLocation={
+            onCameraChanged ? false : isNavigating || (interactive && isTracking)
+          }
           followUserMode={
             isNavigating
               ? UserTrackingMode.FollowWithCourse
@@ -411,7 +428,7 @@ export default function Map({
         />
 
         {/* Desabilitar UserLocation quando não é interativo (overlay) para evitar conflitos */}
-        {interactive && (
+        {interactive && !onCameraChanged && (
           <UserLocation
             visible={true}
             androidRenderMode="gps"
