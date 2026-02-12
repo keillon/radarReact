@@ -114,6 +114,34 @@ export default function Map({
     onCameraChanged({ latitude: lat, longitude: lng });
   };
 
+  // Picker mode: fallback robusto para sempre capturar o centro real do pin.
+  // Alguns builds/ROMs podem não emitir onCameraChanged de forma confiável.
+  useEffect(() => {
+    if (!onCameraChanged) return;
+
+    let active = true;
+    const readCenter = async () => {
+      try {
+        if (!active || !cameraRef.current || typeof cameraRef.current.getCenter !== "function") {
+          return;
+        }
+        const center = await cameraRef.current.getCenter();
+        emitCameraCenter(center);
+      } catch {
+        // Ignorar falhas eventuais de leitura do centro
+      }
+    };
+
+    // Leitura inicial e polling curto enquanto picker estiver aberto
+    readCenter();
+    const interval = setInterval(readCenter, 250);
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [onCameraChanged]);
+
   // Animação de pulso para radares próximos
   useEffect(() => {
     if (nearbyRadarIds.size > 0) {
