@@ -10,6 +10,9 @@ export interface Radar {
   speedLimit?: number;
   type?: string;
   situacao?: string | null;
+  ativo?: boolean;
+  confirms?: number;
+  denies?: number;
   reportedAt?: number;
 }
 

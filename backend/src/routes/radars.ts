@@ -940,7 +940,7 @@ export async function radarRoutes(fastify: FastifyInstance) {
     }
 
     // Incrementar confirmações (preservar tipoRadar e outros campos)
-    const updated = await prisma.radar.update({
+    let updated = await prisma.radar.update({
       where: { id },
       data: {
         confirms: radar.confirms + 1,
@@ -950,6 +950,30 @@ export async function radarRoutes(fastify: FastifyInstance) {
         velocidadeLeve: radar.velocidadeLeve,
         velocidadePesado: radar.velocidadePesado,
       },
+    });
+
+    // Regra de crowdsourcing:
+    // 10 confirmações => manter/reativar radar automaticamente
+    if (updated.confirms >= 10 && (!updated.ativo || updated.situacao !== "Ativo")) {
+      updated = await prisma.radar.update({
+        where: { id },
+        data: {
+          ativo: true,
+          situacao: "Ativo",
+        },
+      });
+    }
+
+    fastify.wsBroadcast("radar:update", {
+      id: updated.id,
+      latitude: updated.latitude,
+      longitude: updated.longitude,
+      velocidadeLeve: updated.velocidadeLeve,
+      tipoRadar: updated.tipoRadar,
+      situacao: updated.situacao,
+      ativo: updated.ativo,
+      confirms: updated.confirms,
+      denies: updated.denies,
     });
 
     return {
@@ -1052,7 +1076,7 @@ export async function radarRoutes(fastify: FastifyInstance) {
     }
 
     // Incrementar negações (preservar tipoRadar e outros campos)
-    const updated = await prisma.radar.update({
+    let updated = await prisma.radar.update({
       where: { id },
       data: {
         denies: radar.denies + 1,
@@ -1061,6 +1085,30 @@ export async function radarRoutes(fastify: FastifyInstance) {
         velocidadeLeve: radar.velocidadeLeve,
         velocidadePesado: radar.velocidadePesado,
       },
+    });
+
+    // Regra de crowdsourcing:
+    // 5 negações => desativar radar automaticamente
+    if (updated.denies >= 5 && (updated.ativo || updated.situacao !== "Inativo")) {
+      updated = await prisma.radar.update({
+        where: { id },
+        data: {
+          ativo: false,
+          situacao: "Inativo",
+        },
+      });
+    }
+
+    fastify.wsBroadcast("radar:update", {
+      id: updated.id,
+      latitude: updated.latitude,
+      longitude: updated.longitude,
+      velocidadeLeve: updated.velocidadeLeve,
+      tipoRadar: updated.tipoRadar,
+      situacao: updated.situacao,
+      ativo: updated.ativo,
+      confirms: updated.confirms,
+      denies: updated.denies,
     });
 
     return {

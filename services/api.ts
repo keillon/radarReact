@@ -17,6 +17,9 @@ interface ApiRadarResponse {
   uf?: string | null;
   municipio?: string | null;
   situacao?: string | null;
+  ativo?: boolean;
+  confirms?: number;
+  denies?: number;
   [key: string]: any; // outros campos que podem existir
 }
 
@@ -29,6 +32,9 @@ const mapApiRadarToRadar = (apiRadar: ApiRadarResponse): Radar => {
     speedLimit: apiRadar.velocidadeLeve || undefined,
     type: apiRadar.tipoRadar || "unknown",
     situacao: apiRadar.situacao ?? undefined,
+    ativo: apiRadar.ativo,
+    confirms: apiRadar.confirms,
+    denies: apiRadar.denies,
   };
 };
 
@@ -409,5 +415,59 @@ export const getRecentRadars = async (
       error?.message || "Erro desconhecido",
     );
     return []; // Retornar array vazio em vez de lançar erro
+  }
+};
+
+// Crowdsourcing: confirmar existência do radar (1 ação por usuário/radar)
+export const confirmRadar = async (
+  radarId: string,
+  userId: string
+): Promise<Radar | null> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/radars/${radarId}/confirm`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ userId }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || `Erro ao confirmar radar (${response.status})`);
+    }
+
+    const data = await response.json();
+    return mapApiRadarToRadar(data.radar || data);
+  } catch (error: any) {
+    console.error("Erro ao confirmar radar:", error?.message || error);
+    return null;
+  }
+};
+
+// Crowdsourcing: negar existência do radar (1 ação por usuário/radar)
+export const denyRadar = async (
+  radarId: string,
+  userId: string
+): Promise<Radar | null> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/radars/${radarId}/deny`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ userId }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || `Erro ao negar radar (${response.status})`);
+    }
+
+    const data = await response.json();
+    return mapApiRadarToRadar(data.radar || data);
+  } catch (error: any) {
+    console.error("Erro ao negar radar:", error?.message || error);
+    return null;
   }
 };
