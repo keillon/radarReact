@@ -306,33 +306,13 @@ const roundDistanceTo10 = (meters: number): number => {
   return Math.round(meters / 10) * 10;
 };
 
-// Função para filtrar radares próximos à rota
-const filterRadarsNearRoute = (
-  radars: Radar[],
-  routePoints: LatLng[],
-  maxDistance: number = 100 // metros
-): Radar[] => {
-  if (routePoints.length < 2) return radars;
-
-  return radars.filter((radar) => {
-    const radarPoint: LatLng = {
-      latitude: radar.latitude,
-      longitude: radar.longitude,
-    };
-
-    // Verificar distância até cada segmento da rota
-    for (let i = 0; i < routePoints.length - 1; i++) {
-      const distance = distanceToLineSegment(
-        radarPoint,
-        routePoints[i],
-        routePoints[i + 1]
-      );
-      if (distance <= maxDistance) {
-        return true;
-      }
-    }
-    return false;
-  });
+const buildRouteSignature = (coordinates: number[][]): string => {
+  const len = coordinates.length;
+  if (len === 0) return "empty";
+  const first = coordinates[0] ?? [0, 0];
+  const mid = coordinates[Math.floor(len / 2)] ?? [0, 0];
+  const last = coordinates[len - 1] ?? [0, 0];
+  return `${len}|${first[0]},${first[1]}|${mid[0]},${mid[1]}|${last[0]},${last[1]}`;
 };
 
 interface HomeProps {
@@ -416,6 +396,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
   const pickerPreviewIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [radarPassedLoading, setRadarPassedLoading] = useState(false); // Loading 5s no modal após passar do radar
   const [deviceUserId, setDeviceUserId] = useState<string | null>(null);
+  const [liveRadarOverlay, setLiveRadarOverlay] = useState<Radar[]>([]);
   const [showRadarFeedbackCard, setShowRadarFeedbackCard] = useState(false);
   const [radarFeedbackTarget, setRadarFeedbackTarget] = useState<Radar | null>(null);
   const [radarFeedbackSubmitting, setRadarFeedbackSubmitting] = useState(false);
@@ -494,6 +475,25 @@ export default function Home({ onOpenEditor }: HomeProps) {
   const routePointsRef = useRef<LatLng[]>([]);
   const routeCumulativeRef = useRef<number[]>([]);
   const lastNearbyRadarIdRef = useRef<string | null>(null);
+  const lastRouteSignatureRef = useRef<string>("");
+  const lastRouteChangedHandledAtRef = useRef<number>(0);
+  const lastRouteGeometryRawRef = useRef<string>("");
+
+  const upsertLiveRadarOverlay = useCallback((radar: Radar) => {
+    if (!radar?.id) return;
+    setLiveRadarOverlay((prev) => {
+      const idx = prev.findIndex((r) => r.id === radar.id);
+      if (idx === -1) return [radar, ...prev].slice(0, 100);
+      const next = [...prev];
+      next[idx] = { ...next[idx], ...radar };
+      return next;
+    });
+  }, []);
+
+  const removeLiveRadarOverlay = useCallback((radarId: string) => {
+    if (!radarId) return;
+    setLiveRadarOverlay((prev) => prev.filter((r) => r.id !== radarId));
+  }, []);
 
   // Preview de lat/lon no picker: polling a cada 400ms para mostrar onde o pin está
   useEffect(() => {
@@ -705,14 +705,6 @@ export default function Home({ onOpenEditor }: HomeProps) {
       setRouteData(routeResponse);
       setRoute(routeResponse.route);
 
-      // Extrair pontos da rota
-      const routePoints = routeResponse.route.geometry.coordinates.map(
-        (coord: number[]) => ({
-          latitude: coord[1],
-          longitude: coord[0],
-        })
-      );
-
       // Limpar estado de radares para nova navegação (cada viagem começa "limpa")
       passedRadarIds.current.clear();
       alertedRadarIds.current.clear();
@@ -885,7 +877,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
       }
     }
 
-    // OTIMIZAÇÃO: Reporte OTIMISTA (Instantâneo)
+    // OTIMIZAÇÃO: Reporte em background sem bloquear UI
     const tempRadar: Radar = {
       id: `temp_${Date.now()}`,
       latitude: reportCoords.latitude,
@@ -899,11 +891,18 @@ export default function Home({ onOpenEditor }: HomeProps) {
     setShowSuccessModal(true);
     setReportSpeedLimit("");
     setReportRadarType("móvel");
-    const addTempRadar = () => setRadars(prev => [tempRadar, ...prev]);
-    if (isNavigating) {
-      setTimeout(addTempRadar, 0);
+    if (!isNavigating) {
+      // Fora da navegação mantém feedback otimista instantâneo
+      setTimeout(() => {
+        if (!isMountedRef.current) return;
+        setRadars((prev) => [tempRadar, ...prev]);
+      }, 0);
     } else {
-      addTempRadar();
+      // Durante navegação, overlay leve para aparecer instantâneo sem re-render pesado da lista completa
+      setTimeout(() => {
+        if (!isMountedRef.current) return;
+        upsertLiveRadarOverlay(tempRadar);
+      }, 0);
     }
 
     // Auto-dismiss
@@ -919,10 +918,17 @@ export default function Home({ onOpenEditor }: HomeProps) {
       type,
     }).then(realRadar => {
       if (!isMountedRef.current) return;
-      if (realRadar.id !== tempRadar.id) {
-        setRadars(prev => prev.map(r => r.id === tempRadar.id ? realRadar : r));
+      if (isNavigating) {
+        removeLiveRadarOverlay(tempRadar.id);
+        upsertLiveRadarOverlay(realRadar);
+      }
+      // Durante navegação, não força merge local para evitar re-render pesado;
+      // atualização chega via WebSocket. Fora da navegação, troca o temp pelo real.
+      if (!isNavigating && realRadar.id !== tempRadar.id) {
+        setRadars((prev) => prev.map((r) => (r.id === tempRadar.id ? realRadar : r)));
       }
     }).catch(err => {
+      removeLiveRadarOverlay(tempRadar.id);
       console.error("Erro no reporte background:", err);
     });
   };
@@ -950,9 +956,9 @@ export default function Home({ onOpenEditor }: HomeProps) {
   // REMOVED: filteredRadarsRef - não mais necessário
   currentLocationRef.current = currentLocation;
 
-  // Preparar radares para o MapboxNavigation (sempre calcular, mesmo quando não está navegando)
-  const mapboxRadars = useMemo(() => {
-    // Usar todos os radares sem filtro
+  // Preparar radares para o MapboxNavigation com base cacheada + overlay em tempo real
+  const baseMapboxRadars = useMemo(() => {
+    if (!isNavigating || radars.length === 0) return [];
     return radars.map((r: any) => ({
       id: r.id,
       latitude: r.latitude,
@@ -960,7 +966,42 @@ export default function Home({ onOpenEditor }: HomeProps) {
       speedLimit: r.speedLimit ?? r.velocidadeLeve ?? 0,
       type: normalizeRadarType(r.type ?? r.tipoRadar ?? "unknown"),
     }));
-  }, [radars]);
+  }, [isNavigating, radars]);
+
+  const liveOverlayMapboxRadars = useMemo(() => {
+    if (!isNavigating || liveRadarOverlay.length === 0) return [];
+    return liveRadarOverlay.map((r: any) => ({
+      id: r.id,
+      latitude: r.latitude,
+      longitude: r.longitude,
+      speedLimit: r.speedLimit ?? r.velocidadeLeve ?? 0,
+      type: normalizeRadarType(r.type ?? r.tipoRadar ?? "unknown"),
+    }));
+  }, [isNavigating, liveRadarOverlay]);
+
+  const mapboxRadars = useMemo(() => {
+    if (!isNavigating) return [];
+    if (liveOverlayMapboxRadars.length === 0) return baseMapboxRadars;
+    const seen = new Set<string>();
+    const merged: Array<{
+      id: string;
+      latitude: number;
+      longitude: number;
+      speedLimit: number;
+      type: string;
+    }> = [];
+    for (const r of liveOverlayMapboxRadars) {
+      if (!r?.id || seen.has(r.id)) continue;
+      seen.add(r.id);
+      merged.push(r);
+    }
+    for (const r of baseMapboxRadars) {
+      if (!r?.id || seen.has(r.id)) continue;
+      seen.add(r.id);
+      merged.push(r);
+    }
+    return merged;
+  }, [isNavigating, baseMapboxRadars, liveOverlayMapboxRadars]);
 
   // WebSocket: única fonte de atualizações em tempo real (sem polling).
   // Alguém reporta radar → backend emite radar:new → cliente recebe e atualiza o mapa uma vez.
@@ -988,35 +1029,49 @@ export default function Home({ onOpenEditor }: HomeProps) {
         ws.onmessage = (e) => {
           if (!isMountedRef.current) return;
           try {
-            const { event, data } = JSON.parse(e.data);
-            console.log(`📡 WebSocket Evento: ${event}`, data);
+            const parsed = JSON.parse(e.data);
+            const event = parsed?.event;
+            const payload = parsed?.data ?? parsed?.radar ?? parsed;
+            console.log(`📡 WebSocket Evento: ${event}`, payload);
+            if (typeof event !== "string") return;
 
             switch (event) {
               case "radar:new":
+              case "radar:created":
                 setRadars((prev) => {
-                  const normalized = normalizeRadarPayload(data);
+                  const normalized = normalizeRadarPayload(payload);
                   if (!normalized || prev.some((r) => r.id === normalized.id)) return prev;
+                  upsertLiveRadarOverlay(normalized);
                   return [normalized, ...prev];
                 });
                 break;
               case "radar:update":
+              case "radar:updated":
                 setRadars((prev) => {
-                  const normalized = normalizeRadarPayload(data);
+                  const normalized = normalizeRadarPayload(payload);
                   if (!normalized) return prev;
+                  const has = prev.some((r) => r.id === normalized.id);
+                  upsertLiveRadarOverlay(normalized);
+                  if (!has) return [normalized, ...prev];
                   return prev.map((r) => (r.id === normalized.id ? { ...r, ...normalized } : r));
                 });
                 break;
               case "radar:delete":
-                setRadars((prev) => prev.filter((r) => r.id !== data.id));
+              case "radar:removed": {
+                const deletedId = String(payload?.id ?? "");
+                if (!deletedId) break;
+                setRadars((prev) => prev.filter((r) => r.id !== deletedId));
+                removeLiveRadarOverlay(deletedId);
                 setNearbyRadarIds((prev) => {
-                  if (prev.has(data.id)) {
+                  if (prev.has(deletedId)) {
                     const newSet = new Set(prev);
-                    newSet.delete(data.id);
+                    newSet.delete(deletedId);
                     return newSet;
                   }
                   return prev;
                 });
                 break;
+              }
             }
           } catch (err) {
             console.error("Erro ao processar mensagem WebSocket:", err);
@@ -1044,7 +1099,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
       if (ws) ws.close();
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
     };
-  }, []);
+  }, [removeLiveRadarOverlay, upsertLiveRadarOverlay]);
 
   // Memoizar conversão de Set para Array para evitar nova referência a cada render
   const nearbyRadarIdsArray = useMemo(() => Array.from(nearbyRadarIds), [nearbyRadarIds]);
@@ -1201,11 +1256,11 @@ export default function Home({ onOpenEditor }: HomeProps) {
             return;
           }
 
-          if (!routeDataRef.current || routePointsRef.current.length < 2) {
+          if (routePointsRef.current.length < 2) {
             return;
           }
 
-          if (radars.length > 0 && routeDataRef.current) {
+          if (radars.length > 0) {
             const checkLocation = {
               latitude: location.latitude,
               longitude: location.longitude,
@@ -1473,7 +1528,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
   }, [radars, currentLocation, modalScale, modalOpacity, routeData, openRadarFeedbackCard]);
 
   // Callback para quando a rota for recalculada (ex: saiu da rota)
-  const handleRouteChanged = useCallback(async (event: any) => {
+  const handleRouteChanged = useCallback((event: any) => {
     try {
       if (!event) return;
       // Corrigir acesso ao nativeEvent (RN Bridge envia dentro de nativeEvent)
@@ -1485,13 +1540,19 @@ export default function Home({ onOpenEditor }: HomeProps) {
         return;
       }
 
-      console.log("🛣️ Rota recalculada! Atualizando radares...");
-
       let coordinates = [];
       try {
         // O evento pode vir como string JSON (nossa conversão nativa) ou objeto direto
         // Tentamos parsear se for string, senão assumimos que é objeto ou array
         if (typeof geometry === 'string') {
+          const nowRaw = Date.now();
+          if (
+            geometry === lastRouteGeometryRawRef.current &&
+            nowRaw - lastRouteChangedHandledAtRef.current < 1500
+          ) {
+            return;
+          }
+          lastRouteGeometryRawRef.current = geometry;
           // Verificar se é Polyline (não começa com { ou [) - Fallback se a conversão nativa falhou
           if (!geometry.trim().startsWith("{") && !geometry.trim().startsWith("[")) {
             console.warn("⚠️ Recebido Polyline em vez de GeoJSON. A conversão nativa pode ter falhado.");
@@ -1510,51 +1571,31 @@ export default function Home({ onOpenEditor }: HomeProps) {
       }
 
       if (!Array.isArray(coordinates) || coordinates.length === 0) return;
-
-      const newRoutePoints = coordinates.map((coord: number[]) => {
-        if (Array.isArray(coord) && coord.length >= 2) {
-          return {
-            latitude: coord[1],
-            longitude: coord[0],
-          };
-        }
-        return null;
-      }).filter((p): p is LatLng => p !== null);
-
-      if (newRoutePoints.length === 0) return;
-
-      // Atualizar dados da rota com type safety
-      setRouteData(prev => {
-        if (!prev || !prev.route) return prev;
-
-        return {
-          ...prev,
-          route: {
-            ...prev.route,
-            type: "Feature",
-            geometry: {
-              ...prev.route.geometry,
-              coordinates: coordinates
-            }
-          }
-        };
-      });
-
-      // Refiltrar usando cache local já carregado (sem nova chamada API)
-      const filtered = filterRadarsNearRoute(radars, newRoutePoints, 250);
-
-      console.log(`✅ ${filtered.length} radares encontrados na nova rota`);
-
-      // Filtered deprecated - using all radars
-      // setFilteredRadars(filtered);
-
-      // Não sobrescrevemos/mesclamos lista aqui para evitar re-render pesado.
-      // A lista global permanece a mesma e novas entradas chegam por WebSocket.
+      const signature = buildRouteSignature(coordinates as number[][]);
+      const now = Date.now();
+      if (
+        signature === lastRouteSignatureRef.current &&
+        now - lastRouteChangedHandledAtRef.current < 1500
+      ) {
+        return;
+      }
+      lastRouteSignatureRef.current = signature;
+      lastRouteChangedHandledAtRef.current = now;
+      // Somente atualizar refs usadas no cálculo de radar (sem setState para não travar layout)
+      const points: LatLng[] = (coordinates as number[][])
+        .map((coord: number[]) => {
+          if (!Array.isArray(coord) || coord.length < 2) return null;
+          return { latitude: coord[1], longitude: coord[0] };
+        })
+        .filter((p: LatLng | null): p is LatLng => p !== null);
+      if (points.length < 2) return;
+      routePointsRef.current = points;
+      routeCumulativeRef.current = getCumulativeDistances(points);
 
     } catch (error) {
       console.error("Erro ao processar mudança de rota:", error);
     }
-  }, [radars]);
+  }, []);
 
   // Handlers memoizados para evitar re-creates
   const handleRouteProgressChange = useCallback((progress: any) => {
@@ -1589,6 +1630,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
     setRadarFeedbackTarget(null);
     setRadarFeedbackSubmitting(false);
     setNearestRadar(null);
+    setLiveRadarOverlay([]);
     lastNearbyRadarIdRef.current = null;
     setNearbyRadarIds(new Set());
     setIsNavigating(false);
@@ -1619,6 +1661,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
     setRadarFeedbackTarget(null);
     setRadarFeedbackSubmitting(false);
     setNearestRadar(null);
+    setLiveRadarOverlay([]);
     lastNearbyRadarIdRef.current = null;
     setNearbyRadarIds(new Set());
     setIsNavigating(false);
@@ -1698,7 +1741,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
   }, [
     MapboxNavComponent, isNavigating, origin, destination, destinationText,
     mapboxRadars, nearbyRadarIdsArray, nearestRadar,
-    handleLocationChange, handleRouteProgressChange, handleArrive, handleCancelNavigation, handleError, handleRouteAlternativeSelected
+    handleLocationChange, handleRouteProgressChange, handleArrive, handleCancelNavigation, handleError, handleRouteAlternativeSelected, handleRouteChanged
   ]);
 
   return (

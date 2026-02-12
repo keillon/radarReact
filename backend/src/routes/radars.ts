@@ -7,6 +7,43 @@ import { syncAllRadars } from "../services/radarSources";
 import { decodePolyline } from "../utils/polyline";
 import { prisma } from "../utils/prisma";
 
+type RadarResponseItem = {
+  id: string;
+  latitude: number;
+  longitude: number;
+  velocidadeLeve: number | null;
+  velocidadePesado: number | null;
+  tipoRadar: string | null;
+  situacao: string | null;
+  ativo: boolean;
+  confirms: number;
+  denies: number;
+  source: string | null;
+  rodovia?: string | null;
+  createdAt: Date;
+  lastConfirmedAt: Date;
+};
+
+type RadarCacheState = {
+  data: RadarResponseItem[];
+  builtAt: number;
+  version: number;
+  loadingPromise: Promise<RadarResponseItem[]> | null;
+};
+
+const RADARS_CACHE_TTL_MS = 30_000;
+const radarCache: RadarCacheState = {
+  data: [],
+  builtAt: 0,
+  version: 0,
+  loadingPromise: null,
+};
+
+let csvCache: { mtimeMs: number; data: RadarResponseItem[] } = {
+  mtimeMs: 0,
+  data: [],
+};
+
 /** Extrai tipo normalizado: Radar Fixo | Radar Movel | Semaforo com Radar | Semaforo com Camera */
 function extractTipoRadarFromDescription(description: string): string {
   if (!description || typeof description !== "string") return "Radar Fixo";
@@ -147,6 +184,101 @@ async function fetchRadarsFromCSV(): Promise<any[]> {
     console.error("❌ [CSV] Erro ao ler arquivo CSV:", error);
     return [];
   }
+}
+
+function getCSVPath(): string {
+  const fromFile = path.join(__dirname, "..", "..", "maparadar.csv");
+  const fromCwd = path.join(process.cwd(), "backend", "maparadar.csv");
+  const fromCwdBackend = path.join(process.cwd(), "maparadar.csv");
+  if (fs.existsSync(fromFile)) return fromFile;
+  if (fs.existsSync(fromCwd)) return fromCwd;
+  return fromCwdBackend;
+}
+
+async function getCsvRadarsCached(): Promise<RadarResponseItem[]> {
+  try {
+    const csvPath = getCSVPath();
+    if (!fs.existsSync(csvPath)) return [];
+    const stat = fs.statSync(csvPath);
+    if (csvCache.data.length > 0 && csvCache.mtimeMs === stat.mtimeMs) {
+      return csvCache.data;
+    }
+    const parsed = (await fetchRadarsFromCSV()) as RadarResponseItem[];
+    csvCache = { mtimeMs: stat.mtimeMs, data: parsed };
+    return parsed;
+  } catch {
+    return csvCache.data;
+  }
+}
+
+async function loadAllRadarsFast(): Promise<RadarResponseItem[]> {
+  const dbRadars = await prisma.radar.findMany({
+    select: {
+      id: true,
+      latitude: true,
+      longitude: true,
+      velocidadeLeve: true,
+      velocidadePesado: true,
+      tipoRadar: true,
+      situacao: true,
+      ativo: true,
+      confirms: true,
+      denies: true,
+      source: true,
+      rodovia: true,
+      createdAt: true,
+      lastConfirmedAt: true,
+    },
+  });
+
+  const csvRadars = await getCsvRadarsCached();
+  const radarMap = new Map<string, RadarResponseItem>();
+  for (const radar of dbRadars as RadarResponseItem[]) {
+    const key = `${radar.latitude.toFixed(6)}-${radar.longitude.toFixed(6)}`;
+    radarMap.set(key, radar);
+  }
+  for (const radar of csvRadars) {
+    const key = `${radar.latitude.toFixed(6)}-${radar.longitude.toFixed(6)}`;
+    if (!radarMap.has(key)) radarMap.set(key, radar);
+  }
+
+  return Array.from(radarMap.values()).map((r: any) => ({
+    ...r,
+    tipoRadar:
+      r.tipoRadar ??
+      extractTipoRadarFromDescription(r.rodovia ?? "") ??
+      "Radar Fixo",
+  }));
+}
+
+async function getAllRadarsCached(forceRefresh: boolean = false): Promise<RadarResponseItem[]> {
+  const now = Date.now();
+  const cacheValid =
+    !forceRefresh &&
+    radarCache.data.length > 0 &&
+    now - radarCache.builtAt < RADARS_CACHE_TTL_MS;
+  if (cacheValid) return radarCache.data;
+
+  if (radarCache.loadingPromise) {
+    return radarCache.loadingPromise;
+  }
+
+  radarCache.loadingPromise = loadAllRadarsFast()
+    .then((data) => {
+      radarCache.data = data;
+      radarCache.builtAt = Date.now();
+      radarCache.version += 1;
+      return data;
+    })
+    .finally(() => {
+      radarCache.loadingPromise = null;
+    });
+
+  return radarCache.loadingPromise;
+}
+
+function invalidateRadarCache() {
+  radarCache.builtAt = 0;
 }
 
 export async function radarRoutes(fastify: FastifyInstance) {
@@ -344,215 +476,41 @@ export async function radarRoutes(fastify: FastifyInstance) {
     };
 
     try {
-      // Buscar por rota (polyline)
-      if (query.route) {
-        const polyline = query.route;
-        const coordinates = decodePolyline(polyline);
+      const forceRefresh =
+        query.debug === "refresh" ||
+        query.debug === "1" ||
+        query.debug === "true";
+      const shouldServeAll =
+        Boolean(query.route) ||
+        (Boolean(query.north) &&
+          Boolean(query.south) &&
+          Boolean(query.east) &&
+          Boolean(query.west)) ||
+        (Boolean(query.lat) && Boolean(query.lon));
 
-        if (coordinates.length === 0) {
+      if (!shouldServeAll) return { radars: [] };
+
+      if (query.route) {
+        // Mantém compatibilidade de API (valida polyline), sem custo de filtro por rota
+        const decoded = decodePolyline(query.route);
+        if (decoded.length === 0) {
           return { radars: [] };
         }
+      }
 
-        // Buscar TODOS os radares do banco (SEM NENHUM FILTRO)
-        fastify.log.info(
-          `📊 Buscando TODOS os radares do banco (SEM NENHUM FILTRO)...`
-        );
-
-        const allRadars = await prisma.radar.findMany({
-          // SEM WHERE - buscar TODOS os radares
-        });
-
-        fastify.log.info(`📊 Total de radares no banco: ${allRadars.length}`);
-
-        // NÃO FILTRAR POR DISTÂNCIA DA ROTA - Retornar TODOS os radares
-        const activeRadars = allRadars;
-
-        fastify.log.info(
-          `✅ Radares encontrados: ${activeRadars.length} (Públicos: ${
-            activeRadars.filter((r) => r.source && r.source !== "user").length
-          }, Móveis: ${
-            activeRadars.filter((r) => r.tipoRadar === "móvel").length
-          }, Fixos: ${
-            activeRadars.filter((r) => r.tipoRadar === "fixo").length
-          })`
-        );
-
-        const response: any = {
+      const activeRadars = await getAllRadarsCached(forceRefresh);
+      if (query.debug) {
+        return {
           radars: activeRadars,
+          meta: {
+            total: activeRadars.length,
+            cacheBuiltAt: radarCache.builtAt,
+            cacheAgeMs: Date.now() - radarCache.builtAt,
+            cacheVersion: radarCache.version,
+          },
         };
-
-        const serializeTime = Date.now();
-        const responseSize = JSON.stringify(response).length;
-        const responseSizeMB = (responseSize / 1024 / 1024).toFixed(2);
-
-        fastify.log.info(
-          `✅ Serialização concluída: ${activeRadars.length} radares (${responseSizeMB} MB)`
-        );
-
-        return response;
       }
-
-      // Buscar por bounding box
-      if (query.north && query.south && query.east && query.west) {
-        // Buscar TODOS os radares do banco (SEM NENHUM FILTRO)
-        fastify.log.info(
-          `📊 Buscando TODOS os radares do banco (SEM NENHUM FILTRO)...`
-        );
-
-        const allRadars = await prisma.radar.findMany({
-          // SEM WHERE - buscar TODOS os radares
-        });
-
-        // NÃO FILTRAR POR BOUNDING BOX - Retornar TODOS os radares
-        const activeRadars = allRadars;
-
-        fastify.log.info(
-          `✅ Radares encontrados: ${activeRadars.length} (Públicos: ${
-            activeRadars.filter((r) => r.source && r.source !== "user").length
-          }, Móveis: ${
-            activeRadars.filter((r) => r.tipoRadar === "móvel").length
-          }, Fixos: ${
-            activeRadars.filter((r) => r.tipoRadar === "fixo").length
-          })`
-        );
-
-        const response: any = {
-          radars: activeRadars,
-        };
-
-        const serializeTime = Date.now();
-        const responseSize = JSON.stringify(response).length;
-        const responseSizeMB = (responseSize / 1024 / 1024).toFixed(2);
-
-        fastify.log.info(
-          `✅ Serialização concluída: ${activeRadars.length} radares (${responseSizeMB} MB)`
-        );
-
-        return response;
-      }
-
-      // Buscar por coordenadas e raio
-      if (query.lat && query.lon) {
-        const centerLat = parseFloat(query.lat);
-        const centerLon = parseFloat(query.lon);
-        const radius = query.radius ? parseFloat(query.radius) : 500; // Raio padrão de 500km para buscar todos
-
-        fastify.log.info(
-          `📊 Buscando TODOS os radares do banco (SEM NENHUM FILTRO DE DISTÂNCIA)...`
-        );
-
-        // Buscar TODOS os radares do banco (SEM NENHUM FILTRO)
-        const allRadars = await prisma.radar.findMany({
-          // SEM WHERE - buscar TODOS os radares
-        });
-
-        fastify.log.info(`📊 Total de radares no banco: ${allRadars.length}`);
-
-        // NÃO FILTRAR POR DISTÂNCIA - Retornar TODOS os radares do banco
-        const dbRadars = allRadars;
-
-        // Buscar radares do arquivo CSV local
-        fastify.log.info(`🔍 Buscando radares do arquivo CSV local...`);
-        let csvRadars: any[] = [];
-        try {
-          csvRadars = await fetchRadarsFromCSV();
-          fastify.log.info(
-            `✅ ${csvRadars.length} radares encontrados do arquivo CSV`
-          );
-        } catch (error: any) {
-          fastify.log.error(`❌ Erro ao ler CSV:`, error);
-        }
-
-        // Combinar radares do banco com radares da Lufop
-        // Usar Set para evitar duplicatas baseado em lat/lon
-        const radarMap = new Map<string, any>();
-
-        // Adicionar radares do banco
-        dbRadars.forEach((radar) => {
-          const key = `${radar.latitude.toFixed(6)}-${radar.longitude.toFixed(
-            6
-          )}`;
-          radarMap.set(key, radar);
-        });
-
-        // Adicionar radares do CSV (não sobrescrever se já existir do banco)
-        csvRadars.forEach((radar) => {
-          const key = `${radar.latitude.toFixed(6)}-${radar.longitude.toFixed(
-            6
-          )}`;
-          if (!radarMap.has(key)) {
-            radarMap.set(key, radar);
-          }
-        });
-
-        const activeRadars = Array.from(radarMap.values());
-
-        fastify.log.info(
-          `🔍 Buscando radares próximos: lat=${centerLat}, lon=${centerLon}, radius=${radius}km`
-        );
-        fastify.log.info(
-          `📊 Total de radares encontrados: ${activeRadars.length}`
-        );
-
-        // Log detalhado
-        const publicRadars = activeRadars.filter(
-          (r) => r.source && r.source !== "user"
-        );
-        const mobileRadars = activeRadars.filter(
-          (r) => r.tipoRadar === "móvel"
-        );
-        const fixedRadars = activeRadars.filter((r) => r.tipoRadar === "fixo");
-
-        fastify.log.info(
-          `✅ Radares encontrados: ${activeRadars.length} (Públicos: ${publicRadars.length}, Móveis: ${mobileRadars.length}, Fixos: ${fixedRadars.length})`
-        );
-
-        // Garantir tipoRadar em todos os radares (ícone correto no frontend)
-        const radarsForResponse = activeRadars.map((r: any) => ({
-          ...r,
-          tipoRadar:
-            r.tipoRadar ??
-            extractTipoRadarFromDescription(
-              r.metadata?.description ?? r.rodovia ?? ""
-            ) ??
-            "Radar Fixo",
-        }));
-
-        const response: any = {
-          radars: radarsForResponse,
-        };
-
-        const serializeTime = Date.now();
-        const responseSize = JSON.stringify(response).length;
-        const responseSizeMB = (responseSize / 1024 / 1024).toFixed(2);
-
-        fastify.log.info(
-          `🔄 Iniciando serialização de ${activeRadars.length} radares...`
-        );
-
-        // Log de amostra de coordenadas para debug
-        if (activeRadars.length > 0) {
-          fastify.log.info(
-            `🔍 [Backend] Amostra de coordenadas (primeiros 5 radares):`
-          );
-          activeRadars.slice(0, 5).forEach((radar, index) => {
-            fastify.log.info(
-              `  [${index}] ID: ${radar.id}, Lat: ${radar.latitude}, Lon: ${radar.longitude}`
-            );
-          });
-        }
-
-        fastify.log.info(
-          `✅ Serialização concluída: ${activeRadars.length} radares em ${
-            Date.now() - serializeTime
-          }ms (${responseSizeMB} MB)`
-        );
-
-        return response;
-      }
-
-      // Se não há parâmetros, retornar vazio
-      return { radars: [] };
+      return { radars: activeRadars };
     } catch (error: any) {
       fastify.log.error("Erro ao buscar radares:", error);
       return reply.code(500).send({
@@ -629,6 +587,7 @@ export async function radarRoutes(fastify: FastifyInstance) {
         );
       } catch (_) {}
 
+      invalidateRadarCache();
       // Broadcast via WebSocket
       fastify.wsBroadcast("radar:new", {
         id: radar.id,
@@ -704,6 +663,7 @@ export async function radarRoutes(fastify: FastifyInstance) {
         },
       });
 
+      invalidateRadarCache();
       // Broadcast via WebSocket
       fastify.wsBroadcast("radar:new", {
         id: radar.id,
@@ -802,6 +762,7 @@ export async function radarRoutes(fastify: FastifyInstance) {
         data: data as any,
       });
 
+      invalidateRadarCache();
       // Broadcast via WebSocket
       fastify.wsBroadcast("radar:update", {
         id: radar.id,
@@ -839,6 +800,7 @@ export async function radarRoutes(fastify: FastifyInstance) {
 
       await prisma.radar.delete({ where: { id } });
 
+      invalidateRadarCache();
       // Broadcast via WebSocket quando deletar
       fastify.wsBroadcast("radar:delete", {
         id: id,
@@ -964,6 +926,7 @@ export async function radarRoutes(fastify: FastifyInstance) {
       });
     }
 
+    invalidateRadarCache();
     fastify.wsBroadcast("radar:update", {
       id: updated.id,
       latitude: updated.latitude,
@@ -1099,6 +1062,7 @@ export async function radarRoutes(fastify: FastifyInstance) {
       });
     }
 
+    invalidateRadarCache();
     fastify.wsBroadcast("radar:update", {
       id: updated.id,
       latitude: updated.latitude,
