@@ -230,19 +230,7 @@ async function loadAllRadarsFast(): Promise<RadarResponseItem[]> {
       lastConfirmedAt: true,
     },
   });
-
-  const csvRadars = await getCsvRadarsCached();
-  const radarMap = new Map<string, RadarResponseItem>();
-  for (const radar of dbRadars as RadarResponseItem[]) {
-    const key = `${radar.latitude.toFixed(6)}-${radar.longitude.toFixed(6)}`;
-    radarMap.set(key, radar);
-  }
-  for (const radar of csvRadars) {
-    const key = `${radar.latitude.toFixed(6)}-${radar.longitude.toFixed(6)}`;
-    if (!radarMap.has(key)) radarMap.set(key, radar);
-  }
-
-  return Array.from(radarMap.values()).map((r: any) => ({
+  return (dbRadars as RadarResponseItem[]).map((r: any) => ({
     ...r,
     tipoRadar:
       r.tipoRadar ??

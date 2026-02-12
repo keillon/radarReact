@@ -1072,6 +1072,20 @@ export default function Home({ onOpenEditor }: HomeProps) {
                 });
                 break;
               }
+              case "radar:refresh": {
+                const loc = currentLocationRef.current;
+                if (!loc?.latitude || !loc?.longitude) break;
+                getRadarsNearLocation(loc.latitude, loc.longitude, 50000)
+                  .then((allRadars) => {
+                    if (!isMountedRef.current) return;
+                    setRadars(allRadars);
+                    setLiveRadarOverlay([]);
+                  })
+                  .catch((error) => {
+                    console.error("Erro ao recarregar radares após refresh:", error);
+                  });
+                break;
+              }
             }
           } catch (err) {
             console.error("Erro ao processar mensagem WebSocket:", err);

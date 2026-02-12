@@ -1,6 +1,7 @@
 import { FastifyInstance } from "fastify";
 import path from "path";
 import fs from "fs";
+import { getCsvImportStatus, importRadarCsv } from "../services/csvRadarImport";
 
 /**
  * Painel Admin HTML simples para enviar notificações
@@ -150,12 +151,57 @@ const adminHTML = `
     .delete-btn:hover {
       background: #c82333;
     }
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+    .tab-btn {
+      flex: 1;
+      background: #eef2ff;
+      color: #3730a3;
+      border: 1px solid #c7d2fe;
+      padding: 10px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .tab-btn.active {
+      background: #4f46e5;
+      color: #fff;
+      border-color: #4f46e5;
+    }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+    .csv-drop {
+      border: 2px dashed #cbd5e1;
+      border-radius: 10px;
+      padding: 16px;
+      background: #f8fafc;
+      margin-bottom: 12px;
+    }
+    .csv-meta {
+      font-size: 13px;
+      color: #475569;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 10px;
+      margin-top: 10px;
+      white-space: pre-wrap;
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>🚨 Painel Admin - Notificações</h1>
-    
+
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="notifications">Notificações</button>
+      <button class="tab-btn" data-tab="csv">CSV de Radares</button>
+    </div>
+
+    <div id="tab-notifications" class="tab-panel active">
     <div class="stats" id="stats">
       <div class="stat-card">
         <h3>Dispositivos Registrados</h3>
@@ -188,10 +234,39 @@ const adminHTML = `
       </div>
       <div id="tokensList"></div>
     </div>
+    </div>
+
+    <div id="tab-csv" class="tab-panel">
+      <h2 style="margin-bottom: 12px;">Atualizar Base CSV</h2>
+      <p style="margin-bottom: 12px; color:#475569;">
+        O backend só reprocessa quando o CSV mudar (hash diferente). Se for igual, ele ignora.
+      </p>
+
+      <div class="csv-drop">
+        <input type="file" id="csvFile" accept=".csv,text/csv" />
+        <p style="margin-top: 8px; color:#64748b; font-size: 13px;">
+          Selecione um arquivo CSV atualizado. O conteúdo será enviado e persistido no backend.
+        </p>
+      </div>
+
+      <button id="uploadCsvBtn" style="margin-bottom:10px;">Enviar CSV e Processar</button>
+      <button id="refreshCsvStatusBtn" style="background:#16a34a;">Atualizar Status CSV</button>
+
+      <div id="csvStatus" class="csv-meta">Carregando status...</div>
+    </div>
   </div>
 
   <script>
     const API_URL = window.location.origin;
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-btn').forEach((btn) => {
+        btn.classList.toggle('active', btn.dataset.tab === tabId);
+      });
+      document.querySelectorAll('.tab-panel').forEach((panel) => {
+        panel.classList.toggle('active', panel.id === 'tab-' + tabId);
+      });
+    }
 
     // Carregar estatísticas e tokens
     async function loadStats() {
@@ -216,6 +291,29 @@ const adminHTML = `
         document.getElementById('tokensList').innerHTML = 
           '<p style="color: #dc3545; text-align: center; padding: 20px;">❌ Erro ao carregar dispositivos. Tente atualizar a página.</p>';
         showMessage('Erro ao carregar dispositivos: ' + error.message, 'error');
+      }
+    }
+
+    async function loadCsvStatus() {
+      const container = document.getElementById('csvStatus');
+      try {
+        const response = await fetch(API_URL + '/admin/csv/status');
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.error || 'Falha ao carregar status');
+
+        const s = data.status || {};
+        const state = s.state || null;
+        const info = s.csvInfo || {};
+        container.textContent =
+          'CSV atual: ' + (info.exists ? 'sim' : 'não') + '\\n' +
+          'Tamanho: ' + (info.size || 0) + ' bytes\\n' +
+          'Modificado em: ' + (info.mtimeMs ? new Date(info.mtimeMs).toLocaleString('pt-BR') : '-') + '\\n\\n' +
+          'Último import: ' + (state?.importedAt ? new Date(state.importedAt).toLocaleString('pt-BR') : 'nunca') + '\\n' +
+          'Arquivo: ' + (state?.fileName || '-') + '\\n' +
+          'Rows: ' + (state?.totalRows || 0) + '\\n' +
+          'Criados: ' + (state?.created || 0) + ' | Atualizados: ' + (state?.updated || 0) + ' | Inativados: ' + (state?.deactivated || 0);
+      } catch (error) {
+        container.textContent = 'Erro ao carregar status CSV: ' + error.message;
       }
     }
 
@@ -322,8 +420,53 @@ const adminHTML = `
       }
     });
 
+    document.querySelectorAll('.tab-btn').forEach((btn) => {
+      btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+    });
+
+    document.getElementById('refreshCsvStatusBtn').addEventListener('click', loadCsvStatus);
+
+    document.getElementById('uploadCsvBtn').addEventListener('click', async () => {
+      const fileInput = document.getElementById('csvFile');
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) {
+        showMessage('Selecione um arquivo CSV.', 'error');
+        return;
+      }
+      const btn = document.getElementById('uploadCsvBtn');
+      btn.disabled = true;
+      btn.textContent = 'Processando CSV...';
+      try {
+        const text = await file.text();
+        const response = await fetch(API_URL + '/admin/csv/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileName: file.name,
+            csvText: text,
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || 'Falha ao processar CSV');
+        }
+        if (data.imported) {
+          showMessage('✅ CSV processado com sucesso. Criados: ' + (data.stats?.created || 0) + ', Atualizados: ' + (data.stats?.updated || 0), 'success');
+        } else {
+          showMessage('ℹ️ CSV não processado: ' + (data.reason || 'sem mudanças'), 'success');
+        }
+        await loadCsvStatus();
+      } catch (error) {
+        showMessage('❌ Erro ao enviar CSV: ' + error.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Enviar CSV e Processar';
+      }
+    });
+
     // Carregar ao iniciar
     loadStats();
+    loadCsvStatus();
     
     // Atualizar automaticamente a cada 30 segundos
     setInterval(loadStats, 30000);
@@ -346,5 +489,55 @@ export async function adminRoutes(fastify: FastifyInstance) {
   // Servir painel admin
   fastify.get("/admin", async (request, reply) => {
     reply.type("text/html").send(adminHTML);
+  });
+
+  fastify.get("/admin/csv/status", async (_request, reply) => {
+    try {
+      const status = getCsvImportStatus();
+      return reply.send({ success: true, status });
+    } catch (error: any) {
+      fastify.log.error({ error }, "Erro ao obter status CSV");
+      return reply.code(500).send({
+        success: false,
+        error: "Erro ao obter status CSV",
+      });
+    }
+  });
+
+  fastify.post("/admin/csv/upload", async (request, reply) => {
+    try {
+      const body = request.body as {
+        csvText?: string;
+        fileName?: string;
+        force?: boolean;
+      };
+      if (!body?.csvText || String(body.csvText).trim().length === 0) {
+        return reply.code(400).send({
+          success: false,
+          error: "csvText é obrigatório",
+        });
+      }
+
+      const result = await importRadarCsv({
+        csvText: body.csvText,
+        fileName: body.fileName || "maparadar.csv",
+        force: body.force === true,
+      });
+
+      // Avisar clientes para recarregar uma vez a base de radares
+      fastify.wsBroadcast("radar:refresh", {
+        at: new Date().toISOString(),
+        reason: result.reason,
+      });
+
+      return reply.send({ success: true, ...result });
+    } catch (error: any) {
+      fastify.log.error({ error }, "Erro ao importar CSV");
+      return reply.code(500).send({
+        success: false,
+        error: "Erro ao importar CSV",
+        details: error?.message,
+      });
+    }
   });
 }
