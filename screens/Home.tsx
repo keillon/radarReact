@@ -111,33 +111,26 @@ const calculateDistance = (
   return R * c;
 };
 
-// Função auxiliar para calcular distância ponto-reta (Cross-Track Distance)
-const getDistanceFromLine = (pt: any, v: any, w: any) => {
-  const l2 = (w[0] - v[0]) ** 2 + (w[1] - v[1]) ** 2;
-  if (l2 === 0) return Math.sqrt((pt[0] - v[0]) ** 2 + (pt[1] - v[1]) ** 2);
-  let t = ((pt[0] - v[0]) * (w[0] - v[0]) + (pt[1] - v[1]) * (w[1] - v[1])) / l2;
-  t = Math.max(0, Math.min(1, t));
-  const projectionX = v[0] + t * (w[0] - v[0]);
-  const projectionY = v[1] + t * (w[1] - v[1]);
-  return Math.sqrt((pt[0] - projectionX) ** 2 + (pt[1] - projectionY) ** 2);
-};
+// Distância máxima perpendicular à rota para considerar "na mesma via" (metros).
+// ~6m = mesma faixa/rua; evita radares em ruas paralelas ou pistas opostas.
+const MAX_ROUTE_DISTANCE_METERS = 6;
 
-// Função para checar se o radar está na rota
-const isRadarOnRoute = (radar: Radar, route: any) => {
-  if (!route || !route.geometry || !route.geometry.coordinates) return true;
+// Função para checar se o radar está na rota (na mesma via, não em rua paralela).
+// Recebe o objeto da rota com geometry (routeData.route), não o RouteResponse inteiro.
+const isRadarOnRoute = (
+  radar: Radar,
+  route: { geometry?: { coordinates?: number[][] } } | null,
+  routePoints: LatLng[]
+): boolean => {
+  if (!route?.geometry?.coordinates?.length) return false;
+  if (routePoints.length < 2) return false;
 
-  // Reduced from 0.00015 (~15m) to 0.00012 (~13m) to STRICTLY filter parallel streets
-  const MAX_DIST_DEG = 0.00012;
-  const coordinates = route.geometry.coordinates;
-  const radarPt = [radar.longitude, radar.latitude];
-
-  for (let i = 0; i < coordinates.length - 1; i++) {
-    const p1 = coordinates[i];
-    const p2 = coordinates[i + 1];
-    const dist = getDistanceFromLine(radarPt, p1, p2);
-    if (dist < MAX_DIST_DEG) return true;
-  }
-  return false;
+  const radarPoint: LatLng = {
+    latitude: radar.latitude,
+    longitude: radar.longitude,
+  };
+  const distMeters = calculateDistanceToRoute(radarPoint, routePoints);
+  return distMeters <= MAX_ROUTE_DISTANCE_METERS;
 };
 
 // Função para calcular distância perpendicular de um ponto a um segmento de linha
@@ -435,6 +428,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
   const audioPlayerRef = useRef<any>(null);
   const isPlayingRadarSound = useRef(false);
   const postPassTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null); // Timer para modal pós-passagem
+  const activeRadarIdRef = useRef<string | null>(null); // Histerese: um único radar ativo até passar ou sair da janela
 
   useEffect(() => {
     initMapbox();
@@ -593,6 +587,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
       // Limpar estado de radares para nova navegação (cada viagem começa "limpa")
       passedRadarIds.current.clear();
       alertedRadarIds.current.clear();
+      activeRadarIdRef.current = null;
       lastCalculatedDistance.current = 0;
       radarZeroTimeRef2.current = null;
 
@@ -1129,22 +1124,16 @@ export default function Home({ onOpenEditor }: HomeProps) {
               distance: number;
               routeDistance: number;
             };
-            let nearest: NearestRadar | null = null;
-            let minDistance = Infinity;
+            const candidates: NearestRadar[] = [];
 
             radars.forEach((radar) => {
-              // Optimization: Skip if already passed
-              if (passedRadarIds.current.has(radar.id)) {
-                return;
-              }
+              if (passedRadarIds.current.has(radar.id)) return;
 
               const radarPoint: LatLng = {
                 latitude: radar.latitude,
                 longitude: radar.longitude,
               };
 
-              // OTIMIZAÇÃO CRÍTICA: Pré-filtro espacial (Ignorar radares a mais de 2km)
-              // Isso reduz drasticamente o processamento de 16.000 para ~50 radares por ciclo
               const distanceToUser = calculateDistance(
                 checkLocation.latitude,
                 checkLocation.longitude,
@@ -1153,55 +1142,67 @@ export default function Home({ onOpenEditor }: HomeProps) {
               );
               if (distanceToUser > 2000) return;
 
-              // 1. STRICT Filtering: Distance from route LINE (Cross-track error)
-              // Reduced to ~13m (0.00012 deg) in isRadarOnRoute, but here we can check meters
               const routeDistMeters = calculateDistanceToRoute(
                 radarPoint,
                 routePoints
               );
-
-              // If radar is > 30m away from the route line, ignore it (Parallel street filter)
-              if (routeDistMeters > 30) {
+              if (routeDistMeters > MAX_ROUTE_DISTANCE_METERS) return;
+              if (
+                !isRadarOnRoute(
+                  radar,
+                  routeDataRef.current?.route ?? null,
+                  routePoints
+                )
+              ) {
                 return;
               }
 
-              // Double check with geometry function
-              if (!isRadarOnRoute(radar, routeDataRef.current)) return;
-
-              // 2. Distance ALONG route (Projected)
-              const routeDistanceResult =
-                calculateDistanceAlongRoute(
-                  checkLocation,
-                  radarPoint,
-                  routePoints
-                );
-
+              const routeDistanceResult = calculateDistanceAlongRoute(
+                checkLocation,
+                radarPoint,
+                routePoints
+              );
               if (routeDistanceResult.hasPassed) {
                 passedRadarIds.current.add(radar.id);
                 return;
               }
 
-              const distanceAlongRoute =
-                routeDistanceResult.distance;
+              const distanceAlongRoute = routeDistanceResult.distance;
+              if (distanceAlongRoute < 0 || distanceAlongRoute >= 500) return;
 
-              // Only consider radars ahead (0 to 500m)
-              if (
-                distanceAlongRoute < 0 ||
-                distanceAlongRoute >= 500
-              ) {
-                return;
-              }
-
-              // Find the CLOSEST radar along the route
-              if (distanceAlongRoute < minDistance) {
-                minDistance = distanceAlongRoute;
-                nearest = {
-                  radar,
-                  distance: roundDistanceTo10(distanceAlongRoute),
-                  routeDistance: Math.round(routeDistMeters),
-                };
-              }
+              candidates.push({
+                radar,
+                distance: roundDistanceTo10(distanceAlongRoute),
+                routeDistance: Math.round(routeDistMeters),
+              });
             });
+
+            // Ordenar por distância ao longo da rota (mais próximo primeiro)
+            candidates.sort((a, b) => a.distance - b.distance);
+
+            // Histerese: manter um único radar ativo até passar ou sair da janela
+            let nearest: NearestRadar | null = null;
+            const activeId = activeRadarIdRef.current;
+            if (
+              activeId &&
+              !passedRadarIds.current.has(activeId) &&
+              candidates.length > 0
+            ) {
+              const activeCandidate = candidates.find((c) => c.radar.id === activeId);
+              if (activeCandidate) {
+                nearest = activeCandidate;
+              } else {
+                nearest = candidates[0];
+                activeRadarIdRef.current = nearest.radar.id;
+              }
+            } else {
+              if (candidates.length > 0) {
+                nearest = candidates[0];
+                activeRadarIdRef.current = nearest.radar.id;
+              } else {
+                activeRadarIdRef.current = null;
+              }
+            }
 
             if (nearest) {
               const nearestData: NearestRadar = nearest;
@@ -1328,6 +1329,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
               // No nearest radar
               radarZeroTimeRef2.current = null;
               lastCalculatedDistance.current = 0;
+              activeRadarIdRef.current = null;
               setNearbyRadarIds(new Set());
               hideModal();
             }
@@ -1466,6 +1468,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
     }
     passedRadarIds.current.clear();
     alertedRadarIds.current.clear();
+    activeRadarIdRef.current = null;
     setNearestRadar(null);
     setNearbyRadarIds(new Set());
     setIsNavigating(false);
@@ -1481,6 +1484,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
     }
     passedRadarIds.current.clear();
     alertedRadarIds.current.clear();
+    activeRadarIdRef.current = null;
     setNearestRadar(null);
     setNearbyRadarIds(new Set());
     setIsNavigating(false);
