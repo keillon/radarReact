@@ -9,7 +9,7 @@ import Mapbox, {
   UserLocation,
   UserTrackingMode,
 } from "@rnmapbox/maps";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Image,
@@ -69,20 +69,33 @@ interface MapProps {
   interactive?: boolean; // Se false, desativa interação do mapa (útil para overlay)
   nearbyRadarIds?: Set<string>; // IDs dos radares próximos para animação pulsante
   onCameraChanged?: (coords: { latitude: number; longitude: number }) => void;
+  /** Esconde o ícone de localização do usuário (ex.: modo picker "marcar no mapa") */
+  hideUserLocation?: boolean;
+  /** Ponto selecionado no modo picker (ex.: toque no mapa) — mostra marcador vermelho */
+  pickerSelectedPoint?: { latitude: number; longitude: number } | null;
 }
 
-export default function Map({
-  radars,
-  route,
-  onRadarPress,
-  onMapPress,
-  isNavigating = false,
-  currentLocation,
-  currentStep,
-  interactive = true,
-  nearbyRadarIds = new Set(),
-  onCameraChanged,
-}: MapProps) {
+export type MapHandle = {
+  getCenter: () => Promise<{ latitude: number; longitude: number } | null>;
+};
+
+const Map = forwardRef<MapHandle, MapProps>(function Map(
+  {
+    radars,
+    route,
+    onRadarPress,
+    onMapPress,
+    isNavigating = false,
+    currentLocation,
+    currentStep,
+    interactive = true,
+    nearbyRadarIds = new Set(),
+    onCameraChanged,
+    hideUserLocation = false,
+    pickerSelectedPoint = null,
+  },
+  ref
+) {
   const [userLocation, setUserLocation] = useState<{
     latitude: number;
     longitude: number;
@@ -111,7 +124,7 @@ export default function Map({
     }
 
     if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) return;
-        onCameraChanged({ latitude: lat, longitude: lng });
+    onCameraChanged({ latitude: lat, longitude: lng });
   };
 
   // Animação de pulso para radares próximos
@@ -148,20 +161,17 @@ export default function Map({
       }
 
       // Se não é interativo (overlay), atualizar câmera para sincronizar com navegação
-      if (!interactive && cameraRef.current) {
-        // Usar requestAnimationFrame para evitar atualizações muito frequentes
+      if (!interactive && cameraRef.current && typeof currentLocation.latitude === "number" && typeof currentLocation.longitude === "number") {
         const timeoutId = setTimeout(() => {
-          if (cameraRef.current) {
-            cameraRef.current.setCamera({
-              centerCoordinate: [
-                currentLocation.longitude,
-                currentLocation.latitude,
-              ],
+          const ref = cameraRef.current;
+          if (ref && typeof ref.setCamera === "function") {
+            ref.setCamera({
+              centerCoordinate: [currentLocation.longitude, currentLocation.latitude],
               zoomLevel: 16,
-              animationDuration: 0, // Sincronização instantânea
+              animationDuration: 0,
             });
           }
-        }, 100); // Debounce de 100ms
+        }, 100);
         return () => clearTimeout(timeoutId);
       }
     }
@@ -169,22 +179,24 @@ export default function Map({
 
   // Focar na localização quando ela for obtida pela primeira vez ou quando um currentLocation inicial é provido
   useEffect(() => {
-    if (cameraRef.current && !isNavigating && !hasInitialized) {
+    const ref = cameraRef.current;
+    if (ref && typeof ref.setCamera === "function" && !isNavigating && !hasInitialized) {
       const targetLocation = currentLocation || userLocation;
-      if (targetLocation && targetLocation.latitude !== 0) {
-        // Se já temos uma localização (via prop ou GPS inicial), focamos nela
-        cameraRef.current.setCamera({
+      if (targetLocation != null && typeof targetLocation.latitude === "number" && typeof targetLocation.longitude === "number" && targetLocation.latitude !== 0) {
+        ref.setCamera({
           centerCoordinate: [targetLocation.longitude, targetLocation.latitude],
           zoomLevel: 14,
-          animationDuration: currentLocation ? 0 : 1000, // Instantâneo se for prop (picker), suave se for GPS
+          animationDuration: currentLocation ? 0 : 1000,
         });
         setHasInitialized(true);
       } else {
         // Fallback: aguardar um pouco para ver se o GPS chega
         const timeoutId = setTimeout(() => {
-          if (cameraRef.current && userLocation && !hasInitialized) {
-            cameraRef.current.setCamera({
-              centerCoordinate: [userLocation.longitude, userLocation.latitude],
+          const r = cameraRef.current;
+          const loc = userLocation;
+          if (r && typeof r.setCamera === "function" && loc != null && typeof loc.latitude === "number" && typeof loc.longitude === "number" && !hasInitialized) {
+            r.setCamera({
+              centerCoordinate: [loc.longitude, loc.latitude],
               zoomLevel: 14,
               animationDuration: 1000,
             });
@@ -197,22 +209,22 @@ export default function Map({
   }, [userLocation, currentLocation, isNavigating, hasInitialized]);
 
   const focusOnUserLocation = () => {
-    // Priority for GPS center: use local state or prop fallback
     const target = userLocation || currentLocation;
-    if (target && cameraRef.current) {
-      // Toggle tracking to force Mapbox camera to refocus
-      setIsTracking(false);
-      setTimeout(() => {
-        setIsTracking(true);
-        if (cameraRef.current) {
-          cameraRef.current.setCamera({
-            centerCoordinate: [target.longitude, target.latitude],
-            zoomLevel: 16,
-            animationDuration: 1000,
-          });
-        }
-      }, 50);
-    }
+    if (target == null || typeof target.latitude !== "number" || typeof target.longitude !== "number") return;
+    const ref = cameraRef.current;
+    if (ref == null || typeof ref.setCamera !== "function") return;
+    setIsTracking(false);
+    setTimeout(() => {
+      setIsTracking(true);
+      const r = cameraRef.current;
+      if (r && typeof r.setCamera === "function") {
+        r.setCamera({
+          centerCoordinate: [target.longitude, target.latitude],
+          zoomLevel: 16,
+          animationDuration: 1000,
+        });
+      }
+    }, 50);
   };
 
   // Removido onMapDrag redundante
@@ -278,6 +290,39 @@ export default function Map({
       })),
   }), [radars, nearbyRadarIds]);
 
+  const showUserLocation: boolean =
+    interactive && !onCameraChanged && !hideUserLocation;
+
+  useImperativeHandle(ref, () => ({
+    getCenter: (): Promise<{ latitude: number; longitude: number } | null> => {
+      const cam = cameraRef.current;
+      if (cam == null || typeof (cam as any).getCenter !== "function") {
+        return Promise.resolve(null);
+      }
+      return Promise.resolve((cam as any).getCenter())
+        .then((raw: unknown) => {
+          if (raw == null) return null;
+          let lat: number | null = null;
+          let lng: number | null = null;
+          if (Array.isArray(raw) && raw.length >= 2) {
+            lng = Number(raw[0]);
+            lat = Number(raw[1]);
+          } else if (typeof raw === "object" && raw !== null) {
+            const o = raw as Record<string, unknown>;
+            const a = o.latitude ?? o.lat;
+            const b = o.longitude ?? o.lng ?? o.lon;
+            if (typeof a === "number" && typeof b === "number") {
+              lat = a;
+              lng = b;
+            }
+          }
+          if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) return null;
+          return { latitude: lat, longitude: lng };
+        })
+        .catch(() => null);
+    },
+  }), []);
+
   /* useEffect(() => {
     if (!__DEV__) return;
     const validRadars = radars || [];
@@ -309,69 +354,47 @@ export default function Map({
         compassPosition={{ bottom: 420, right: 20 }}
         scaleBarEnabled={false}
         onPress={(event) => {
-          const geometry = event?.geometry as
-            | { coordinates?: number[] }
-            | undefined;
-          const coords = geometry?.coordinates;
+          const geom = event?.geometry as { coordinates?: number[] } | undefined;
+          const coords = geom?.coordinates;
           if (onMapPress && Array.isArray(coords) && coords.length >= 2) {
             const [lng, lat] = coords;
-            onMapPress({ latitude: lat, longitude: lng });
+            onMapPress({ latitude: Number(lat), longitude: Number(lng) });
           }
         }}
         onLongPress={(event) => {
-          const geometry = event?.geometry as
-            | { coordinates?: number[] }
-            | undefined;
-          const coords = geometry?.coordinates;
+          const geom = event?.geometry as { coordinates?: number[] } | undefined;
+          const coords = geom?.coordinates;
           if (onMapPress && Array.isArray(coords) && coords.length >= 2) {
             const [lng, lat] = coords;
-            onMapPress({ latitude: lat, longitude: lng });
+            onMapPress({ latitude: Number(lat), longitude: Number(lng) });
           }
         }}
-        onCameraChanged={(event) => {
-          try {
-            // Define isUserInteraction strictly
-            const props = (event.properties || {}) as any;
-            const isUserInteraction = props.isUserInteraction === true;
-
-            if (isTracking && isUserInteraction) {
-              setIsTracking(false);
+        {...(onCameraChanged != null
+          ? {
+              onCameraChanged: (event: unknown) => {
+                if (event == null || typeof event !== "object") return;
+                try {
+                  const props = (event as { properties?: Record<string, unknown> }).properties ?? {};
+                  const isUserInteraction = props.isUserInteraction === true;
+                  if (isTracking && isUserInteraction) setIsTracking(false);
+                  const centerCandidate =
+                    (props.center as number[] | undefined) ??
+                    (event as { geometry?: { coordinates?: number[] } }).geometry?.coordinates ??
+                    (event as { centerCoordinate?: number[] }).centerCoordinate ??
+                    (event as { center?: number[] }).center;
+                  if (centerCandidate != null) emitCameraCenter(centerCandidate);
+                } catch (_) {}
+              },
+              onMapIdle: (event: unknown) => {
+                if (event == null || typeof event !== "object") return;
+                try {
+                  const e = event as { properties?: { center?: number[] }; geometry?: { coordinates?: number[] } };
+                  const centerCandidate = e.properties?.center ?? e.geometry?.coordinates;
+                  if (centerCandidate != null) emitCameraCenter(centerCandidate);
+                } catch (_) {}
+              },
             }
-
-            if (onCameraChanged) {
-              // Captura robusta do centro para diferentes formatos de evento
-              const centerCandidate =
-                event?.properties?.center ??
-                (event as any)?.geometry?.coordinates ??
-                (event as any)?.centerCoordinate ??
-                (event as any)?.center;
-
-              emitCameraCenter(centerCandidate);
-
-              // Fallback adicional: obter do Camera ref se o evento vier sem centro
-              if (
-                centerCandidate == null &&
-                cameraRef.current &&
-                typeof cameraRef.current.getCenter === "function"
-              ) {
-                Promise.resolve(cameraRef.current.getCenter())
-                  .then((center: any) => emitCameraCenter(center))
-                  .catch(() => {
-                    // ignorar fallback failures
-                  });
-              }
-            }
-          } catch (e) {
-            console.error("Error in onCameraChanged:", e);
-          }
-        }}
-        onMapIdle={(event: any) => {
-          if (!onCameraChanged) return;
-          const centerCandidate =
-            event?.properties?.center ??
-            event?.geometry?.coordinates;
-          emitCameraCenter(centerCandidate);
-        }}
+          : {})}
       >
         <Camera
           ref={cameraRef}
@@ -391,19 +414,16 @@ export default function Map({
           animationDuration={1000}
         />
 
-        {/* Desabilitar UserLocation quando não é interativo (overlay) para evitar conflitos */}
-        {interactive && !onCameraChanged && (
+        {/* Desabilitar UserLocation quando não é interativo (overlay) ou no modo picker */}
+        {showUserLocation && (
           <UserLocation
             visible={true}
             androidRenderMode="gps"
             onUpdate={(location) => {
-              if (location?.coords) {
-                // SÓ atualizamos o estado de localização se NÃO estivermos no modo picker
-                if (!onCameraChanged) {
-                  setUserLocation({
-                    latitude: location.coords.latitude,
-                    longitude: location.coords.longitude,
-                  });
+              if (location?.coords != null && onCameraChanged == null) {
+                const { latitude, longitude } = location.coords;
+                if (typeof latitude === "number" && typeof longitude === "number") {
+                  setUserLocation({ latitude, longitude });
                 }
               }
             }}
@@ -523,8 +543,10 @@ export default function Map({
         {/* Ícones de radar por tipo (radar, radarFixo, radarMovel, radarSemaforico) */}
         <Images
           images={radarImages}
-          onImageMissing={(imageId) => {
-            console.warn(`⚠️ Imagem faltando no mapa: ${imageId}`);
+          onImageMissing={(imageId: unknown) => {
+            if (imageId != null && typeof imageId === "string") {
+              console.warn("Imagem faltando no mapa:", imageId);
+            }
           }}
         />
 
@@ -540,29 +562,18 @@ export default function Map({
               clusterRadius={50}
               clusterMaxZoomLevel={14}
               onPress={(event) => {
+                if (event == null || onRadarPress == null || radars == null) return;
                 try {
-                  console.log("Radar pressionado:", event);
-                  if (
-                    onRadarPress &&
-                    event?.features &&
-                    Array.isArray(event.features) &&
-                    event.features.length > 0
-                  ) {
-                    const feature = event.features[0];
-                    if (feature != null) {
-                      const radarId = feature.properties?.id || feature.id; // Check properties first
-                      if (radarId != null && radars != null) {
-                        const radar = radars.find(
-                          (r) => r != null && r.id === radarId
-                        );
-                        if (radar != null) {
-                          onRadarPress(radar);
-                        }
-                      }
-                    }
-                  }
-                } catch (error) {
-                  console.error("Erro ao processar press do radar:", error);
+                  const features = event.features;
+                  if (!Array.isArray(features) || features.length === 0) return;
+                  const feature = features[0];
+                  if (feature == null) return;
+                  const radarId = feature.properties?.id ?? feature.id;
+                  if (radarId == null) return;
+                  const radar = radars.find((r) => r != null && r.id === radarId);
+                  if (radar != null) onRadarPress(radar);
+                } catch (_) {
+                  // Evita NPE no bridge
                 }
               }}
             >
@@ -619,6 +630,42 @@ export default function Map({
               />
             </ShapeSource>
           )}
+
+        {/* Marcador do ponto selecionado no modo picker (por último = por cima) */}
+        {pickerSelectedPoint != null &&
+          typeof pickerSelectedPoint.latitude === "number" &&
+          typeof pickerSelectedPoint.longitude === "number" && (
+            <ShapeSource
+              id="pickerSelectedPoint"
+              shape={{
+                type: "Feature",
+                properties: {},
+                geometry: {
+                  type: "Point",
+                  coordinates: [pickerSelectedPoint.longitude, pickerSelectedPoint.latitude],
+                },
+              }}
+            >
+              <CircleLayer
+                id="pickerSelectedPointCircle"
+                style={{
+                  circleRadius: 22,
+                  circleColor: "#ef4444",
+                  circleStrokeWidth: 4,
+                  circleStrokeColor: "#fff",
+                }}
+              />
+              <CircleLayer
+                id="pickerSelectedPointRing"
+                style={{
+                  circleRadius: 28,
+                  circleColor: "transparent",
+                  circleStrokeWidth: 3,
+                  circleStrokeColor: "#ef4444",
+                }}
+              />
+            </ShapeSource>
+          )}
       </MapView>
       {!isNavigating && (userLocation || currentLocation) && (
         <TouchableOpacity
@@ -635,7 +682,9 @@ export default function Map({
       )}
     </View>
   );
-}
+});
+
+export default Map;
 
 const styles = StyleSheet.create({
   container: {

@@ -48,8 +48,6 @@ import {
   confirmRadar,
   denyRadar,
   getRadarsNearLocation,
-  getRadarsNearRoute,
-  getRecentRadars,
   Radar,
   reportRadar
 } from "../services/api";
@@ -161,24 +159,6 @@ const calculateDistance = (
 // Distância máxima perpendicular à rota para considerar "na mesma via" (metros).
 // ~6m = mesma faixa/rua; evita radares em ruas paralelas ou pistas opostas.
 const MAX_ROUTE_DISTANCE_METERS = 6;
-
-// Função para checar se o radar está na rota (na mesma via, não em rua paralela).
-// Recebe o objeto da rota com geometry (routeData.route), não o RouteResponse inteiro.
-const isRadarOnRoute = (
-  radar: Radar,
-  route: { geometry?: { coordinates?: number[][] } } | null,
-  routePoints: LatLng[]
-): boolean => {
-  if (!route?.geometry?.coordinates?.length) return false;
-  if (routePoints.length < 2) return false;
-
-  const radarPoint: LatLng = {
-    latitude: radar.latitude,
-    longitude: radar.longitude,
-  };
-  const distMeters = calculateDistanceToRoute(radarPoint, routePoints);
-  return distMeters <= MAX_ROUTE_DISTANCE_METERS;
-};
 
 // Função para calcular distância perpendicular de um ponto a um segmento de linha
 const distanceToLineSegment = (
@@ -298,28 +278,21 @@ function projectPointOntoRoute(
   return bestCumulative;
 }
 
-/**
- * Distância ao longo da rota do usuário até o radar (em metros).
- * Positiva = radar à frente; negativa ou zero = já passou.
- * Estilo Waze: projeção contínua + cumulativas.
- */
-const calculateDistanceAlongRoute = (
+const calculateDistanceAlongRouteWithCumulative = (
   userLocation: LatLng,
   radarLocation: LatLng,
-  routePoints: LatLng[]
+  routePoints: LatLng[],
+  cumulative: number[]
 ): { distance: number; hasPassed: boolean } => {
-  if (routePoints.length < 2) {
+  if (
+    routePoints.length < 2 ||
+    cumulative.length !== routePoints.length
+  ) {
     return { distance: Infinity, hasPassed: false };
   }
-  const cumulative = getCumulativeDistances(routePoints);
   const userCum = projectPointOntoRoute(userLocation, routePoints, cumulative);
-  const radarCum = projectPointOntoRoute(
-    radarLocation,
-    routePoints,
-    cumulative
-  );
+  const radarCum = projectPointOntoRoute(radarLocation, routePoints, cumulative);
   const distanceAlongRoute = radarCum - userCum;
-  // Histerese 5m: marcar "passou" quando < 5m para evitar flicker por ruído do GPS
   const hasPassed = distanceAlongRoute < 5;
   return {
     distance: hasPassed ? 0 : Math.max(0, distanceAlongRoute),
@@ -366,6 +339,37 @@ interface HomeProps {
   onOpenEditor?: () => void;
 }
 
+const normalizeRadarType = (value?: string): string => {
+  if (!value) return "unknown";
+  return String(value)
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+};
+
+const normalizeRadarPayload = (raw: any): Radar | null => {
+  if (!raw || raw.id == null) return null;
+  const latitude = Number(raw.latitude);
+  const longitude = Number(raw.longitude);
+  if (Number.isNaN(latitude) || Number.isNaN(longitude)) return null;
+  return {
+    id: String(raw.id),
+    latitude,
+    longitude,
+    speedLimit:
+      raw.speedLimit ??
+      raw.velocidadeLeve ??
+      raw.velocidade ??
+      undefined,
+    type: raw.type ?? raw.tipoRadar ?? raw.tipo ?? "unknown",
+    situacao: raw.situacao ?? null,
+    ativo: raw.ativo,
+    confirms: raw.confirms,
+    denies: raw.denies,
+  };
+};
+
 export default function Home({ onOpenEditor }: HomeProps) {
   const [origin, setOrigin] = useState<LatLng | null>(null);
   const [destination, setDestination] = useState<LatLng | null>(null);
@@ -408,6 +412,8 @@ export default function Home({ onOpenEditor }: HomeProps) {
     useState<LatLng | null>(null);
   const [showMapPicker, setShowMapPicker] = useState(false);
   const [mapPickerCenter, setMapPickerCenter] = useState<LatLng | null>(null);
+  const [pickerPreviewCoords, setPickerPreviewCoords] = useState<LatLng | null>(null); // Preview lat/lon durante marcação
+  const pickerPreviewIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [radarPassedLoading, setRadarPassedLoading] = useState(false); // Loading 5s no modal após passar do radar
   const [deviceUserId, setDeviceUserId] = useState<string | null>(null);
   const [showRadarFeedbackCard, setShowRadarFeedbackCard] = useState(false);
@@ -429,7 +435,6 @@ export default function Home({ onOpenEditor }: HomeProps) {
     type: "info",
   });
 
-  const lastSyncTimeRef = useRef<number>(Date.now());
 
   const REPORT_RADAR_TYPES: {
     value: "móvel" | "semaforo" | "placa";
@@ -452,7 +457,6 @@ export default function Home({ onOpenEditor }: HomeProps) {
         icon: require("../assets/images/placa60.png"),
       },
     ];
-  const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const locationWatchRef = useRef<any>(null);
   const modalOpacity = useRef(new Animated.Value(0)).current;
@@ -475,7 +479,6 @@ export default function Home({ onOpenEditor }: HomeProps) {
   const mapPickerDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   // REMOVED: filteredRadarsRef - não mais necessário
   const currentLocationRef = useRef<any>(null);
-  const lastRadarFetchRef = useRef<LatLng | null>(null);
   const isMountedRef = useRef(true);
   const audioPlayerRef = useRef<any>(null);
   const isPlayingRadarSound = useRef(false);
@@ -484,8 +487,37 @@ export default function Home({ onOpenEditor }: HomeProps) {
   const radarSoundPlayedIds = useRef<Set<string>>(new Set()); // Evitar tocar alerta sonoro mais de uma vez por radar (3x aos 30m)
   const radarFeedbackDismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const radarFeedbackActionIds = useRef<Set<string>>(new Set()); // 1 confirmação/negação por usuário no app (sessão)
-  const mapPickerCenterRef = useRef<LatLng | null>(null); // Fonte de verdade do pin no modal "Marcar no Mapa"
+  const mapPickerCenterRef = useRef<LatLng | null>(null); // Fallback centro ao abrir picker
+  const mapPickerMapRef = useRef<{ getCenter: () => Promise<LatLng | null> } | null>(null); // Ref do Map no picker para getCenter()
   const reportCustomLocationRef = useRef<LatLng | null>(null); // Backup da localização escolhida no mapa
+  const hasInitialRadarLoadRef = useRef(false);
+  const routePointsRef = useRef<LatLng[]>([]);
+  const routeCumulativeRef = useRef<number[]>([]);
+  const lastNearbyRadarIdRef = useRef<string | null>(null);
+
+  // Preview de lat/lon no picker: polling a cada 400ms para mostrar onde o pin está
+  useEffect(() => {
+    if (!showMapPicker) {
+      if (pickerPreviewIntervalRef.current) {
+        clearInterval(pickerPreviewIntervalRef.current);
+        pickerPreviewIntervalRef.current = null;
+      }
+      setPickerPreviewCoords(null);
+      return;
+    }
+    setPickerPreviewCoords(mapPickerCenter ?? null);
+    pickerPreviewIntervalRef.current = setInterval(() => {
+      mapPickerMapRef.current?.getCenter?.().then((center) => {
+        if (center != null) setPickerPreviewCoords(center);
+      });
+    }, 400);
+    return () => {
+      if (pickerPreviewIntervalRef.current) {
+        clearInterval(pickerPreviewIntervalRef.current);
+        pickerPreviewIntervalRef.current = null;
+      }
+    };
+  }, [showMapPicker, mapPickerCenter?.latitude, mapPickerCenter?.longitude]);
 
   useEffect(() => {
     initMapbox();
@@ -547,6 +579,24 @@ export default function Home({ onOpenEditor }: HomeProps) {
   }, []);
 
   useEffect(() => {
+    const coordinates = routeData?.route?.geometry?.coordinates;
+    if (!Array.isArray(coordinates) || coordinates.length < 2) {
+      routePointsRef.current = [];
+      routeCumulativeRef.current = [];
+      return;
+    }
+    const points: LatLng[] = coordinates
+      .map((coord: number[]) => {
+        if (!Array.isArray(coord) || coord.length < 2) return null;
+        return { latitude: coord[1], longitude: coord[0] };
+      })
+      .filter((p: LatLng | null): p is LatLng => p !== null);
+    routePointsRef.current = points;
+    routeCumulativeRef.current =
+      points.length >= 2 ? getCumulativeDistances(points) : [];
+  }, [routeData?.route?.geometry?.coordinates]);
+
+  useEffect(() => {
     let mounted = true;
     getOrCreateDeviceUserId()
       .then((id) => {
@@ -588,17 +638,20 @@ export default function Home({ onOpenEditor }: HomeProps) {
           setCurrentLocation(loc);
           setOrigin(loc); // Origem sempre será a localização atual
 
-          // Buscar radares imediatamente quando obtém localização
-          getRadarsNearLocation(loc.latitude, loc.longitude, 50000)
-            .then((nearbyRadars) => {
-              console.log(
-                `✅ ${nearbyRadars.length} radares encontrados na inicialização`
-              );
-              setRadars(nearbyRadars);
-            })
-            .catch((error) => {
-              console.error("Erro ao buscar radares na inicialização:", error);
-            });
+          // Carga inicial única de radares (sem polling/requisições repetidas)
+          if (!hasInitialRadarLoadRef.current) {
+            hasInitialRadarLoadRef.current = true;
+            getRadarsNearLocation(loc.latitude, loc.longitude, 50000)
+              .then((nearbyRadars) => {
+                console.log(
+                  `✅ ${nearbyRadars.length} radares encontrados na inicialização`
+                );
+                setRadars(nearbyRadars);
+              })
+              .catch((error) => {
+                console.error("Erro ao buscar radares na inicialização:", error);
+              });
+          }
         },
         (error: unknown) => {
           console.error("Erro ao obter localização:", error);
@@ -688,35 +741,16 @@ export default function Home({ onOpenEditor }: HomeProps) {
         loadingOpacity.setValue(0);
       });
 
-      // Buscar radares em BACKGROUND (não bloqueia navegação)
-      getRadarsNearRoute({
-        route: routePoints,
-        radius: 250, // Aumentado para 250m para ser mais abrangente
-      })
-        .then((nearbyRadars) => {
-          // UNIR: Manter o que já temos localmente (especialmente reportes recentes) e adicionar os novos
-          setRadars((prev) => {
-            const existingIds = new Set(prev.map(r => r.id));
-            const newRadars = nearbyRadars.filter(r => !existingIds.has(r.id));
-            return [...newRadars, ...prev];
+      // Sem chamada extra por rota: usa cache local + atualizações em tempo real via WebSocket.
+      // Caso a lista ainda esteja vazia, faz uma única carga ampla.
+      if (radars.length === 0 && !hasInitialRadarLoadRef.current) {
+        hasInitialRadarLoadRef.current = true;
+        getRadarsNearLocation(origin.latitude, origin.longitude, 50000)
+          .then((initialRadars) => setRadars(initialRadars))
+          .catch((err) => {
+            console.error("Erro ao carregar radares iniciais na navegação:", err);
           });
-
-          console.log(
-            `✅ ${nearbyRadars.length} radares da API injetados na lista`
-          );
-        })
-        .catch((error: any) => {
-          // Fallback simples: usar localização atual se busca falhar
-          console.warn("Erro ao buscar radares na rota, usando fallback:", error);
-          getRadarsNearLocation(origin.latitude, origin.longitude, 50000)
-            .then((fallbackRadars) => {
-              setRadars(prev => [...fallbackRadars.filter(r => !prev.some(p => p.id === r.id)), ...prev]);
-              console.log(`✅ ${fallbackRadars.length} radares (fallback)`);
-            })
-            .catch((err) => {
-              console.error("Erro no fallback de radares:", err);
-            });
-        });
+      }
     } catch (error: any) {
       console.error("Erro ao buscar rota:", error);
       // Resetar animação em caso de erro
@@ -738,41 +772,6 @@ export default function Home({ onOpenEditor }: HomeProps) {
       setGeocoding(false);
     }
   };
-
-  // Buscar radares quando a localização muda (mapa normal) - OTIMIZADO com debounce e threshold
-  useEffect(() => {
-    if (!currentLocation || isNavigating) return;
-
-    // Verificar se moveu mais de 100 metros desde a última busca
-    const lastFetch = lastRadarFetchRef.current;
-    if (lastFetch) {
-      const distance = calculateDistance(
-        lastFetch.latitude,
-        lastFetch.longitude,
-        currentLocation.latitude,
-        currentLocation.longitude
-      );
-      if (distance < 100) return; // Só busca se mover mais de 100m
-    }
-
-    const timeoutId = setTimeout(async () => {
-      try {
-        const nearbyRadars = await getRadarsNearLocation(
-          currentLocation.latitude,
-          currentLocation.longitude,
-          50000 // raio de 50km
-        );
-        if (!isMountedRef.current) return;
-        setRadars(nearbyRadars);
-        lastRadarFetchRef.current = currentLocation;
-        console.log(`✅ ${nearbyRadars.length} radares encontrados próximos`);
-      } catch (error) {
-        console.error("Erro ao buscar radares:", error);
-      }
-    }, 2000); // 2 segundos de debounce
-
-    return () => clearTimeout(timeoutId);
-  }, [currentLocation?.latitude, currentLocation?.longitude, isNavigating]);
 
   // Monitorar localização apenas quando não está navegando (o SDK cuida durante navegação)
   useEffect(() => {
@@ -895,13 +894,17 @@ export default function Home({ onOpenEditor }: HomeProps) {
       type: type,
     };
 
-    // UI Updates Síncronos
+    // UI Updates: mensagem e modal primeiro; atualizar lista em próximo tick para não travar (principalmente em navegação)
     setSuccessMessage("Radar reportado com sucesso! ✅\n\n obrigado por ajudar!");
     setShowSuccessModal(true);
-    setRadars(prev => [tempRadar, ...prev]);
-    // Radar adicionado a lista principal - sem filtro
     setReportSpeedLimit("");
     setReportRadarType("móvel");
+    const addTempRadar = () => setRadars(prev => [tempRadar, ...prev]);
+    if (isNavigating) {
+      setTimeout(addTempRadar, 0);
+    } else {
+      addTempRadar();
+    }
 
     // Auto-dismiss
     setTimeout(() => {
@@ -924,59 +927,8 @@ export default function Home({ onOpenEditor }: HomeProps) {
     });
   };
 
-  // Sincronizar radares reportados recentemente (em tempo real)
-  const syncRecentRadars = useCallback(async () => {
-    if (!isNavigating) return;
-
-    try {
-      const recentRadars = await getRecentRadars(lastSyncTimeRef.current);
-
-      if (recentRadars.length > 0) {
-        console.log(`🔄 ${recentRadars.length} novos radares sincronizados`);
-
-        // Adicionar novos radares à lista
-        setRadars((prev) => {
-          const existingIds = new Set(prev.map((r) => r.id));
-          const newRadars = recentRadars.filter((r) => !existingIds.has(r.id));
-
-          if (newRadars.length > 0) {
-            return [...prev, ...newRadars];
-          }
-          return prev;
-        });
-
-      }
-
-      lastSyncTimeRef.current = Date.now();
-    } catch (error) {
-      console.error("Erro ao sincronizar radares recentes:", error);
-    }
-  }, [isNavigating, routeData]);
-
-  // Iniciar sincronização em tempo real quando começar a navegar
-  useEffect(() => {
-    if (isNavigating) {
-      // Sincronizar imediatamente
-      syncRecentRadars();
-
-      // Sincronizar a cada 15 segundos
-      syncIntervalRef.current = setInterval(() => {
-        syncRecentRadars();
-      }, 15000); // 15 segundos
-    } else {
-      // Parar sincronização quando parar de navegar
-      if (syncIntervalRef.current) {
-        clearInterval(syncIntervalRef.current);
-        syncIntervalRef.current = null;
-      }
-    }
-
-    return () => {
-      if (syncIntervalRef.current) {
-        clearInterval(syncIntervalRef.current);
-      }
-    };
-  }, [isNavigating]); // REMOVIDO syncRecentRadars para evitar loop infinito
+  // Atualizações de radares em tempo real: APENAS via WebSocket (radar:new, radar:update, radar:delete).
+  // Sem polling: quando alguém reporta, o backend envia pelo WebSocket e o mapa atualiza uma vez.
 
   // Carregar MapboxNavigation só quando entrar em navegação (evita "Requiring unknown module 'undefined'" no bundle)
   useEffect(() => {
@@ -1006,11 +958,12 @@ export default function Home({ onOpenEditor }: HomeProps) {
       latitude: r.latitude,
       longitude: r.longitude,
       speedLimit: r.speedLimit ?? r.velocidadeLeve ?? 0,
-      type: r.type ?? r.tipoRadar ?? "unknown",
+      type: normalizeRadarType(r.type ?? r.tipoRadar ?? "unknown"),
     }));
   }, [radars]);
 
-  // WebSocket nativo: radares em tempo real (Sincronização entre usuários/dispositivos)
+  // WebSocket: única fonte de atualizações em tempo real (sem polling).
+  // Alguém reporta radar → backend emite radar:new → cliente recebe e atualiza o mapa uma vez.
   useEffect(() => {
     let ws: WebSocket | null = null;
     let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -1041,12 +994,17 @@ export default function Home({ onOpenEditor }: HomeProps) {
             switch (event) {
               case "radar:new":
                 setRadars((prev) => {
-                  if (prev.some((r) => r.id === data.id)) return prev;
-                  return [data, ...prev];
+                  const normalized = normalizeRadarPayload(data);
+                  if (!normalized || prev.some((r) => r.id === normalized.id)) return prev;
+                  return [normalized, ...prev];
                 });
                 break;
               case "radar:update":
-                setRadars((prev) => prev.map((r) => (r.id === data.id ? data : r)));
+                setRadars((prev) => {
+                  const normalized = normalizeRadarPayload(data);
+                  if (!normalized) return prev;
+                  return prev.map((r) => (r.id === normalized.id ? { ...r, ...normalized } : r));
+                });
                 break;
               case "radar:delete":
                 setRadars((prev) => prev.filter((r) => r.id !== data.id));
@@ -1166,7 +1124,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
         clearTimeout(locationUpdateDebounce.current);
       }
 
-      // Aumentar debounce para 100ms (throttle effect) para resposta mais rápida
+      // Debounce 200ms: atualizar localização e rodar checkRadarDistance só uma vez por período (evita travamento)
       locationUpdateDebounce.current = setTimeout(() => {
         try {
           const newLocation = {
@@ -1183,36 +1141,34 @@ export default function Home({ onOpenEditor }: HomeProps) {
               newLocation.longitude
             );
 
-            // Se a distância for muito pequena (< 5m), não atualizar
             if (distance < 5) {
               return;
             }
 
-            // Verificar se a mudança é muito grande (possível erro do GPS)
             if (
               distance > 200 &&
               now - lastLocationUpdate.current < 2000
             ) {
-              console.warn(
-                "⚠️ Mudança de localização muito grande, ignorando (possível erro GPS)"
-              );
               return;
             }
           }
 
           setCurrentLocation(newLocation);
           lastLocationUpdate.current = now;
+
+          // Rodar verificação de radares apenas dentro do debounce (evita rodar a cada evento = não trava)
+          checkRadarDistance();
         } catch (error) {
           console.error("Erro ao processar localização:", error);
         }
-      }, 100);
-
-      // Buscar radares próximos durante navegação REMOVIDO por solicitação
-      // Apenas WebSocket ou carga inicial atualiza a lista
-
+      }, 200);
 
       // Função auxiliar para esconder modal com animações
       const hideModal = () => {
+        // Se já estamos no pós-passagem, manter modal por 5s completos
+        if (radarPassedLoading && postPassTimerRef.current) {
+          return;
+        }
         if (postPassTimerRef.current) {
           clearTimeout(postPassTimerRef.current);
           postPassTimerRef.current = null;
@@ -1245,12 +1201,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
             return;
           }
 
-          if (
-            !routeDataRef.current ||
-            !routeDataRef.current.route ||
-            !routeDataRef.current.route.geometry ||
-            !routeDataRef.current.route.geometry.coordinates
-          ) {
+          if (!routeDataRef.current || routePointsRef.current.length < 2) {
             return;
           }
 
@@ -1259,27 +1210,12 @@ export default function Home({ onOpenEditor }: HomeProps) {
               latitude: location.latitude,
               longitude: location.longitude,
             };
-
-            const coordinates =
-              routeDataRef.current.route.geometry.coordinates;
-            // Defensive check for coordinates array
-            if (!Array.isArray(coordinates) || coordinates.length === 0) {
-              return;
-            }
-
-            const routePoints: LatLng[] = coordinates
-              .map((coord: number[]) => {
-                if (!Array.isArray(coord) || coord.length < 2) {
-                  return null;
-                }
-                return {
-                  latitude: coord[1],
-                  longitude: coord[0],
-                };
-              })
-              .filter((point: LatLng | null): point is LatLng => point !== null);
-
-            if (routePoints.length === 0) {
+            const routePoints = routePointsRef.current;
+            const routeCumulative = routeCumulativeRef.current;
+            if (
+              routePoints.length < 2 ||
+              routeCumulative.length !== routePoints.length
+            ) {
               return;
             }
 
@@ -1293,6 +1229,13 @@ export default function Home({ onOpenEditor }: HomeProps) {
             radars.forEach((radar) => {
               if (passedRadarIds.current.has(radar.id)) return;
               if (radar.situacao && radar.situacao.toLowerCase().includes("inativ")) return;
+              // Filtro barato para evitar cálculos pesados em radares muito distantes
+              if (
+                Math.abs(checkLocation.latitude - radar.latitude) > 0.03 ||
+                Math.abs(checkLocation.longitude - radar.longitude) > 0.03
+              ) {
+                return;
+              }
 
               const radarPoint: LatLng = {
                 latitude: radar.latitude,
@@ -1312,20 +1255,12 @@ export default function Home({ onOpenEditor }: HomeProps) {
                 routePoints
               );
               if (routeDistMeters > MAX_ROUTE_DISTANCE_METERS) return;
-              if (
-                !isRadarOnRoute(
-                  radar,
-                  routeDataRef.current?.route ?? null,
-                  routePoints
-                )
-              ) {
-                return;
-              }
 
-              const routeDistanceResult = calculateDistanceAlongRoute(
+              const routeDistanceResult = calculateDistanceAlongRouteWithCumulative(
                 checkLocation,
                 radarPoint,
-                routePoints
+                routePoints,
+                routeCumulative
               );
               if (routeDistanceResult.hasPassed) {
                 passedRadarIds.current.add(radar.id);
@@ -1409,12 +1344,15 @@ export default function Home({ onOpenEditor }: HomeProps) {
                 }
               });
 
-              setNearbyRadarIds(new Set([nearestRadarObj.id]));
+              if (lastNearbyRadarIdRef.current !== nearestRadarObj.id) {
+                lastNearbyRadarIdRef.current = nearestRadarObj.id;
+                setNearbyRadarIds(new Set([nearestRadarObj.id]));
+              }
 
               // Alerta sonoro aos 30m: tocar alertRadar.mp3 3 vezes (uma vez por radar)
               if (
                 nearestDistance <= 30 &&
-                nearestDistance > 0 &&
+                nearestDistance >= 0 &&
                 !radarSoundPlayedIds.current.has(nearestRadarObj.id)
               ) {
                 radarSoundPlayedIds.current.add(nearestRadarObj.id);
@@ -1425,6 +1363,10 @@ export default function Home({ onOpenEditor }: HomeProps) {
                 if (nearestDistance < 10) {
                   // PASSED: manter modal com loading por 5s
                   passedRadarIds.current.add(nearestRadarObj.id);
+                  if (!radarSoundPlayedIds.current.has(nearestRadarObj.id)) {
+                    radarSoundPlayedIds.current.add(nearestRadarObj.id);
+                    playAlertRadar3Times();
+                  }
                   if (radarZeroTimeRef2.current === null) {
                     radarZeroTimeRef2.current = Date.now();
                     setRadarPassedLoading(true);
@@ -1453,8 +1395,10 @@ export default function Home({ onOpenEditor }: HomeProps) {
                   ]).start();
                 }
               } else {
-                radarZeroTimeRef2.current = null;
-                hideModal();
+                if (!(radarPassedLoading && postPassTimerRef.current)) {
+                  radarZeroTimeRef2.current = null;
+                  hideModal();
+                }
               }
 
               // TTS Handling
@@ -1469,7 +1413,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
 
                 // Construct Message
                 let radarType = "Radar";
-                const type = nearestRadarObj.type ? nearestRadarObj.type.toLowerCase() : "";
+                const type = normalizeRadarType(nearestRadarObj.type);
                 if (type.includes("semaforo") || type.includes("camera") || type.includes("fotografica")) {
                   radarType = "Radar Semafórico";
                 } else if (type.includes("movel") || type.includes("mobile")) {
@@ -1503,11 +1447,16 @@ export default function Home({ onOpenEditor }: HomeProps) {
               }
             } else {
               // No nearest radar
-              radarZeroTimeRef2.current = null;
-              lastCalculatedDistance.current = 0;
-              activeRadarIdRef.current = null;
-              setNearbyRadarIds(new Set());
-              hideModal();
+              if (!(radarPassedLoading && postPassTimerRef.current)) {
+                radarZeroTimeRef2.current = null;
+                lastCalculatedDistance.current = 0;
+                activeRadarIdRef.current = null;
+                if (lastNearbyRadarIdRef.current != null) {
+                  lastNearbyRadarIdRef.current = null;
+                  setNearbyRadarIds(new Set());
+                }
+                hideModal();
+              }
             }
           } else {
             // No radars or route
@@ -1517,15 +1466,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
         }
       };
 
-      if (radarCheckDebounce.current) {
-        clearTimeout(radarCheckDebounce.current);
-      }
-
-      checkRadarDistance();
-      radarCheckDebounce.current = setTimeout(
-        checkRadarDistance,
-        500
-      );
+      // checkRadarDistance é chamado apenas dentro do debounce de 200ms acima (evita travamento)
     } catch (error) {
       console.error("Erro no callback onLocationChange:", error);
     }
@@ -1599,32 +1540,21 @@ export default function Home({ onOpenEditor }: HomeProps) {
         };
       });
 
-      // Refiltrar radares para a nova rota
-      // Buscar radares próximos ao novo caminho (usando API se necessário ou cache local)
-      const nearbyRadars = await getRadarsNearLocation(
-        newRoutePoints[0].latitude,
-        newRoutePoints[0].longitude,
-        5000 // Busca ampla inicial
-      );
-
-      const filtered = filterRadarsNearRoute(nearbyRadars, newRoutePoints, 250);
+      // Refiltrar usando cache local já carregado (sem nova chamada API)
+      const filtered = filterRadarsNearRoute(radars, newRoutePoints, 250);
 
       console.log(`✅ ${filtered.length} radares encontrados na nova rota`);
 
       // Filtered deprecated - using all radars
       // setFilteredRadars(filtered);
 
-      // Atualizar lista principal também para garantir consistência
-      setRadars(prev => {
-        const existingIds = new Set(prev.map(r => r.id));
-        const newRadars = filtered.filter(r => !existingIds.has(r.id));
-        return [...newRadars, ...prev];
-      });
+      // Não sobrescrevemos/mesclamos lista aqui para evitar re-render pesado.
+      // A lista global permanece a mesma e novas entradas chegam por WebSocket.
 
     } catch (error) {
       console.error("Erro ao processar mudança de rota:", error);
     }
-  }, []);
+  }, [radars]);
 
   // Handlers memoizados para evitar re-creates
   const handleRouteProgressChange = useCallback((progress: any) => {
@@ -1659,6 +1589,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
     setRadarFeedbackTarget(null);
     setRadarFeedbackSubmitting(false);
     setNearestRadar(null);
+    lastNearbyRadarIdRef.current = null;
     setNearbyRadarIds(new Set());
     setIsNavigating(false);
     setIsPreparingNavigation(false);
@@ -1688,6 +1619,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
     setRadarFeedbackTarget(null);
     setRadarFeedbackSubmitting(false);
     setNearestRadar(null);
+    lastNearbyRadarIdRef.current = null;
     setNearbyRadarIds(new Set());
     setIsNavigating(false);
     setIsPreparingNavigation(false);
@@ -1961,7 +1893,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
               <>
                 <View style={styles.radarIconContainer}>
                   {(() => {
-                    const type = nearestRadar.radar.type ? nearestRadar.radar.type.toLowerCase() : "";
+                    const type = normalizeRadarType(nearestRadar.radar.type);
                     let iconSource = radarImages.radarMovel;
 
                     if (type.includes("semaforo") || type.includes("camera") || type.includes("fotografica")) {
@@ -1978,7 +1910,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
                 <View style={styles.radarAlertTextContainer}>
                   <Text style={styles.radarAlertTitle}>
                     {(() => {
-                      const type = nearestRadar.radar.type ? nearestRadar.radar.type.toLowerCase() : "";
+                      const type = normalizeRadarType(nearestRadar.radar.type);
                       let typeName = "Radar";
                       if (type.includes("semaforo")) typeName = "Radar Semafórico";
                       else if (type.includes("movel")) typeName = "Radar Móvel";
@@ -2208,7 +2140,6 @@ export default function Home({ onOpenEditor }: HomeProps) {
                   onPress={() => {
                     setReportLocationMode("map");
                     setShowMapPicker(true);
-                    // Force a clean object to avoid any potential corruption
                     const initialLoc = currentLocation
                       ? { latitude: currentLocation.latitude, longitude: currentLocation.longitude }
                       : { latitude: -23.550520, longitude: -46.633308 };
@@ -2275,7 +2206,10 @@ export default function Home({ onOpenEditor }: HomeProps) {
       <Modal
         visible={showMapPicker}
         animationType="slide"
-        onRequestClose={() => setShowMapPicker(false)}
+        onRequestClose={() => {
+          setShowMapPicker(false);
+          mapPickerCenterRef.current = null;
+        }}
       >
         <View style={{ flex: 1 }}>
           {mapPickerCenter && (
@@ -2283,56 +2217,55 @@ export default function Home({ onOpenEditor }: HomeProps) {
               {/* Map View for picking location */}
               <Suspense fallback={<View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}><ActivityIndicator size="large" color="#3b82f6" /></View>}>
                 <MapComponent
-                  radars={[]} // No radars needed for picker
+                  ref={mapPickerMapRef}
+                  radars={[]}
                   interactive={true}
                   currentLocation={mapPickerCenter}
-                  onMapPress={(coords: LatLng) => {
-                    mapPickerCenterRef.current = {
-                      latitude: coords.latitude,
-                      longitude: coords.longitude,
-                    };
-                    setMapPickerCenter({
-                      latitude: coords.latitude,
-                      longitude: coords.longitude,
-                    });
-                  }}
-                  onCameraChanged={(coords: LatLng) => {
-                    console.log("🗺️ [Home-MapPicker] Novo centro capturado:", coords);
-                    mapPickerCenterRef.current = {
-                      latitude: coords.latitude,
-                      longitude: coords.longitude,
-                    };
-                    setMapPickerCenter({
-                      latitude: coords.latitude,
-                      longitude: coords.longitude,
-                    });
-                  }}
+                  hideUserLocation={true}
                 />
               </Suspense>
 
-              {/* Center Pin Overlay */}
-              <View style={{ position: "absolute", top: "50%", left: "50%", marginTop: -40, marginLeft: -20, pointerEvents: "none" }}>
-                <Ionicons name="location" size={40} color="#ef4444" />
+              {/* Pin fixo no centro: usuário arrasta o mapa; o pin marca o local que será reportado */}
+              <View pointerEvents="none" style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, justifyContent: "center", alignItems: "center" }}>
+                <View style={{ marginTop: -48 }}>
+                  <Ionicons name="location" size={48} color="#ef4444" />
+                </View>
               </View>
+
+              {/* Preview lat/lon: mostra em tempo real onde o pin está (atualizado a cada 400ms) */}
+              {pickerPreviewCoords != null && (
+                <View pointerEvents="none" style={{ position: "absolute", top: 56, left: 12, right: 12, backgroundColor: "rgba(255,255,255,0.95)", padding: 10, borderRadius: 10, borderWidth: 1, borderColor: "#e5e7eb" }}>
+                  <Text style={{ fontSize: 11, color: "#6b7280", marginBottom: 4 }}>Posição do pin (será reportada)</Text>
+                  <Text style={{ fontSize: 13, fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace", color: "#111827" }} numberOfLines={1}>
+                    lat: {pickerPreviewCoords.latitude.toFixed(6)}  lon: {pickerPreviewCoords.longitude.toFixed(6)}
+                  </Text>
+                </View>
+              )}
 
               {/* Control Overlay */}
               <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, backgroundColor: "#fff", padding: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20, shadowColor: "#000", shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 5 }}>
                 <Text style={{ fontSize: 14, color: "#6b7280", marginBottom: 12, textAlign: "center" }}>
-                  Arraste o mapa para posicionar ou toque no local
+                  Arraste o mapa para posicionar o pin no local do radar. Depois toque em Confirmar.
                 </Text>
                 <View style={{ flexDirection: "row", gap: 12 }}>
                   <TouchableOpacity
                     style={{ flex: 1, padding: 16, backgroundColor: "#f3f4f6", borderRadius: 12, alignItems: "center" }}
-                    onPress={() => setShowMapPicker(false)}
+                    onPress={() => {
+                      setShowMapPicker(false);
+                      mapPickerCenterRef.current = null;
+                    }}
                   >
                     <Text style={{ fontSize: 16, fontWeight: "600", color: "#374151" }}>Cancelar</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={{ flex: 1, padding: 16, backgroundColor: "#3b82f6", borderRadius: 12, alignItems: "center" }}
-                    onPress={() => {
-                      const selected = mapPickerCenterRef.current || mapPickerCenter;
-                      console.log("🗺️ [Home-MapPicker] Confirmando localização:", selected);
-                      if (!selected) return;
+                    onPress={async () => {
+                      const center = await mapPickerMapRef.current?.getCenter?.();
+                      const selected = center ?? mapPickerCenterRef.current;
+                      if (!selected) {
+                        Alert.alert("Erro", "Não foi possível obter a posição do mapa. Tente novamente.");
+                        return;
+                      }
                       const picked = {
                         latitude: selected.latitude,
                         longitude: selected.longitude,
@@ -2340,8 +2273,9 @@ export default function Home({ onOpenEditor }: HomeProps) {
                       reportCustomLocationRef.current = picked;
                       setReportCustomLocation(picked);
                       setReportLocationMode("map");
-                      // Reporta DIRETO do picker para não depender do modal principal
                       handleReportRadar({ location: picked });
+                      setShowMapPicker(false);
+                      mapPickerCenterRef.current = null;
                     }}
                   >
                     <Text style={{ fontSize: 16, fontWeight: "600", color: "#fff" }}>Confirmar Localização</Text>
