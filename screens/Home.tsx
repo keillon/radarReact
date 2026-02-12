@@ -829,6 +829,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
   const handleReportRadar = async (opts?: {
     speedLimit?: number;
     type?: "móvel" | "semaforo" | "placa";
+    location?: LatLng;
   }) => {
 
     const speedLimit =
@@ -846,16 +847,23 @@ export default function Home({ onOpenEditor }: HomeProps) {
     }
 
     setShowReportModal(false);
+    setShowMapPicker(false);
 
     // Determinar coordenadas de forma Síncrona.
     // IMPORTANTE: se existir ponto marcado no mapa, ele tem prioridade.
     let reportCoords: LatLng | null = null;
+    if (opts?.location) {
+      reportCoords = {
+        latitude: opts.location.latitude,
+        longitude: opts.location.longitude,
+      };
+    }
     const pickerPoint =
       reportCustomLocationRef.current ||
       reportCustomLocation ||
       mapPickerCenterRef.current ||
       mapPickerCenter;
-    if (reportLocationMode === "map") {
+    if (!reportCoords && reportLocationMode === "map") {
       if (reportCustomLocationRef.current) {
         reportCoords = reportCustomLocationRef.current;
       } else if (reportCustomLocation) {
@@ -869,7 +877,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
         setModalConfig({ visible: true, title: "Erro", message: "Selecione uma localização no mapa", type: "error" });
         return;
       }
-    } else {
+    } else if (!reportCoords) {
       if (currentLocation) {
         reportCoords = { latitude: currentLocation.latitude, longitude: currentLocation.longitude };
       } else {
@@ -2332,7 +2340,8 @@ export default function Home({ onOpenEditor }: HomeProps) {
                       reportCustomLocationRef.current = picked;
                       setReportCustomLocation(picked);
                       setReportLocationMode("map");
-                      setShowMapPicker(false);
+                      // Reporta DIRETO do picker para não depender do modal principal
+                      handleReportRadar({ location: picked });
                     }}
                   >
                     <Text style={{ fontSize: 16, fontWeight: "600", color: "#fff" }}>Confirmar Localização</Text>
