@@ -485,6 +485,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
   const radarFeedbackDismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const radarFeedbackActionIds = useRef<Set<string>>(new Set()); // 1 confirmação/negação por usuário no app (sessão)
   const mapPickerCenterRef = useRef<LatLng | null>(null); // Fonte de verdade do pin no modal "Marcar no Mapa"
+  const reportCustomLocationRef = useRef<LatLng | null>(null); // Backup da localização escolhida no mapa
 
   useEffect(() => {
     initMapbox();
@@ -849,9 +850,15 @@ export default function Home({ onOpenEditor }: HomeProps) {
     // Determinar coordenadas de forma Síncrona.
     // IMPORTANTE: se existir ponto marcado no mapa, ele tem prioridade.
     let reportCoords: LatLng | null = null;
-    const pickerPoint = mapPickerCenterRef.current || mapPickerCenter;
+    const pickerPoint =
+      reportCustomLocationRef.current ||
+      reportCustomLocation ||
+      mapPickerCenterRef.current ||
+      mapPickerCenter;
     if (reportLocationMode === "map") {
-      if (reportCustomLocation) {
+      if (reportCustomLocationRef.current) {
+        reportCoords = reportCustomLocationRef.current;
+      } else if (reportCustomLocation) {
         reportCoords = reportCustomLocation;
       } else if (pickerPoint) {
         reportCoords = {
@@ -2162,6 +2169,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
                   onPress={() => {
                     setReportLocationMode("current");
                     setReportCustomLocation(null);
+                    reportCustomLocationRef.current = null;
                     mapPickerCenterRef.current = null;
                   }}
                   activeOpacity={0.7}
@@ -2317,10 +2325,12 @@ export default function Home({ onOpenEditor }: HomeProps) {
                       const selected = mapPickerCenterRef.current || mapPickerCenter;
                       console.log("🗺️ [Home-MapPicker] Confirmando localização:", selected);
                       if (!selected) return;
-                      setReportCustomLocation({
+                      const picked = {
                         latitude: selected.latitude,
                         longitude: selected.longitude,
-                      });
+                      };
+                      reportCustomLocationRef.current = picked;
+                      setReportCustomLocation(picked);
                       setReportLocationMode("map");
                       setShowMapPicker(false);
                     }}

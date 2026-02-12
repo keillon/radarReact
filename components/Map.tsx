@@ -92,6 +92,28 @@ export default function Map({
   const cameraRef = useRef<any>(null);
   const pulseAnimation = useRef(new Animated.Value(1)).current;
 
+  const emitCameraCenter = (rawCenter: any) => {
+    if (!onCameraChanged || rawCenter == null) return;
+
+    let lat: number | null = null;
+    let lng: number | null = null;
+
+    if (Array.isArray(rawCenter) && rawCenter.length >= 2) {
+      lng = Number(rawCenter[0]);
+      lat = Number(rawCenter[1]);
+    } else if (typeof rawCenter === "object") {
+      const maybeLat = (rawCenter.latitude ?? rawCenter.lat) as number | undefined;
+      const maybeLng = (rawCenter.longitude ?? rawCenter.lng ?? rawCenter.lon) as number | undefined;
+      if (maybeLat != null && maybeLng != null) {
+        lat = Number(maybeLat);
+        lng = Number(maybeLng);
+      }
+    }
+
+    if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) return;
+    onCameraChanged({ latitude: lat, longitude: lng });
+  };
+
   // Animação de pulso para radares próximos
   useEffect(() => {
     if (nearbyRadarIds.size > 0) {
@@ -317,16 +339,26 @@ export default function Map({
             }
 
             if (onCameraChanged) {
-              // Robust extraction for v10+ (center array is [lng, lat])
-              const center = event.properties?.center || (event as any).geometry?.coordinates;
-              if (center && Array.isArray(center) && center.length >= 2) {
-                const [lng, lat] = center;
-                // Always use fresh primitives to ensure name consistency and clean data
-                const coords = { latitude: Number(lat), longitude: Number(lng) };
-                // Simple validation to avoid passing NaN
-                if (!isNaN(coords.latitude) && !isNaN(coords.longitude)) {
-                  onCameraChanged(coords);
-                }
+              // Captura robusta do centro para diferentes formatos de evento
+              const centerCandidate =
+                event?.properties?.center ??
+                (event as any)?.geometry?.coordinates ??
+                (event as any)?.centerCoordinate ??
+                (event as any)?.center;
+
+              emitCameraCenter(centerCandidate);
+
+              // Fallback adicional: obter do Camera ref se o evento vier sem centro
+              if (
+                centerCandidate == null &&
+                cameraRef.current &&
+                typeof cameraRef.current.getCenter === "function"
+              ) {
+                Promise.resolve(cameraRef.current.getCenter())
+                  .then((center: any) => emitCameraCenter(center))
+                  .catch(() => {
+                    // ignorar fallback failures
+                  });
               }
             }
           } catch (e) {
