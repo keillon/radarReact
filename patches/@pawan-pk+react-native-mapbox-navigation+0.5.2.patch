@@ -75,7 +75,7 @@ index 7d28df3..f6c5272 100644
    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
    implementation 'androidx.cardview:cardview:1.0.0'
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
-index 41a3ba0..e6c774b 100644
+index 41a3ba0..513c75e 100644
 --- a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
 +++ b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
 @@ -3,25 +3,38 @@ package com.mapboxnavigation
@@ -1666,7 +1666,7 @@ index 41a3ba0..e6c774b 100644
    }
  
    fun setLocal(language: String) {
-@@ -820,4 +1225,1738 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -820,4 +1225,1739 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
    fun setShowCancelButton(show: Boolean) {
      binding.stop.visibility = if (show) View.VISIBLE else View.INVISIBLE
    }
@@ -2527,14 +2527,13 @@ index 41a3ba0..e6c774b 100644
 +      val urlChanged = url != lastRadarsGeoJsonUrlUsed
 +      if (!style.styleSourceExists("radars-source")) {
 +        val escapedUrl = url.replace("\\", "\\\\").replace("\"", "\\\"")
++        // cluster:false para debug — sem clustering, todos os pontos mostram círculo/ícone
 +        val sourceJson =
 +            """
 +            {
 +              "type": "geojson",
 +              "data": "$escapedUrl",
-+              "cluster": true,
-+              "clusterRadius": 50,
-+              "clusterMaxZoom": 11
++              "cluster": false
 +            }
 +          """.trimIndent()
 +        val sourceVal = com.mapbox.bindgen.Value.fromJson(sourceJson)
@@ -3041,13 +3040,15 @@ index 41a3ba0..e6c774b 100644
 +  }
 +
 +  private fun updateBaseSymbolFilterExcludingOverlay(style: com.mapbox.maps.Style) {
-+    if (!style.styleLayerExists("radars-layer-symbol")) return
 +    try {
 +      val filterJson = buildBaseSymbolFilterJson()
 +      val filterValue = com.mapbox.bindgen.Value.fromJson(filterJson).value ?: return
-+      style.setStyleLayerProperty("radars-layer-symbol", "filter", filterValue)
++      if (style.styleLayerExists("radars-layer-symbol"))
++        style.setStyleLayerProperty("radars-layer-symbol", "filter", filterValue)
++      if (style.styleLayerExists("radars-unclustered-circle"))
++        style.setStyleLayerProperty("radars-unclustered-circle", "filter", filterValue)
 +    } catch (e: Exception) {
-+      Log.e("MapboxNavigationView", "Erro ao atualizar filter base symbol", e)
++      Log.e("MapboxNavigationView", "Erro ao atualizar filter base symbol/circle", e)
 +    }
 +  }
 +
