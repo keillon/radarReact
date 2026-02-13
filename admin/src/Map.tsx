@@ -296,6 +296,11 @@ function Map({
         if (id) {
           const radar = radarsRef.current.find((r) => r.id === id);
           if (radar) {
+            map.flyTo({
+              center: [radar.longitude, radar.latitude],
+              zoom: 16,
+              duration: 800,
+            });
             onSelectRadarRef.current(radar);
             return;
           }

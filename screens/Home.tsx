@@ -43,7 +43,7 @@ function getGeolocation(): GeolocationApi {
 }
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { getClosestPlacaName, radarImages } from "../components/Map";
+import { getClosestPlacaName, radarImages, type MapHandle } from "../components/Map";
 import SearchContainer from "../components/SearchContainer";
 import { useRadarProximity } from "../hooks/useRadarProximity";
 import {
@@ -296,6 +296,12 @@ export default function Home({ onOpenEditor }: HomeProps) {
     type: "info",
   });
 
+  // Radar selecionado ao clicar no mapa (foco + vignette + modal no topo)
+  const [selectedRadarDetail, setSelectedRadarDetail] = useState<Radar | null>(
+    null,
+  );
+  const mainMapRef = useRef<MapHandle | null>(null);
+
   // CSV radars: converter Map → Array apenas quando CSV muda (raro)
   const csvRadars = useMemo(
     () => Array.from(csvRadarsMap.values()),
@@ -431,9 +437,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
   > | null>(null);
   const radarFeedbackActionIds = useRef<Set<string>>(new Set()); // 1 confirmação/negação por usuário no app (sessão)
   const mapPickerCenterRef = useRef<LatLng | null>(null); // Fallback centro ao abrir picker
-  const mapPickerMapRef = useRef<{
-    getCenter: () => Promise<LatLng | null>;
-  } | null>(null); // Ref do Map no picker para getCenter()
+  const mapPickerMapRef = useRef<MapHandle | null>(null); // Ref do Map no picker para getCenter()
   const reportCustomLocationRef = useRef<LatLng | null>(null); // Backup da localização escolhida no mapa
   const hasInitialRadarLoadRef = useRef(false);
   const routePointsRef = useRef<LatLng[]>([]);
@@ -875,6 +879,11 @@ export default function Home({ onOpenEditor }: HomeProps) {
     setDestination(coords);
   };
 
+  const handleRadarPress = useCallback((radar: Radar) => {
+    setSelectedRadarDetail(radar);
+    mainMapRef.current?.focusOnCoord(radar.latitude, radar.longitude);
+  }, []);
+
   // Reportar radar na localização atual (modal: velocidade + tipo).
   // Futuro: mesma lógica pode ser usada para reportar acidentes, trânsito, etc. (estilo Waze) — por ora só radar.
   const handleReportRadar = async (opts?: {
@@ -897,6 +906,15 @@ export default function Home({ onOpenEditor }: HomeProps) {
 
     setShowReportModal(false);
     setShowMapPicker(false);
+
+    // Resetar modal de reportar para estado inicial (evita ficar no último passo)
+    setReportStep(1);
+    setReportSelectedSpeed(null);
+    setReportRadarType("placa");
+    setReportLocationMode("current");
+    setReportCustomLocation(null);
+    reportCustomLocationRef.current = null;
+    mapPickerCenterRef.current = null;
 
     // Determinar coordenadas de forma Síncrona.
     // IMPORTANTE: se existir ponto marcado no mapa, ele tem prioridade.
@@ -1899,6 +1917,20 @@ export default function Home({ onOpenEditor }: HomeProps) {
         onError={handleError}
         onRouteAlternativeSelected={handleRouteAlternativeSelected}
         onRouteChanged={handleRouteChanged}
+        onRadarTap={(
+          e: { nativeEvent?: { id: string; latitude: number; longitude: number; speedLimit?: number; type?: string } }
+        ) => {
+          const ev = e?.nativeEvent ?? e;
+          if (ev && typeof ev === "object" && "id" in ev && ev.latitude != null && ev.longitude != null) {
+            setSelectedRadarDetail({
+              id: String(ev.id),
+              latitude: Number(ev.latitude),
+              longitude: Number(ev.longitude),
+              speedLimit: ev.speedLimit,
+              type: ev.type ?? "unknown",
+            });
+          }
+        }}
       />
     );
   }, [
@@ -2022,13 +2054,14 @@ export default function Home({ onOpenEditor }: HomeProps) {
             }
           >
             <MapComponent
+              ref={mainMapRef}
               radars={radars}
               route={route}
               isNavigating={false}
               currentLocation={currentLocation}
               nearbyRadarIds={nearbyRadarIds}
+              onRadarPress={handleRadarPress}
               onMapPress={(coords: any) => {
-                // Ao tocar no mapa, podemos sugerir reportar radar ali
                 setReportCustomLocation(coords);
                 setReportLocationMode("map");
                 setShowReportModal(true);
@@ -2055,6 +2088,116 @@ export default function Home({ onOpenEditor }: HomeProps) {
           </TouchableOpacity>
         </View>
       )}
+
+      {/* Vignette + Modal radar no topo (ao clicar em um radar - mapa livre ou navegação) */}
+      {selectedRadarDetail && (
+          <>
+            <View
+              style={[
+                StyleSheet.absoluteFill,
+                {
+                  backgroundColor: "rgba(0,0,0,0.35)",
+                  zIndex: 999,
+                  elevation: 999,
+                  pointerEvents: "box-none",
+                },
+              ]}
+            >
+              <TouchableOpacity
+                style={StyleSheet.absoluteFill}
+                activeOpacity={1}
+                onPress={() => setSelectedRadarDetail(null)}
+              />
+            </View>
+            <View
+              style={{
+                position: "absolute",
+                top: Platform.OS === "ios" ? 56 : 40,
+                left: 16,
+                right: 16,
+                zIndex: 1000,
+                elevation: 1000,
+              }}
+              pointerEvents="box-none"
+            >
+              <View
+                style={[
+                  styles.radarAlertContent,
+                  {
+                    width: "100%",
+                    maxWidth: 400,
+                    alignSelf: "center",
+                  },
+                ]}
+              >
+                <View style={styles.radarIconContainer}>
+                  <Image
+                    source={
+                      (() => {
+                        const t = normalizeRadarType(selectedRadarDetail.type);
+                        if (
+                          t.includes("semaforo") ||
+                          t.includes("camera") ||
+                          t.includes("fotografica")
+                        )
+                          return radarImages.radarSemaforico;
+                        if (
+                          t.includes("movel") ||
+                          t.includes("mobile")
+                        )
+                          return radarImages.radarMovel;
+                        return (
+                          radarImages[
+                            getClosestPlacaName(
+                              selectedRadarDetail.speedLimit
+                            )
+                          ] || radarImages.placa60
+                        );
+                      })()
+                    }
+                    style={styles.radarAlertIconLarge}
+                    resizeMode="contain"
+                  />
+                </View>
+                <View style={[styles.radarAlertTextContainer, { flex: 1 }]}>
+                  <Text style={styles.radarAlertTitle}>
+                    {(() => {
+                      const t = normalizeRadarType(
+                        selectedRadarDetail.type
+                      );
+                      if (t.includes("semaforo")) return "Radar Semafórico";
+                      if (t.includes("movel")) return "Radar Móvel";
+                      if (t.includes("fixo") || t.includes("placa"))
+                        return "Placa de Velocidade";
+                      return "Radar";
+                    })()}
+                  </Text>
+                  <Text style={styles.radarAlertDistance}>
+                    {selectedRadarDetail.speedLimit
+                      ? `${selectedRadarDetail.speedLimit} km/h`
+                      : "Sem limite"}
+                    {" • "}
+                    {selectedRadarDetail.latitude.toFixed(5)},{" "}
+                    {selectedRadarDetail.longitude.toFixed(5)}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={{
+                    padding: 12,
+                    backgroundColor: "#e5e7eb",
+                    borderRadius: 8,
+                  }}
+                  onPress={() => setSelectedRadarDetail(null)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={{ fontWeight: "600", color: "#374151" }}>
+                    Fechar
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </>
+        )}
 
       {/* Alerta de radar - Modal animado no topo */}
       {isNavigating &&

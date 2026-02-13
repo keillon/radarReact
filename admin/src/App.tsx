@@ -504,6 +504,66 @@ export default function App() {
         </div>
       )}
 
+      {/* Vignette + Modal radar no topo (ao clicar em um radar) */}
+      {selected && !pendingAdd && (
+        <>
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "radial-gradient(ellipse at center, transparent 0%, rgba(0,0,0,0.4) 100%)",
+              pointerEvents: "none",
+              zIndex: 900,
+            }}
+            aria-hidden
+          />
+          <div
+            style={{
+              position: "fixed",
+              top: 16,
+              left: 16,
+              right: 16,
+              maxWidth: 400,
+              background: "#fff",
+              borderRadius: 12,
+              padding: 16,
+              boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
+              zIndex: 1001,
+              display: "flex",
+              alignItems: "center",
+              gap: 16,
+            }}
+          >
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <h3 style={{ margin: "0 0 4px", fontSize: 16, fontWeight: 600 }}>
+                {selected.type || "Radar"}
+                {selected.speedLimit != null && ` • ${selected.speedLimit} km/h`}
+              </h3>
+              <p style={{ margin: 0, fontSize: 13, color: "#6b7280" }}>
+                {selected.latitude.toFixed(5)}, {selected.longitude.toFixed(5)}
+              </p>
+              {selected.situacao === "Inativo" || selected.situacao === "inativo" ? (
+                <span style={{ fontSize: 12, color: "#9ca3af", fontWeight: 600 }}>Inativo</span>
+              ) : null}
+            </div>
+            <button
+              type="button"
+              onClick={() => setSelected(null)}
+              style={{
+                padding: "8px 12px",
+                background: "#e5e7eb",
+                border: "none",
+                borderRadius: 8,
+                cursor: "pointer",
+                fontWeight: 600,
+              }}
+            >
+              Fechar
+            </button>
+          </div>
+        </>
+      )}
+
       <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
         <div style={{ flex: 1, position: "relative" }}>
           {!import.meta.env.VITE_MAPBOX_TOKEN &&

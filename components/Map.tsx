@@ -9,13 +9,20 @@ import Mapbox, {
   UserLocation,
   UserTrackingMode,
 } from "@rnmapbox/maps";
-import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import React, {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Animated,
   Image,
   StyleSheet,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import { MAPBOX_TOKEN, NavigationStep, RouteFeature } from "../services/mapbox";
 import { Radar } from "../services/types";
@@ -29,14 +36,14 @@ export const PLACA_SPEEDS = [
 export const getClosestPlacaName = (speed: number | undefined): string => {
   if (speed == null || speed <= 0) return "placa60";
   const closest = PLACA_SPEEDS.reduce((a, b) =>
-    Math.abs(a - speed) <= Math.abs(b - speed) ? a : b
+    Math.abs(a - speed) <= Math.abs(b - speed) ? a : b,
   );
   return `placa${closest}`;
 };
 
 export const radarImages: Record<string, any> = {
   // radar: require("../assets/images/radar.png"), // Removed usage
-  radarFixo: require("../assets/images/radarFixo.png"),
+  // radarFixo: radares fixos usam placas (placa20, placa60, etc.) dinamicamente
   radarMovel: require("../assets/images/radarMovel.png"),
   radarSemaforico: require("../assets/images/radarSemaforico.png"),
   placa20: require("../assets/images/placa20.png"),
@@ -77,6 +84,12 @@ interface MapProps {
 
 export type MapHandle = {
   getCenter: () => Promise<{ latitude: number; longitude: number } | null>;
+  /** Foca a câmera nas coordenadas (zoom 16, animação 800ms) */
+  focusOnCoord: (
+    latitude: number,
+    longitude: number,
+    zoomLevel?: number,
+  ) => void;
 };
 
 const Map = forwardRef<MapHandle, MapProps>(function Map(
@@ -94,7 +107,7 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
     hideUserLocation = false,
     pickerSelectedPoint = null,
   },
-  ref
+  ref,
 ) {
   const [userLocation, setUserLocation] = useState<{
     latitude: number;
@@ -115,8 +128,12 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
       lng = Number(rawCenter[0]);
       lat = Number(rawCenter[1]);
     } else if (typeof rawCenter === "object") {
-      const maybeLat = (rawCenter.latitude ?? rawCenter.lat) as number | undefined;
-      const maybeLng = (rawCenter.longitude ?? rawCenter.lng ?? rawCenter.lon) as number | undefined;
+      const maybeLat = (rawCenter.latitude ?? rawCenter.lat) as
+        | number
+        | undefined;
+      const maybeLng = (rawCenter.longitude ??
+        rawCenter.lng ??
+        rawCenter.lon) as number | undefined;
       if (maybeLat != null && maybeLng != null) {
         lat = Number(maybeLat);
         lng = Number(maybeLng);
@@ -143,7 +160,7 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
             duration: 1000,
             useNativeDriver: false,
           }),
-        ])
+        ]),
       ).start();
     } else {
       pulseAnimation.setValue(1);
@@ -161,12 +178,20 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
       }
 
       // Se não é interativo (overlay), atualizar câmera para sincronizar com navegação
-      if (!interactive && cameraRef.current && typeof currentLocation.latitude === "number" && typeof currentLocation.longitude === "number") {
+      if (
+        !interactive &&
+        cameraRef.current &&
+        typeof currentLocation.latitude === "number" &&
+        typeof currentLocation.longitude === "number"
+      ) {
         const timeoutId = setTimeout(() => {
           const ref = cameraRef.current;
           if (ref && typeof ref.setCamera === "function") {
             ref.setCamera({
-              centerCoordinate: [currentLocation.longitude, currentLocation.latitude],
+              centerCoordinate: [
+                currentLocation.longitude,
+                currentLocation.latitude,
+              ],
               zoomLevel: 16,
               animationDuration: 0,
             });
@@ -180,9 +205,19 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
   // Focar na localização quando ela for obtida pela primeira vez ou quando um currentLocation inicial é provido
   useEffect(() => {
     const ref = cameraRef.current;
-    if (ref && typeof ref.setCamera === "function" && !isNavigating && !hasInitialized) {
+    if (
+      ref &&
+      typeof ref.setCamera === "function" &&
+      !isNavigating &&
+      !hasInitialized
+    ) {
       const targetLocation = currentLocation || userLocation;
-      if (targetLocation != null && typeof targetLocation.latitude === "number" && typeof targetLocation.longitude === "number" && targetLocation.latitude !== 0) {
+      if (
+        targetLocation != null &&
+        typeof targetLocation.latitude === "number" &&
+        typeof targetLocation.longitude === "number" &&
+        targetLocation.latitude !== 0
+      ) {
         ref.setCamera({
           centerCoordinate: [targetLocation.longitude, targetLocation.latitude],
           zoomLevel: 14,
@@ -194,7 +229,14 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
         const timeoutId = setTimeout(() => {
           const r = cameraRef.current;
           const loc = userLocation;
-          if (r && typeof r.setCamera === "function" && loc != null && typeof loc.latitude === "number" && typeof loc.longitude === "number" && !hasInitialized) {
+          if (
+            r &&
+            typeof r.setCamera === "function" &&
+            loc != null &&
+            typeof loc.latitude === "number" &&
+            typeof loc.longitude === "number" &&
+            !hasInitialized
+          ) {
             r.setCamera({
               centerCoordinate: [loc.longitude, loc.latitude],
               zoomLevel: 14,
@@ -210,7 +252,12 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
 
   const focusOnUserLocation = () => {
     const target = userLocation || currentLocation;
-    if (target == null || typeof target.latitude !== "number" || typeof target.longitude !== "number") return;
+    if (
+      target == null ||
+      typeof target.latitude !== "number" ||
+      typeof target.longitude !== "number"
+    )
+      return;
     const ref = cameraRef.current;
     if (ref == null || typeof ref.setCamera !== "function") return;
     setIsTracking(false);
@@ -229,12 +276,10 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
 
   // Removido onMapDrag redundante
 
-
   /** Tamanhos de ícone por tipo (ajuste aqui para mudar no mapa). */
   const RADAR_ICON_SIZES: Record<string, number> = {
     radarMovel: 0.05,
     radarSemaforico: 0.05,
-    radarFixo: 0.05,
     placa: 0.18,
   };
   const getIconSizeForIcon = (iconImage: string): number => {
@@ -259,69 +304,93 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
     return "radarMovel";
   };
 
-
   // Criar GeoJSON para radares com ícone por tipo (radar, radarFixo, radarMovel, radarSemaforico)
-  const radarsGeoJSON = useMemo(() => ({
-    type: "FeatureCollection" as const,
-    features: (radars || [])
-      .filter(
-        (radar) =>
-          radar != null &&
-          radar.id != null &&
-          typeof radar.latitude === "number" &&
-          typeof radar.longitude === "number" &&
-          !isNaN(radar.latitude) &&
-          !isNaN(radar.longitude)
-      )
-      .map((radar) => ({
-        type: "Feature" as const,
-        id: radar.id,
-        geometry: {
-          type: "Point" as const,
-          coordinates: [radar.longitude, radar.latitude],
-        },
-        properties: {
+  const radarsGeoJSON = useMemo(
+    () => ({
+      type: "FeatureCollection" as const,
+      features: (radars || [])
+        .filter(
+          (radar) =>
+            radar != null &&
+            radar.id != null &&
+            typeof radar.latitude === "number" &&
+            typeof radar.longitude === "number" &&
+            !isNaN(radar.latitude) &&
+            !isNaN(radar.longitude),
+        )
+        .map((radar) => ({
+          type: "Feature" as const,
           id: radar.id,
-          type: radar.type || "default",
-          iconImage: getRadarIconForMap(radar),
-          iconSize: getIconSizeForIcon(getRadarIconForMap(radar)),
-          isNearby: nearbyRadarIds?.has(radar.id) ? 1 : 0,
-        },
-      })),
-  }), [radars, nearbyRadarIds]);
+          geometry: {
+            type: "Point" as const,
+            coordinates: [radar.longitude, radar.latitude],
+          },
+          properties: {
+            id: radar.id,
+            type: radar.type || "default",
+            iconImage: getRadarIconForMap(radar),
+            iconSize: getIconSizeForIcon(getRadarIconForMap(radar)),
+            isNearby: nearbyRadarIds?.has(radar.id) ? 1 : 0,
+          },
+        })),
+    }),
+    [radars, nearbyRadarIds],
+  );
 
   const showUserLocation: boolean =
     interactive && !onCameraChanged && !hideUserLocation;
 
-  useImperativeHandle(ref, () => ({
-    getCenter: (): Promise<{ latitude: number; longitude: number } | null> => {
-      const cam = cameraRef.current;
-      if (cam == null || typeof (cam as any).getCenter !== "function") {
-        return Promise.resolve(null);
-      }
-      return Promise.resolve((cam as any).getCenter())
-        .then((raw: unknown) => {
-          if (raw == null) return null;
-          let lat: number | null = null;
-          let lng: number | null = null;
-          if (Array.isArray(raw) && raw.length >= 2) {
-            lng = Number(raw[0]);
-            lat = Number(raw[1]);
-          } else if (typeof raw === "object" && raw !== null) {
-            const o = raw as Record<string, unknown>;
-            const a = o.latitude ?? o.lat;
-            const b = o.longitude ?? o.lng ?? o.lon;
-            if (typeof a === "number" && typeof b === "number") {
-              lat = a;
-              lng = b;
+  useImperativeHandle(
+    ref,
+    () => ({
+      getCenter: (): Promise<{
+        latitude: number;
+        longitude: number;
+      } | null> => {
+        const cam = cameraRef.current;
+        if (cam == null || typeof (cam as any).getCenter !== "function") {
+          return Promise.resolve(null);
+        }
+        return Promise.resolve((cam as any).getCenter())
+          .then((raw: unknown) => {
+            if (raw == null) return null;
+            let lat: number | null = null;
+            let lng: number | null = null;
+            if (Array.isArray(raw) && raw.length >= 2) {
+              lng = Number(raw[0]);
+              lat = Number(raw[1]);
+            } else if (typeof raw === "object" && raw !== null) {
+              const o = raw as Record<string, unknown>;
+              const a = o.latitude ?? o.lat;
+              const b = o.longitude ?? o.lng ?? o.lon;
+              if (typeof a === "number" && typeof b === "number") {
+                lat = a;
+                lng = b;
+              }
             }
-          }
-          if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) return null;
-          return { latitude: lat, longitude: lng };
-        })
-        .catch(() => null);
-    },
-  }), []);
+            if (lat == null || lng == null || isNaN(lat) || isNaN(lng))
+              return null;
+            return { latitude: lat, longitude: lng };
+          })
+          .catch(() => null);
+      },
+      focusOnCoord: (
+        latitude: number,
+        longitude: number,
+        zoomLevel: number = 16,
+      ) => {
+        const cam = cameraRef.current;
+        if (cam == null || typeof (cam as any).setCamera !== "function") return;
+        setIsTracking(false);
+        (cam as any).setCamera({
+          centerCoordinate: [longitude, latitude],
+          zoomLevel,
+          animationDuration: 800,
+        });
+      },
+    }),
+    [],
+  );
 
   /* useEffect(() => {
     if (!__DEV__) return;
@@ -354,7 +423,9 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
         compassPosition={{ bottom: 420, right: 20 }}
         scaleBarEnabled={false}
         onPress={(event) => {
-          const geom = event?.geometry as { coordinates?: number[] } | undefined;
+          const geom = event?.geometry as
+            | { coordinates?: number[] }
+            | undefined;
           const coords = geom?.coordinates;
           if (onMapPress && Array.isArray(coords) && coords.length >= 2) {
             const [lng, lat] = coords;
@@ -362,7 +433,9 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
           }
         }}
         onLongPress={(event) => {
-          const geom = event?.geometry as { coordinates?: number[] } | undefined;
+          const geom = event?.geometry as
+            | { coordinates?: number[] }
+            | undefined;
           const coords = geom?.coordinates;
           if (onMapPress && Array.isArray(coords) && coords.length >= 2) {
             const [lng, lat] = coords;
@@ -374,23 +447,33 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
               onCameraChanged: (event: unknown) => {
                 if (event == null || typeof event !== "object") return;
                 try {
-                  const props = (event as { properties?: Record<string, unknown> }).properties ?? {};
+                  const props =
+                    (event as { properties?: Record<string, unknown> })
+                      .properties ?? {};
                   const isUserInteraction = props.isUserInteraction === true;
                   if (isTracking && isUserInteraction) setIsTracking(false);
                   const centerCandidate =
                     (props.center as number[] | undefined) ??
-                    (event as { geometry?: { coordinates?: number[] } }).geometry?.coordinates ??
-                    (event as { centerCoordinate?: number[] }).centerCoordinate ??
+                    (event as { geometry?: { coordinates?: number[] } })
+                      .geometry?.coordinates ??
+                    (event as { centerCoordinate?: number[] })
+                      .centerCoordinate ??
                     (event as { center?: number[] }).center;
-                  if (centerCandidate != null) emitCameraCenter(centerCandidate);
+                  if (centerCandidate != null)
+                    emitCameraCenter(centerCandidate);
                 } catch (_) {}
               },
               onMapIdle: (event: unknown) => {
                 if (event == null || typeof event !== "object") return;
                 try {
-                  const e = event as { properties?: { center?: number[] }; geometry?: { coordinates?: number[] } };
-                  const centerCandidate = e.properties?.center ?? e.geometry?.coordinates;
-                  if (centerCandidate != null) emitCameraCenter(centerCandidate);
+                  const e = event as {
+                    properties?: { center?: number[] };
+                    geometry?: { coordinates?: number[] };
+                  };
+                  const centerCandidate =
+                    e.properties?.center ?? e.geometry?.coordinates;
+                  if (centerCandidate != null)
+                    emitCameraCenter(centerCandidate);
                 } catch (_) {}
               },
             }
@@ -403,12 +486,16 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
             zoomLevel: 14,
           }}
           followUserLocation={
-            onCameraChanged ? false : isNavigating || (interactive && isTracking)
+            onCameraChanged
+              ? false
+              : isNavigating || (interactive && isTracking)
           }
           followUserMode={
             isNavigating
               ? UserTrackingMode.FollowWithCourse
-              : (isTracking ? UserTrackingMode.Follow : undefined)
+              : isTracking
+                ? UserTrackingMode.Follow
+                : undefined
           }
           {...(isTracking ? { followZoomLevel: 16 } : {})}
           animationDuration={1000}
@@ -422,7 +509,10 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
             onUpdate={(location) => {
               if (location?.coords != null && onCameraChanged == null) {
                 const { latitude, longitude } = location.coords;
-                if (typeof latitude === "number" && typeof longitude === "number") {
+                if (
+                  typeof latitude === "number" &&
+                  typeof longitude === "number"
+                ) {
                   setUserLocation({ latitude, longitude });
                 }
               }
@@ -446,16 +536,16 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
                   lineJoin: "round",
                   lineGradient: isNavigating
                     ? [
-                      "interpolate",
-                      ["linear"],
-                      ["line-progress"],
-                      0,
-                      "#3b82f6",
-                      0.5,
-                      "#60a5fa",
-                      1,
-                      "#93c5fd",
-                    ]
+                        "interpolate",
+                        ["linear"],
+                        ["line-progress"],
+                        0,
+                        "#3b82f6",
+                        0.5,
+                        "#60a5fa",
+                        1,
+                        "#93c5fd",
+                      ]
                     : undefined,
                 }}
               />
@@ -560,9 +650,10 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
               shape={radarsGeoJSON}
               cluster
               clusterRadius={50}
-              clusterMaxZoomLevel={14}
+              clusterMaxZoomLevel={12}
               onPress={(event) => {
-                if (event == null || onRadarPress == null || radars == null) return;
+                if (event == null || onRadarPress == null || radars == null)
+                  return;
                 try {
                   const features = event.features;
                   if (!Array.isArray(features) || features.length === 0) return;
@@ -570,7 +661,9 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
                   if (feature == null) return;
                   const radarId = feature.properties?.id ?? feature.id;
                   if (radarId == null) return;
-                  const radar = radars.find((r) => r != null && r.id === radarId);
+                  const radar = radars.find(
+                    (r) => r != null && r.id === radarId,
+                  );
                   if (radar != null) onRadarPress(radar);
                 } catch (_) {
                   // Evita NPE no bridge
@@ -642,7 +735,10 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
                 properties: {},
                 geometry: {
                   type: "Point",
-                  coordinates: [pickerSelectedPoint.longitude, pickerSelectedPoint.latitude],
+                  coordinates: [
+                    pickerSelectedPoint.longitude,
+                    pickerSelectedPoint.latitude,
+                  ],
                 },
               }}
             >
@@ -717,6 +813,5 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     flex: 1,
-
   },
 });

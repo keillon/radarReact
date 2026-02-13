@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -11,7 +11,11 @@ import {
   View,
 } from "react-native";
 import Geolocation from "react-native-geolocation-service";
-import Map, { getClosestPlacaName, radarImages } from "../components/Map";
+import Map, {
+  getClosestPlacaName,
+  radarImages,
+  type MapHandle,
+} from "../components/Map";
 import {
   API_BASE_URL,
   Radar,
@@ -45,6 +49,7 @@ export default function RadarEditorScreen({
   const [radarType, setRadarType] = useState<
     "móvel" | "semaforo" | "placa"
   >("placa");
+  const editorMapRef = useRef<MapHandle | null>(null);
 
   const RADAR_TYPES: {
     value: "móvel" | "semaforo" | "placa";
@@ -164,6 +169,7 @@ export default function RadarEditorScreen({
     setNewSpeedLimit(radar.speedLimit != null ? String(radar.speedLimit) : "");
     setMode("view");
     setPendingAddCoords(null);
+    editorMapRef.current?.focusOnCoord(radar.latitude, radar.longitude);
   };
 
   const handleMapPress = (coords: { latitude: number; longitude: number }) => {
@@ -377,6 +383,7 @@ export default function RadarEditorScreen({
 
       <View style={styles.mapWrapper}>
         <Map
+          ref={editorMapRef}
           radars={radars}
           onRadarPress={handleRadarPress}
           onMapPress={handleMapPress}
@@ -390,6 +397,112 @@ export default function RadarEditorScreen({
           </View>
         )}
       </View>
+
+      {/* Vignette + Modal radar no topo (ao clicar em um radar) */}
+      {selectedRadar && mode === "view" && (
+        <>
+          <View
+            style={[
+              StyleSheet.absoluteFill,
+              {
+                backgroundColor: "rgba(0,0,0,0.35)",
+                zIndex: 999,
+                elevation: 999,
+                pointerEvents: "box-none",
+              },
+            ]}
+          >
+            <TouchableOpacity
+              style={StyleSheet.absoluteFill}
+              activeOpacity={1}
+              onPress={() => setSelectedRadar(null)}
+            />
+          </View>
+          <View
+            style={{
+              position: "absolute",
+              top: 56,
+              left: 16,
+              right: 16,
+              zIndex: 1000,
+              elevation: 1000,
+            }}
+            pointerEvents="box-none"
+          >
+            <View
+              style={{
+                flexDirection: "row",
+                  alignItems: "center",
+                  gap: 16,
+                  padding: 16,
+                  backgroundColor: "#fff",
+                  borderRadius: 12,
+                  shadowColor: "#000",
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 8,
+                  elevation: 8,
+                  maxWidth: 400,
+                  alignSelf: "center",
+                }}
+            >
+              <View>
+                <Image
+                  source={
+                    (() => {
+                      const t = String(selectedRadar.type || "")
+                        .trim()
+                        .toLowerCase();
+                      if (
+                        t.includes("semaforo") ||
+                        t.includes("camera") ||
+                        t.includes("fotografica")
+                      )
+                        return radarImages.radarSemaforico;
+                      if (t.includes("movel") || t.includes("mobile"))
+                        return radarImages.radarMovel;
+                      return (
+                        radarImages[
+                          getClosestPlacaName(selectedRadar.speedLimit)
+                        ] || radarImages.placa60
+                      );
+                    })()
+                  }
+                  style={{ width: 56, height: 56 }}
+                  resizeMode="contain"
+                />
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={{ fontSize: 16, fontWeight: "600", marginBottom: 4 }}>
+                  {selectedRadar.type || "Radar"}
+                  {selectedRadar.speedLimit != null &&
+                    ` • ${selectedRadar.speedLimit} km/h`}
+                </Text>
+                <Text
+                  style={{ fontSize: 13, color: "#6b7280" }}
+                  numberOfLines={1}
+                >
+                  {selectedRadar.latitude.toFixed(5)},{" "}
+                  {selectedRadar.longitude.toFixed(5)}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={{
+                  padding: 12,
+                  backgroundColor: "#e5e7eb",
+                  borderRadius: 8,
+                }}
+                onPress={() => setSelectedRadar(null)}
+                activeOpacity={0.8}
+              >
+                <Text style={{ fontWeight: "600", color: "#374151" }}>
+                  Fechar
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </>
+      )}
 
       {/* Modal: Reportar radar (velocidade + tipo) */}
       <Modal
