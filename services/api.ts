@@ -1,6 +1,5 @@
 export const API_BASE_URL = "http://72.60.247.18:3000";
 
-import { createTempRadar, saveReportedRadarLocally } from "./reportedRadars";
 import type { NearRouteRequest, Radar } from "./types";
 export type { LatLng, NearRouteRequest, Radar } from "./types";
 
@@ -199,112 +198,86 @@ export interface ReportRadarRequest {
   reportedBy?: string; // ID do usuário que reportou (opcional)
 }
 
-// Reportar um radar (POST) - com fallback para armazenamento local
+// Reportar um radar (POST) - com retry automático em caso de falha de rede
 export const reportRadar = async (
   request: ReportRadarRequest,
 ): Promise<Radar> => {
-  try {
-    const url = `${API_BASE_URL}/radars/report`;
-    console.log(`📤 Reportando radar em: ${url}`);
-    console.log(
-      `📍 Localização: lat=${request.latitude}, lon=${request.longitude}`,
-    );
+  const maxRetries = 3;
+  const delays = [500, 1000, 2000]; // Backoff exponencial: 500ms, 1s, 2s
 
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        latitude: request.latitude,
-        longitude: request.longitude,
-        velocidadeLeve: request.speedLimit || null,
-        tipoRadar: request.type || "reportado",
-        reportedBy: request.reportedBy || "anonymous",
-      }),
-    });
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const url = `${API_BASE_URL}/radars/report`;
+      console.log(`📤 Reportando radar (tentativa ${attempt + 1}/${maxRetries + 1}): ${url}`);
+      console.log(
+        `📍 Localização: lat=${request.latitude}, lon=${request.longitude}`,
+      );
 
-    console.log(
-      `📡 Resposta da API: status=${response.status}, ok=${response.ok}`,
-    );
-
-    if (!response.ok) {
-      // Se o endpoint não existir (404), criar radar localmente
-      if (response.status === 404) {
-        console.log(
-          `⚠️ Endpoint /radars/report não disponível (404), criando radar localmente`,
-        );
-
-        // Importar dinamicamente para evitar dependência circular
-        const { createTempRadar, saveReportedRadarLocally } =
-          await import("./reportedRadars");
-
-        // Criar radar temporário
-        const tempRadar = createTempRadar({
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
           latitude: request.latitude,
           longitude: request.longitude,
-          speedLimit: request.speedLimit,
-          type: request.type || "reportado",
-        });
-
-        // Salvar localmente
-        await saveReportedRadarLocally(tempRadar);
-
-        console.log(`✅ Radar criado localmente com ID: ${tempRadar.id}`);
-        return tempRadar;
-      }
-
-      const errorText = await response.text();
-      console.error(`❌ Erro HTTP ${response.status}: ${errorText}`);
-      throw new Error(
-        `Erro ao reportar radar: ${response.status} ${response.statusText}`,
-      );
-    }
-
-    const data = await response.json();
-    console.log(`✅ Radar reportado com sucesso no backend:`, data);
-
-    const radar = mapApiRadarToRadar(data.radar || data);
-
-    // Salvar localmente em BACKGROUND (não bloquear retorno)
-    saveReportedRadarLocally(radar).catch(e => console.warn("Erro no backup local:", e));
-
-    return radar;
-  } catch (error: any) {
-    // Se for erro de rede ou timeout, criar radar localmente
-    if (
-      error?.message?.includes("Network") ||
-      error?.message?.includes("timeout") ||
-      error?.message?.includes("Failed to fetch") ||
-      error?.message?.includes("Indisponível")
-    ) {
-      console.log(`⚠️ Erro de rede ao reportar radar, criando localmente`);
-
-      const tempRadar = createTempRadar({
-        latitude: request.latitude,
-        longitude: request.longitude,
-        speedLimit: request.speedLimit,
-        type: request.type || "reportado",
+          velocidadeLeve: request.speedLimit || null,
+          tipoRadar: request.type || "reportado",
+          reportedBy: request.reportedBy || "anonymous",
+        }),
       });
 
-      // Salvar localmente em background
-      saveReportedRadarLocally(tempRadar).catch(e => console.warn("Erro no save local fallback:", e));
-      
-      return tempRadar;
-    }
+      console.log(
+        `📡 Resposta da API: status=${response.status}, ok=${response.ok}`,
+      );
 
-    const errorDetails = {
-      message: error?.message || "Erro desconhecido",
-      stack: error?.stack,
-      name: error?.name,
-      url: `${API_BASE_URL}/radars/report`,
-    };
-    console.error(
-      "Erro ao reportar radar:",
-      JSON.stringify(errorDetails, null, 2),
-    );
-    throw new Error(`Erro ao reportar radar: ${errorDetails.message}`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`❌ Erro HTTP ${response.status}: ${errorText}`);
+        throw new Error(
+          `Erro ao reportar radar: ${response.status} ${response.statusText}`,
+        );
+      }
+
+      const data = await response.json();
+      console.log(`✅ Radar reportado com sucesso no backend:`, data);
+
+      const radar = mapApiRadarToRadar(data.radar || data);
+      return radar;
+    } catch (error: any) {
+      const isLastAttempt = attempt === maxRetries;
+      
+      // Se for erro de rede/timeout e não for última tentativa, fazer retry
+      if (
+        !isLastAttempt &&
+        (error?.message?.includes("Network") ||
+          error?.message?.includes("timeout") ||
+          error?.message?.includes("Failed to fetch") ||
+          error?.message?.includes("Indisponível"))
+      ) {
+        const delay = delays[attempt] || 2000;
+        console.warn(`⚠️ Falha na tentativa ${attempt + 1}, aguardando ${delay}ms antes de tentar novamente...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue; // Próxima tentativa
+      }
+
+      // Se for última tentativa ou erro não-retryable, throw
+      const errorDetails = {
+        message: error?.message || "Erro desconhecido",
+        stack: error?.stack,
+        name: error?.name,
+        url: `${API_BASE_URL}/radars/report`,
+      };
+      console.error(
+        "Erro ao reportar radar (após todas as tentativas):",
+        JSON.stringify(errorDetails, null, 2),
+      );
+      throw new Error(`Erro ao reportar radar: ${errorDetails.message}`);
+    }
   }
+
+  // Fallback (nunca deve chegar aqui devido ao loop, mas TS precisa)
+  throw new Error("Erro inesperado ao reportar radar");
 };
 
 // Atualizar radar (PATCH) - para o editor: mover posição, limite, inativar

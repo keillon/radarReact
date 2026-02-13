@@ -63,11 +63,7 @@ import {
   RouteResponse,
 } from "../services/mapbox";
 import { areMapboxRadarArraysEqual } from "../utils/radarDiff";
-import {
-  calculateDistance,
-  calculateDistanceToRoute,
-  getCumulativeDistances,
-} from "../utils/radarGeometry";
+import { calculateDistance, getCumulativeDistances } from "../utils/radarGeometry";
 // TTS: carregar só no primeiro uso para evitar "Requiring unknown module 'undefined'" no startup
 let TtsCache: any = undefined; // undefined = ainda não tentou; null = tentou e falhou
 function getTts(): any {
@@ -257,13 +253,6 @@ export default function Home({ onOpenEditor }: HomeProps) {
     useState<LatLng | null>(null);
   const [showMapPicker, setShowMapPicker] = useState(false);
 
-  // Radares ao longo da rota (máx 1200) para enviar ao mapa nativo — evita ANR ao reportar (nunca enviar 16k+)
-  const [radarsAlongRouteForNative, setRadarsAlongRouteForNative] = useState<
-    Array<{ id: string; latitude: number; longitude: number; speedLimit: number; type: string }>
-  >([]);
-  const [routeFilterVersion, setRouteFilterVersion] = useState(0);
-  const MAX_RADARS_TO_NATIVE = 1200;
-  const ROUTE_RADAR_DISTANCE_METERS = 2000;
   const [mapPickerCenter, setMapPickerCenter] = useState<LatLng | null>(null);
   const [pickerPreviewCoords, setPickerPreviewCoords] = useState<LatLng | null>(null); // Preview lat/lon durante marcação
   const pickerPreviewIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -584,7 +573,6 @@ export default function Home({ onOpenEditor }: HomeProps) {
     if (!Array.isArray(coordinates) || coordinates.length < 2) {
       routePointsRef.current = [];
       routeCumulativeRef.current = [];
-      setRadarsAlongRouteForNative([]);
       return;
     }
     const points: LatLng[] = coordinates
@@ -596,7 +584,6 @@ export default function Home({ onOpenEditor }: HomeProps) {
     routePointsRef.current = points;
     routeCumulativeRef.current =
       points.length >= 2 ? getCumulativeDistances(points) : [];
-    setRouteFilterVersion((v) => v + 1);
   }, [routeData?.route?.geometry?.coordinates]);
 
   useEffect(() => {
@@ -968,41 +955,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
   isNavigatingRef.current = isNavigating;
   currentLocationRef.current = currentLocation;
 
-  // Computar radares ao longo da rota (máx 1200) em background — só quando rota ou CSV muda. Reportados vão no overlay.
-  useEffect(() => {
-    if (!isNavigating || routePointsRef.current.length < 2) {
-      setRadarsAlongRouteForNative([]);
-      return;
-    }
-    const points = routePointsRef.current;
-    const csv = csvRadars;
-    const timer = setTimeout(() => {
-      const withDistance: Array<{ r: (typeof csv)[0]; d: number }> = [];
-      for (let i = 0; i < csv.length; i++) {
-        const r = csv[i];
-        if (!r?.id || r.latitude == null || r.longitude == null) continue;
-        const d = calculateDistanceToRoute(
-          { latitude: r.latitude, longitude: r.longitude },
-          points
-        );
-        if (d <= ROUTE_RADAR_DISTANCE_METERS) withDistance.push({ r, d });
-      }
-      withDistance.sort((a, b) => a.d - b.d);
-      const limited = withDistance.slice(0, MAX_RADARS_TO_NATIVE).map(({ r }) => ({
-        id: r.id,
-        latitude: r.latitude,
-        longitude: r.longitude,
-        speedLimit: r.speedLimit ?? (r as any).velocidadeLeve ?? 0,
-        type: normalizeRadarType(r.type ?? (r as any).tipoRadar ?? "unknown"),
-      }));
-      setRadarsAlongRouteForNative((prev) =>
-        prev.length === limited.length && prev[0]?.id === limited[0]?.id ? prev : limited
-      );
-    }, 0);
-    return () => clearTimeout(timer);
-  }, [isNavigating, routeFilterVersion, csvRadars]);
-
-  // Preparar radares para o MapboxNavigation (base completo para outros usos; mapa nativo usa lista limitada)
+  // Preparar radares para o MapboxNavigation
   const baseMapboxRadars = useMemo(() => {
     if (!isNavigating || radars.length === 0) return [];
     return radars.map((r: any) => ({
@@ -1030,7 +983,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
     [liveDeletedRadarIds]
   );
 
-  // Lista enviada ao mapa nativo: APENAS overlay + radares ao longo da rota (máx 1200). Nunca 16k+ — evita ANR ao reportar.
+  // Base vem do servidor via URL no nativo; mapboxRadars usado apenas para lógica JS (proximity usa radars)
   const mapboxRadars = useMemo(() => {
     if (!isNavigating) return EMPTY_MAPBOX_RADARS;
     const overlayIds = new Set(
@@ -1039,11 +992,24 @@ export default function Home({ onOpenEditor }: HomeProps) {
     const overlayFirst = liveOverlayMapboxRadars.filter(
       (r) => r?.id && !liveDeletedRadarIdsSet.has(r.id)
     );
-    const rest = radarsAlongRouteForNative.filter(
-      (r) => r?.id && !liveDeletedRadarIdsSet.has(r.id) && !overlayIds.has(r.id)
-    );
+    const rest = (csvRadars as Array<{ id?: string; latitude?: number; longitude?: number; speedLimit?: number; type?: string }>)
+      .filter(
+        (r) =>
+          r?.id &&
+          !liveDeletedRadarIdsSet.has(r.id) &&
+          !overlayIds.has(r.id) &&
+          r.latitude != null &&
+          r.longitude != null
+      )
+      .map((r) => ({
+        id: r.id!,
+        latitude: r.latitude!,
+        longitude: r.longitude!,
+        speedLimit: r.speedLimit ?? (r as any).velocidadeLeve ?? 0,
+        type: normalizeRadarType(r.type ?? (r as any).tipoRadar ?? "unknown"),
+      }));
     return [...overlayFirst, ...rest];
-  }, [isNavigating, radarsAlongRouteForNative, liveOverlayMapboxRadars, liveDeletedRadarIdsSet]);
+  }, [isNavigating, csvRadars, liveOverlayMapboxRadars, liveDeletedRadarIdsSet]);
 
   // Para cálculo do modal/metros, usamos base + overlay em tempo real (somente JS).
   const radarsForProximity = useMemo(() => {
@@ -1105,7 +1071,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
     Array<{ id: string; latitude: number; longitude: number; speedLimit: number; type: string }>
   >([]);
 
-  // Base: push UMA vez quando rota está pronta (radares CSV ao longo da rota)
+  // Base: nativo carrega TODOS os radares via URL (GET /radars/geojson) — sem bridge, como Waze/RadarBot
   useEffect(() => {
     if (!isNavigating) {
       setLiveDeletedRadarIds([]);
@@ -1114,12 +1080,8 @@ export default function Home({ onOpenEditor }: HomeProps) {
       setMapboxOverlayForNative([]);
       return;
     }
-    const base = radarsAlongRouteForNative;
-    if (base.length === 0) return;
-    if (areMapboxRadarArraysEqual(lastPushedBaseRef.current as typeof base | null, base)) return;
-    lastPushedBaseRef.current = base;
-    InteractionManager.runAfterInteractions(() => setMapboxBaseForNative(base));
-  }, [isNavigating, radarsAlongRouteForNative]);
+    setMapboxBaseForNative([]);
+  }, [isNavigating]);
 
   // Overlay: push SOMENTE quando reporta (lista pequena)
   const overlayToPush = useMemo(() => {
@@ -1327,6 +1289,12 @@ export default function Home({ onOpenEditor }: HomeProps) {
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
     };
   }, [rearmRadarRuntimeState, syncAllRadarsFromCurrentLocation]);
+
+  // Durante navegação, manter highlight/pulse no nativo em sync com proximidade
+  useEffect(() => {
+    if (!isNavigating) return;
+    setNearbyRadarIds(proximityNearbyRadarIds);
+  }, [isNavigating, proximityNearbyRadarIds]);
 
   // Memoizar conversão de Set para Array para evitar nova referência a cada render
   const nearbyRadarIdsArray = useMemo(() => Array.from(nearbyRadarIds), [nearbyRadarIds]);
@@ -1635,7 +1603,6 @@ export default function Home({ onOpenEditor }: HomeProps) {
       if (points.length < 2) return;
       routePointsRef.current = points;
       routeCumulativeRef.current = getCumulativeDistances(points);
-      setRouteFilterVersion((v) => v + 1);
     } catch (error) {
       console.error("Erro ao processar mudança de rota:", error);
     }
@@ -1766,6 +1733,8 @@ export default function Home({ onOpenEditor }: HomeProps) {
         distanceUnit="metric"
         language="pt-BR"
         // @ts-ignore
+        radarsGeoJsonUrl={isNavigating && API_BASE_URL ? `${API_BASE_URL}/radars/geojson` : undefined}
+        // @ts-ignore
         radars={mapboxBaseForNative}
         // @ts-ignore
         overlayRadars={mapboxOverlayForNative}
@@ -1787,7 +1756,8 @@ export default function Home({ onOpenEditor }: HomeProps) {
   }, [
     MapboxNavComponent, isNavigating, origin, destination, destinationText,
     mapboxBaseForNative, mapboxOverlayForNative, nearbyRadarIdsArray, nearestRadar,
-    handleLocationChange, handleRouteProgressChange, handleArrive, handleCancelNavigation, handleError, handleRouteAlternativeSelected, handleRouteChanged
+    handleLocationChange, handleRouteProgressChange, handleArrive, handleCancelNavigation, handleError, handleRouteAlternativeSelected, handleRouteChanged,
+    API_BASE_URL
   ]);
 
   return (

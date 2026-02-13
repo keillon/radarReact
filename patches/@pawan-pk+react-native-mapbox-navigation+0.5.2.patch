@@ -75,7 +75,7 @@ index 7d28df3..f6c5272 100644
    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
    implementation 'androidx.cardview:cardview:1.0.0'
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
-index 41a3ba0..563fe77 100644
+index 41a3ba0..2497549 100644
 --- a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
 +++ b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
 @@ -3,25 +3,38 @@ package com.mapboxnavigation
@@ -1048,34 +1048,6 @@ index 41a3ba0..563fe77 100644
 -      when (navigationCameraState) {
 -        NavigationCameraState.TRANSITION_TO_FOLLOWING,
 -        NavigationCameraState.FOLLOWING -> binding.recenter.visibility = View.INVISIBLE
--
--        NavigationCameraState.TRANSITION_TO_OVERVIEW,
--        NavigationCameraState.OVERVIEW,
--        NavigationCameraState.IDLE -> binding.recenter.visibility = View.VISIBLE
--      }
--    }
--    // set the padding values depending on screen orientation and visible view layout
--    if (this.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
--      viewportDataSource.overviewPadding = landscapeOverviewPadding
--    } else {
--      viewportDataSource.overviewPadding = overviewPadding
--    }
--    if (this.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
--      viewportDataSource.followingPadding = landscapeFollowingPadding
--    } else {
--      viewportDataSource.followingPadding = followingPadding
--    }
--
--    // make sure to use the same DistanceFormatterOptions across different features
--    val unitType = if (distanceUnit == "imperial") UnitType.IMPERIAL else UnitType.METRIC
--    val distanceFormatterOptions = DistanceFormatterOptions.Builder(context)
--      .unitType(unitType)
--      .build()
--
--    // initialize maneuver api that feeds the data to the top banner maneuver view
--    maneuverApi = MapboxManeuverApi(
--      MapboxDistanceFormatter(distanceFormatterOptions)
--    )
 +      // set the animations lifecycle listener to ensure the NavigationCamera stops
 +      // automatically following the user location when the map is interacted with
 +      binding.mapView.camera.addCameraAnimationsLifecycleListener(
@@ -1100,32 +1072,9 @@ index 41a3ba0..563fe77 100644
 +        }
 +      }
  
--    // initialize bottom progress view
--    tripProgressApi = MapboxTripProgressApi(
--      TripProgressUpdateFormatter.Builder(context)
--        .distanceRemainingFormatter(
--          DistanceRemainingFormatter(distanceFormatterOptions)
--        )
--        .timeRemainingFormatter(
--          TimeRemainingFormatter(context)
--        )
--        .percentRouteTraveledFormatter(
--          PercentDistanceTraveledFormatter()
--        )
--        .estimatedTimeToArrivalFormatter(
--          EstimatedTimeToArrivalFormatter(context, TimeFormat.NONE_SPECIFIED)
--        )
--        .build()
--    )
--    // initialize voice instructions api and the voice instruction player
--    speechApi = MapboxSpeechApi(
--      context,
--      locale.language
--    )
--    voiceInstructionsPlayer = MapboxVoiceInstructionsPlayer(
--      context,
--      locale.language
--    )
+-        NavigationCameraState.TRANSITION_TO_OVERVIEW,
+-        NavigationCameraState.OVERVIEW,
+-        NavigationCameraState.IDLE -> binding.recenter.visibility = View.VISIBLE
 +      // Remover delay antigo aqui (movido para o locationObserver)
 +      // set the padding values depending on screen orientation and visible view layout
 +      if (this.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
@@ -1137,13 +1086,25 @@ index 41a3ba0..563fe77 100644
 +        viewportDataSource.followingPadding = landscapeFollowingPadding
 +      } else {
 +        viewportDataSource.followingPadding = followingPadding
-+      }
- 
--    // load map style
--    binding.mapView.mapboxMap.loadStyle(NavigationStyles.NAVIGATION_DAY_STYLE) {
--      // Ensure that the route line related layers are present before the route arrow
--      routeLineView.initializeLayers(it)
+       }
 -    }
+-    // set the padding values depending on screen orientation and visible view layout
+-    if (this.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+-      viewportDataSource.overviewPadding = landscapeOverviewPadding
+-    } else {
+-      viewportDataSource.overviewPadding = overviewPadding
+-    }
+-    if (this.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+-      viewportDataSource.followingPadding = landscapeFollowingPadding
+-    } else {
+-      viewportDataSource.followingPadding = followingPadding
+-    }
+ 
+-    // make sure to use the same DistanceFormatterOptions across different features
+-    val unitType = if (distanceUnit == "imperial") UnitType.IMPERIAL else UnitType.METRIC
+-    val distanceFormatterOptions = DistanceFormatterOptions.Builder(context)
+-      .unitType(unitType)
+-      .build()
 +      // make sure to use the same DistanceFormatterOptions across different features (incl. Speed
 +      // Limit API)
 +      val unitType = if (distanceUnit == "imperial") UnitType.IMPERIAL else UnitType.METRIC
@@ -1179,14 +1140,10 @@ index 41a3ba0..563fe77 100644
 +        voiceInstructionsPlayer = null
 +      }
  
--    // initialize view interactions
--    binding.stop.setOnClickListener {
--      val event = Arguments.createMap()
--      event.putString("message", "Navigation Cancel")
--      context
--        .getJSModule(RCTEventEmitter::class.java)
--        .receiveEvent(id, "onCancelNavigation", event)
--    }
+-    // initialize maneuver api that feeds the data to the top banner maneuver view
+-    maneuverApi = MapboxManeuverApi(
+-      MapboxDistanceFormatter(distanceFormatterOptions)
+-    )
 +      // load map style
 +      binding.mapView.mapboxMap.loadStyle(NavigationStyles.NAVIGATION_DAY_STYLE) { style ->
 +        // Ensure that the route line related layers are present before the route arrow
@@ -1201,18 +1158,32 @@ index 41a3ba0..563fe77 100644
 +          Log.w("MapboxNavigationView", "Erro ao configurar callouts: ${e.message}")
 +        }
  
--    binding.recenter.setOnClickListener {
--      navigationCamera.requestNavigationCameraToFollowing()
--      binding.routeOverview.showTextAndExtend(BUTTON_ANIMATION_DURATION)
--    }
--    binding.routeOverview.setOnClickListener {
--      navigationCamera.requestNavigationCameraToOverview()
--      binding.recenter.showTextAndExtend(BUTTON_ANIMATION_DURATION)
--    }
--    binding.soundButton.setOnClickListener {
--      // mute/unmute voice instructions
--      isVoiceInstructionsMuted = !isVoiceInstructionsMuted
--    }
+-    // initialize bottom progress view
+-    tripProgressApi = MapboxTripProgressApi(
+-      TripProgressUpdateFormatter.Builder(context)
+-        .distanceRemainingFormatter(
+-          DistanceRemainingFormatter(distanceFormatterOptions)
+-        )
+-        .timeRemainingFormatter(
+-          TimeRemainingFormatter(context)
+-        )
+-        .percentRouteTraveledFormatter(
+-          PercentDistanceTraveledFormatter()
+-        )
+-        .estimatedTimeToArrivalFormatter(
+-          EstimatedTimeToArrivalFormatter(context, TimeFormat.NONE_SPECIFIED)
+-        )
+-        .build()
+-    )
+-    // initialize voice instructions api and the voice instruction player
+-    speechApi = MapboxSpeechApi(
+-      context,
+-      locale.language
+-    )
+-    voiceInstructionsPlayer = MapboxVoiceInstructionsPlayer(
+-      context,
+-      locale.language
+-    )
 +        // Carregar imagens de radar e registrar listener
 +        try {
 +          loadRadarImages(style)
@@ -1237,7 +1208,12 @@ index 41a3ba0..563fe77 100644
 +        } catch (e: Exception) {
 +          Log.d("MapboxNavigationView", "Compass position: ${e.message}")
 +        }
-+
+ 
+-    // load map style
+-    binding.mapView.mapboxMap.loadStyle(NavigationStyles.NAVIGATION_DAY_STYLE) {
+-      // Ensure that the route line related layers are present before the route arrow
+-      routeLineView.initializeLayers(it)
+-    }
 +        // Registrar listener de click no mapa para selecionar rota alternativa
 +        binding.mapView.mapboxMap.addOnMapClickListener { point ->
 +          try {
@@ -1287,13 +1263,14 @@ index 41a3ba0..563fe77 100644
 +        }
 +      }
  
--    // Check initial muted or not
--    if (this.isVoiceInstructionsMuted) {
--      binding.soundButton.mute()
--      voiceInstructionsPlayer?.volume(SpeechVolume(0f))
--    } else {
--      binding.soundButton.unmute()
--      voiceInstructionsPlayer?.volume(SpeechVolume(1f))
+-    // initialize view interactions
+-    binding.stop.setOnClickListener {
+-      val event = Arguments.createMap()
+-      event.putString("message", "Navigation Cancel")
+-      context
+-        .getJSModule(RCTEventEmitter::class.java)
+-        .receiveEvent(id, "onCancelNavigation", event)
+-    }
 +      // initialize view interactions
 +      binding.stop.setOnClickListener {
 +        // Enviar pedido de cancelamento para o React Native tratar com modal personalizado
@@ -1301,7 +1278,19 @@ index 41a3ba0..563fe77 100644
 +        event.putString("message", "Request Cancel")
 +        safeEmitEvent("onCancelNavigation", event)
 +      }
-+
+ 
+-    binding.recenter.setOnClickListener {
+-      navigationCamera.requestNavigationCameraToFollowing()
+-      binding.routeOverview.showTextAndExtend(BUTTON_ANIMATION_DURATION)
+-    }
+-    binding.routeOverview.setOnClickListener {
+-      navigationCamera.requestNavigationCameraToOverview()
+-      binding.recenter.showTextAndExtend(BUTTON_ANIMATION_DURATION)
+-    }
+-    binding.soundButton.setOnClickListener {
+-      // mute/unmute voice instructions
+-      isVoiceInstructionsMuted = !isVoiceInstructionsMuted
+-    }
 +      binding.recenter.setOnClickListener {
 +        isManualOverview = false
 +        initialFocusHandled = true
@@ -1317,7 +1306,14 @@ index 41a3ba0..563fe77 100644
 +        // mute/unmute voice instructions
 +        isVoiceInstructionsMuted = !isVoiceInstructionsMuted
 +      }
-+
+ 
+-    // Check initial muted or not
+-    if (this.isVoiceInstructionsMuted) {
+-      binding.soundButton.mute()
+-      voiceInstructionsPlayer?.volume(SpeechVolume(0f))
+-    } else {
+-      binding.soundButton.unmute()
+-      voiceInstructionsPlayer?.volume(SpeechVolume(1f))
 +      // Check initial muted or not
 +      if (this.isVoiceInstructionsMuted) {
 +        binding.soundButton.mute()
@@ -1603,7 +1599,9 @@ index 41a3ba0..563fe77 100644
      mapboxNavigation?.unregisterVoiceInstructionsObserver(voiceInstructionsObserver)
 +    onDestroy()
 +  }
-+
+ 
+-    // Clear routs and end
+-    mapboxNavigation?.setNavigationRoutes(listOf())
 +  private fun startAutoRecenterTimer() {
 +    stopAutoRecenterTimer()
 +    autoRecenterRunnable = Runnable {
@@ -1614,9 +1612,7 @@ index 41a3ba0..563fe77 100644
 +    }
 +    autoRecenterRunnable?.let { autoRecenterHandler.postDelayed(it, AUTO_RECENTER_DELAY) }
 +  }
- 
--    // Clear routs and end
--    mapboxNavigation?.setNavigationRoutes(listOf())
++
 +  private fun stopAutoRecenterTimer() {
 +    autoRecenterRunnable?.let { autoRecenterHandler.removeCallbacks(it) }
 +    autoRecenterRunnable = null
@@ -1667,7 +1663,7 @@ index 41a3ba0..563fe77 100644
    }
  
    fun setLocal(language: String) {
-@@ -820,4 +1222,1316 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -820,4 +1222,1397 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
    fun setShowCancelButton(show: Boolean) {
      binding.stop.visibility = if (show) View.VISIBLE else View.INVISIBLE
    }
@@ -1728,6 +1724,7 @@ index 41a3ba0..563fe77 100644
 +      lastNearbyRadarIdsHash = newHash
 +      this.nearbyRadarIds = radarIds
 +      Log.d("MapboxNavigationView", "📡 ${radarIds.size} radares próximos definidos")
++      throttleHandler.post { updateHighlightFilterAndPulse() }
 +    } catch (e: Exception) {
 +      Log.e("MapboxNavigationView", "Erro ao definir radares próximos", e)
 +    }
@@ -2682,6 +2679,27 @@ index 41a3ba0..563fe77 100644
 +                      val countVal = com.mapbox.bindgen.Value.fromJson(countLayerJson)
 +                      countVal.value?.let { value -> currentStyle.addStyleLayer(value, null) }
 +
++                      // 2.5 Highlight layer (pulse para radares próximos) — filter por nearbyRadarIds
++                      val highlightFilter = buildHighlightFilterJson()
++                      val highlightLayerJson =
++                              """
++                          {
++                            "id": "radars-highlight-layer", "type": "circle", "source": "radars-source",
++                            "filter": $highlightFilter,
++                            "paint": {
++                              "circle-radius": $PULSE_MIN_RADIUS,
++                              "circle-color": "#ef4444",
++                              "circle-opacity": $PULSE_MIN_OPACITY,
++                              "circle-stroke-width": 2,
++                              "circle-stroke-color": "#ffffff",
++                              "circle-stroke-opacity": 0.8
++                            }
++                          }
++                        """.trimIndent()
++                      val highlightVal = com.mapbox.bindgen.Value.fromJson(highlightLayerJson)
++                      highlightVal.value?.let { value -> currentStyle.addStyleLayer(value, null) }
++                      if (nearbyRadarIds.isNotEmpty()) startRadarPulseAnimation(currentStyle)
++
 +                      // 3. Symbol Layer
 +                      val layerJson =
 +                              """
@@ -2723,9 +2741,68 @@ index 41a3ba0..563fe77 100644
 +            .start()
 +  }
 +
++  private val PULSE_INTERVAL_MS = 120L
++  private val PULSE_MIN_RADIUS = 22.0
++  private val PULSE_MAX_RADIUS = 38.0
++  private val PULSE_MIN_OPACITY = 0.25
++  private val PULSE_MAX_OPACITY = 0.55
++
++  private fun buildHighlightFilterJson(): String {
++    val ids = nearbyRadarIds.toList()
++    if (ids.isEmpty()) return """["==", true, false]"""
++    val escaped = ids.joinToString(",") { "\"${it.replace("\\", "\\\\").replace("\"", "\\\"")}\"" }
++    return """["all", ["!", ["has", "point_count"]], ["in", ["get", "id"], ["literal", [$escaped]]]]"""
++  }
++
++  private fun updateHighlightFilterAndPulse() {
++    val style = getCurrentStyle() ?: return
++    if (!style.styleLayerExists("radars-highlight-layer")) return
++    try {
++      val filterJson = buildHighlightFilterJson()
++      val filterValue = com.mapbox.bindgen.Value.fromJson(filterJson).value ?: return
++      style.setStyleLayerProperty("radars-highlight-layer", "filter", filterValue)
++    } catch (e: Exception) {
++      Log.e("MapboxNavigationView", "Erro ao atualizar filter do highlight", e)
++    }
++    if (nearbyRadarIds.isNotEmpty()) {
++      startRadarPulseAnimation(style)
++    } else {
++      pulseAnimationRunnable?.let { pulseHandler.removeCallbacks(it) }
++      pulseAnimationRunnable = null
++    }
++  }
++
 +  private fun startRadarPulseAnimation(style: com.mapbox.maps.Style) {
 +    pulseAnimationRunnable?.let { pulseHandler.removeCallbacks(it) }
-+    pulseAnimationRunnable = null
++    if (nearbyRadarIds.isEmpty()) return
++    pulseAnimationRunnable =
++        object : Runnable {
++          override fun run() {
++            try {
++              if (!style.styleLayerExists("radars-highlight-layer") || nearbyRadarIds.isEmpty()) {
++                return
++              }
++              pulseAnimationValue += 0.04f
++              if (pulseAnimationValue > 1f) pulseAnimationValue = 0f
++              val sine = kotlin.math.sin(pulseAnimationValue * Math.PI).toFloat()
++              val radius = PULSE_MIN_RADIUS + (PULSE_MAX_RADIUS - PULSE_MIN_RADIUS) * sine
++              val opacity = PULSE_MIN_OPACITY + (PULSE_MAX_OPACITY - PULSE_MIN_OPACITY) * sine
++              Choreographer.getInstance().postFrameCallback {
++                try {
++                  if (isDestroyed) return@postFrameCallback
++                  val s = getCurrentStyle() ?: return@postFrameCallback
++                  if (!s.styleLayerExists("radars-highlight-layer")) return@postFrameCallback
++                  s.setStyleLayerProperty("radars-highlight-layer", "circle-radius", com.mapbox.bindgen.Value(radius))
++                  s.setStyleLayerProperty("radars-highlight-layer", "circle-opacity", com.mapbox.bindgen.Value(opacity))
++                } catch (_: Exception) { }
++              }
++              pulseHandler.postDelayed(this, PULSE_INTERVAL_MS)
++            } catch (e: Exception) {
++              Log.e("MapboxNavigationView", "Erro no pulse", e)
++            }
++          }
++        }
++    pulseHandler.postDelayed(pulseAnimationRunnable!!, PULSE_INTERVAL_MS)
 +  }
 +
 +  private fun updateNearbyRadarsInSource() {

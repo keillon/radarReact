@@ -349,6 +349,86 @@ export async function radarRoutes(fastify: FastifyInstance) {
     }
   });
 
+  /** Mapeia radar para propriedades GeoJSON (iconImage/iconSize) — mesma lógica do nativo */
+  function radarToGeoJsonProperties(r: RadarResponseItem): {
+    id: string;
+    iconImage: string;
+    iconSize: number;
+    speedLimit: string;
+    radarType: string;
+  } {
+    const typeStr = (r.tipoRadar ?? "unknown").trim().toLowerCase();
+    const speed = r.velocidadeLeve ?? 0;
+    const speeds = [20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160];
+    const closestSpeed =
+      speed > 0 ? speeds.reduce((a, b) => (Math.abs(b - speed) < Math.abs(a - speed) ? b : a)) : 0;
+    let iconImage: string;
+    let iconSize: number;
+    if (
+      typeStr.includes("semaforo") ||
+      typeStr.includes("camera") ||
+      typeStr.includes("fotografica")
+    ) {
+      iconImage = "radar_semaforico";
+      iconSize = 0.05;
+    } else if (typeStr.includes("movel") || typeStr.includes("mobile")) {
+      iconImage = "radar_movel";
+      iconSize = 0.05;
+    } else if (typeStr.includes("fixo") || typeStr.includes("placa")) {
+      iconImage = closestSpeed > 0 ? `placa${closestSpeed}` : "radar_fixo";
+      iconSize = 0.18;
+    } else {
+      iconImage = "radar_movel";
+      iconSize = 0.05;
+    }
+    return {
+      id: r.id,
+      iconImage,
+      iconSize,
+      speedLimit: speed > 0 ? String(speed) : "",
+      radarType: r.tipoRadar ?? "",
+    };
+  }
+
+  /** GET /radars/geojson — GeoJSON FeatureCollection para o mapa (nativo carrega direto, sem bridge) */
+  fastify.get("/radars/geojson", async (request, reply) => {
+    try {
+      const radars = await getAllRadarsCached(false);
+      const features = radars
+        .filter(
+          (r) =>
+            r.latitude != null &&
+            r.longitude != null &&
+            !Number.isNaN(r.latitude) &&
+            !Number.isNaN(r.longitude)
+        )
+        .map((r) => {
+          const props = radarToGeoJsonProperties(r);
+          return {
+            type: "Feature",
+            geometry: {
+              type: "Point",
+              coordinates: [r.longitude, r.latitude],
+            },
+            properties: props,
+          };
+        });
+      const geojson = {
+        type: "FeatureCollection",
+        features,
+      };
+      reply.header("Content-Type", "application/geo+json; charset=utf-8");
+      reply.header("Cache-Control", "public, max-age=60");
+      return reply.send(geojson);
+    } catch (error: any) {
+      fastify.log.error("Erro em /radars/geojson:", error);
+      return reply.code(500).send({
+        error: "Erro ao gerar GeoJSON",
+        details: error.message,
+      });
+    }
+  });
+
   // Endpoint para buscar novos radares móveis desde uma data específica (para atualização em tempo real)
   fastify.get("/radars/mobile/new", async (request, reply) => {
     const query = request.query as {
