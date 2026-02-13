@@ -1,18 +1,17 @@
 import React from "react";
 import {
   Dimensions,
-  Image,
   StyleSheet,
   TouchableOpacity,
   View,
 } from "react-native";
-import MaskedView from "@react-native-masked-view/masked-view";
 
 const HOLE_RADIUS = 52;
 
 /**
- * Overlay estilo Waze: tela escura com UM CÍRCULO em volta do radar.
- * Máscara PNG: branco com círculo transparente = spotlight perfeito.
+ * Overlay estilo Waze: tela escura com círculo em volta do radar.
+ * 4 barras nativas + borderRadius nos cantos internos = círculo.
+ * Sem dependências nativas extras (react-native-svg, masked-view).
  */
 export function VignetteOverlay({
   onPress,
@@ -28,10 +27,14 @@ export function VignetteOverlay({
   const { width, height } = Dimensions.get("window");
   const cx = centerX ?? width / 2;
   const cy = centerY ?? height / 2;
+  const r = radius;
 
-  // Máscara 512x512, círculo r=10 no centro → escalar para radius no ecrã
-  const scale = radius / 10;
-  const maskSize = 512 * scale;
+  const t = Math.max(0, cy - r);
+  const b = Math.min(height, cy + r);
+  const l = Math.max(0, cx - r);
+  const rr = Math.min(width, cx + r);
+
+  const fill = { backgroundColor: "rgba(0,0,0,0.55)" as const };
 
   return (
     <View
@@ -43,29 +46,16 @@ export function VignetteOverlay({
         activeOpacity={1}
         onPress={onPress}
       />
-      <MaskedView
-        style={StyleSheet.absoluteFill}
-        maskElement={
-          <Image
-            source={require("../assets/images/vignetteMask.png")}
-            style={{
-              position: "absolute",
-              width: maskSize,
-              height: maskSize,
-              left: cx - maskSize / 2,
-              top: cy - maskSize / 2,
-            }}
-            resizeMode="stretch"
-          />
-        }
-      >
-        <View
-          style={[
-            StyleSheet.absoluteFillObject,
-            { backgroundColor: "rgba(0,0,0,0.55)" },
-          ]}
-        />
-      </MaskedView>
+      <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+        <View style={[s.bar, fill, { height: t, top: 0, left: 0, right: 0, borderBottomLeftRadius: r, borderBottomRightRadius: r }]} />
+        <View style={[s.bar, fill, { height: height - b, bottom: 0, left: 0, right: 0, borderTopLeftRadius: r, borderTopRightRadius: r }]} />
+        <View style={[s.bar, fill, { width: l, left: 0, top: t, height: b - t, borderTopRightRadius: r, borderBottomRightRadius: r }]} />
+        <View style={[s.bar, fill, { width: width - rr, right: 0, top: t, height: b - t, borderTopLeftRadius: r, borderBottomLeftRadius: r }]} />
+      </View>
     </View>
   );
 }
+
+const s = StyleSheet.create({
+  bar: { position: "absolute" as const },
+});
