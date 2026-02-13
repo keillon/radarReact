@@ -75,7 +75,7 @@ index 7d28df3..f6c5272 100644
    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
    implementation 'androidx.cardview:cardview:1.0.0'
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
-index 41a3ba0..665e466 100644
+index 41a3ba0..e6c774b 100644
 --- a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
 +++ b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
 @@ -3,25 +3,38 @@ package com.mapboxnavigation
@@ -1666,7 +1666,7 @@ index 41a3ba0..665e466 100644
    }
  
    fun setLocal(language: String) {
-@@ -820,4 +1225,1723 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -820,4 +1225,1738 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
    fun setShowCancelButton(show: Boolean) {
      binding.stop.visibility = if (show) View.VISIBLE else View.INVISIBLE
    }
@@ -2569,14 +2569,29 @@ index 41a3ba0..665e466 100644
 +        else null
 +    // Ordem conforme docs Mapbox: unclustered PRIMEIRO, depois clusters
 +    val baseSymbolFilter = buildBaseSymbolFilterJson()
++    // Circle: garante que radares unclustered sejam visíveis (funcionava na 1ª versão)
++    val unclusteredCircleJson =
++        """
++        {
++          "id": "radars-unclustered-circle", "type": "circle", "source": "radars-source",
++          "filter": $baseSymbolFilter,
++          "paint": {
++            "circle-radius": 10,
++            "circle-color": "#fbbf24",
++            "circle-stroke-width": 2,
++            "circle-stroke-color": "#ffffff"
++          }
++        }
++      """.trimIndent()
++    com.mapbox.bindgen.Value.fromJson(unclusteredCircleJson).value?.let { style.addStyleLayer(it, aboveRoute) }
 +    val symbolJson =
 +        """
 +        {
 +          "id": "radars-layer-symbol", "type": "symbol", "source": "radars-source",
 +          "filter": $baseSymbolFilter,
 +          "layout": {
-+            "icon-image": ["coalesce", ["get", "iconImage"], "radar_movel"],
-+            "icon-size": ["coalesce", ["get", "iconSize"], 0.05],
++            "icon-image": ["coalesce", ["get", "iconImage"], "radarMovel"],
++            "icon-size": ["coalesce", ["get", "iconSize"], 0.15],
 +            "icon-allow-overlap": true,
 +            "icon-ignore-placement": true,
 +            "icon-anchor": "center",

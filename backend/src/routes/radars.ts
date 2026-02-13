@@ -349,7 +349,7 @@ export async function radarRoutes(fastify: FastifyInstance) {
     }
   });
 
-  /** Mapeia radar para propriedades GeoJSON (iconImage/iconSize) — mesma lógica do nativo */
+  /** Mapeia radar para propriedades GeoJSON (iconImage/iconSize) — alinhado ao Map.tsx (camelCase) */
   function radarToGeoJsonProperties(r: RadarResponseItem): {
     id: string;
     iconImage: string;
@@ -369,16 +369,16 @@ export async function radarRoutes(fastify: FastifyInstance) {
       typeStr.includes("camera") ||
       typeStr.includes("fotografica")
     ) {
-      iconImage = "radar_semaforico";
+      iconImage = "radarSemaforico";
       iconSize = 0.05;
     } else if (typeStr.includes("movel") || typeStr.includes("mobile")) {
-      iconImage = "radar_movel";
+      iconImage = "radarMovel";
       iconSize = 0.05;
     } else if (typeStr.includes("fixo") || typeStr.includes("placa")) {
-      iconImage = closestSpeed > 0 ? `placa${closestSpeed}` : "radar_fixo";
+      iconImage = closestSpeed > 0 ? `placa${closestSpeed}` : "radarFixo";
       iconSize = 0.18;
     } else {
-      iconImage = "radar_movel";
+      iconImage = "radarMovel";
       iconSize = 0.05;
     }
     return {
