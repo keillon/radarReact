@@ -3,6 +3,7 @@ export type GeoPoint = {
   longitude: number;
 };
 
+/** Raio máximo (m) da rota para considerar radar: estradas têm ~10–30m de largura. */
 export const MAX_ROUTE_DISTANCE_METERS = 6;
 export const RADAR_DIRECT_FILTER_METERS = 800;
 

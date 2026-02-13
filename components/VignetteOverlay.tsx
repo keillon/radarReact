@@ -1,61 +1,86 @@
 import React from "react";
 import {
   Dimensions,
+  Image,
+  ImageSourcePropType,
   StyleSheet,
   TouchableOpacity,
   View,
 } from "react-native";
 
-const HOLE_SIZE = 112; // Quadrado ~56px de cada lado do centro = radar destacado
+const ICON_SIZE = 50;
 
 /**
- * Tudo escuro em volta, radar destacado no centro.
- * 4 barras formam um quadrado limpo — sem borderRadius (evita artefatos).
- * Funciona sem deps nativas extras.
+ * Overlay escuro em toda a tela.
+ * Camada acima: somente o ícone do radar selecionado (destacado no centro).
  */
 export function VignetteOverlay({
   onPress,
   centerX,
   centerY,
-  size = HOLE_SIZE,
+  radarIconSource,
 }: {
   onPress: () => void;
   centerX?: number | null;
   centerY?: number | null;
-  size?: number;
+  radarIconSource?: ImageSourcePropType | null;
 }) {
   const { width, height } = Dimensions.get("window");
   const cx = centerX ?? width / 2;
   const cy = centerY ?? height / 2;
-  const half = size / 2;
-
-  const t = Math.max(0, cy - half);
-  const b = Math.min(height, cy + half);
-  const l = Math.max(0, cx - half);
-  const rr = Math.min(width, cx + half);
-
-  const fill = { backgroundColor: "rgba(0,0,0,0.62)" as const };
+  const half = ICON_SIZE / 2;
+  const showRadar = !!radarIconSource;
 
   return (
-    <View
-      style={[StyleSheet.absoluteFillObject, { zIndex: 999, elevation: 999 }]}
-      pointerEvents="box-none"
-    >
+    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
       <TouchableOpacity
         style={StyleSheet.absoluteFill}
         activeOpacity={1}
         onPress={onPress}
       />
-      <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
-        <View style={[s.bar, fill, { height: t, top: 0, left: 0, right: 0 }]} />
-        <View style={[s.bar, fill, { height: height - b, bottom: 0, left: 0, right: 0 }]} />
-        <View style={[s.bar, fill, { width: l, left: 0, top: t, height: b - t }]} />
-        <View style={[s.bar, fill, { width: width - rr, right: 0, top: t, height: b - t }]} />
-      </View>
+      {/* Camada escura (cobre tudo) */}
+      <View style={styles.darkLayer} pointerEvents="none" />
+      {/* Camada acima: somente o radar selecionado destacado */}
+      {showRadar && (
+        <View
+          style={[
+            styles.radarLayer,
+            {
+              left: cx - half,
+              top: cy - half,
+              width: ICON_SIZE,
+              height: ICON_SIZE,
+            },
+          ]}
+          pointerEvents="none"
+        >
+         
+        </View>
+      )}
     </View>
   );
 }
 
-const s = StyleSheet.create({
-  bar: { position: "absolute" as const },
+const styles = StyleSheet.create({
+  darkLayer: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.8)",
+  },
+  radarLayer: {
+    position: "absolute",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderRadius: 40,
+    // Brilho sutil no Android
+    elevation: 12,
+    shadowColor: "#fff",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 16,
+  },
+  // radarIcon: {
+  //   width: 52,
+  //   height: 52,
+  // },
 });

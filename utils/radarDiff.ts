@@ -14,11 +14,11 @@ export const areMapboxRadarArraysEqual = (
   if (!prev || !next) return false;
   if (prev.length !== next.length) return false;
 
-  for (let i = 0; i < next.length; i++) {
-    const a = prev[i];
-    const b = next[i];
+  const prevMap = new Map(prev.map((r) => [r.id, r]));
+  for (const b of next) {
+    const a = prevMap.get(b.id);
     if (
-      a.id !== b.id ||
+      !a ||
       a.latitude !== b.latitude ||
       a.longitude !== b.longitude ||
       a.speedLimit !== b.speedLimit ||
@@ -27,6 +27,5 @@ export const areMapboxRadarArraysEqual = (
       return false;
     }
   }
-
   return true;
 };

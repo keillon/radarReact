@@ -42,10 +42,8 @@ function getRadarIconForMap(radar: Radar): string {
 
 /** Tamanhos de ícone por tipo (ajuste aqui para mudar no overlay de navegação). */
 const RADAR_ICON_SIZES: Record<string, number> = {
-  // radar: 0.2, // Removed
   radarMovel: 0.2,
   radarSemaforico: 0.22,
-  radarFixo: 0.24,
   placa: 0.24,
 };
 function getIconSizeForIcon(iconImage: string): number {

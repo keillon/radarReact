@@ -71,6 +71,7 @@ export default function RadarEditorScreen({
   const [radarDetailAddress, setRadarDetailAddress] = useState<string | null>(null);
   const [vignetteCenter, setVignetteCenter] = useState<{ x: number; y: number } | null>(null);
   const editorMapRef = useRef<MapHandle | null>(null);
+  const selectedRadarIdRef = useRef<string | null>(null);
 
   const RADAR_TYPES: {
     value: "móvel" | "semaforo" | "placa";
@@ -201,13 +202,30 @@ export default function RadarEditorScreen({
     return () => { cancelled = true; };
   }, [selectedRadar?.id, selectedRadar?.latitude, selectedRadar?.longitude]);
 
+  useEffect(() => {
+    selectedRadarIdRef.current = selectedRadar?.id ?? null;
+  }, [selectedRadar?.id]);
+
   const handleRadarPress = (radar: Radar) => {
     if (mode === "add") return;
     setSelectedRadar(radar);
+    setVignetteCenter(null);
+    selectedRadarIdRef.current = radar.id;
     setNewSpeedLimit(radar.speedLimit != null ? String(radar.speedLimit) : "");
     setMode("view");
     setPendingAddCoords(null);
     editorMapRef.current?.focusOnCoord(radar.latitude, radar.longitude);
+    // Obter posição após animação — evita onMapIdle (causa NPE no Mapbox)
+    setTimeout(() => {
+      if (selectedRadarIdRef.current !== radar.id) return;
+      editorMapRef.current
+        ?.getPointInView?.(radar.longitude, radar.latitude)
+        ?.then((pt) => {
+          if (pt && pt.length >= 2 && selectedRadarIdRef.current === radar.id)
+            setVignetteCenter({ x: pt[0], y: pt[1] });
+        })
+        ?.catch(() => {});
+    }, 900);
   };
 
   const handleMapPress = (coords: { latitude: number; longitude: number }) => {
@@ -427,16 +445,6 @@ export default function RadarEditorScreen({
           onMapPress={handleMapPress}
           interactive={true}
           currentLocation={center}
-          onMapIdle={() => {
-            const r = selectedRadar;
-            if (!r || !editorMapRef.current?.getPointInView) return;
-            editorMapRef.current
-              .getPointInView(r.longitude, r.latitude)
-              .then((pt) => {
-                if (pt && pt.length >= 2)
-                  setVignetteCenter({ x: pt[0], y: pt[1] });
-              });
-          }}
         />
         {loading && (
           <View style={styles.loadingOverlay}>
@@ -456,6 +464,16 @@ export default function RadarEditorScreen({
             }}
             centerX={vignetteCenter?.x ?? null}
             centerY={vignetteCenter?.y ?? null}
+            radarIconSource={
+              (() => {
+                const t = String(selectedRadar.type || "").trim().toLowerCase();
+                if (t.includes("semaforo") || t.includes("camera") || t.includes("fotografica"))
+                  return radarImages.radarSemaforico;
+                if (t.includes("movel") || t.includes("mobile"))
+                  return radarImages.radarMovel;
+                return radarImages[getClosestPlacaName(selectedRadar.speedLimit)] || radarImages.placa60;
+              })()
+            }
           />
         <View
           style={{

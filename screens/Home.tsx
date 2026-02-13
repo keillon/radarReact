@@ -928,6 +928,17 @@ export default function Home({ onOpenEditor }: HomeProps) {
     setVignetteCenter(null);
     selectedRadarDetailRef.current = radar;
     mainMapRef.current?.focusOnCoord(radar.latitude, radar.longitude);
+    // Obter posição após animação da câmera — evita onMapIdle (causa NPE no Mapbox)
+    setTimeout(() => {
+      if (selectedRadarDetailRef.current?.id !== radar.id) return;
+      mainMapRef.current
+        ?.getPointInView?.(radar.longitude, radar.latitude)
+        ?.then((pt) => {
+          if (pt && pt.length >= 2 && selectedRadarDetailRef.current?.id === radar.id)
+            setVignetteCenter({ x: pt[0], y: pt[1] });
+        })
+        ?.catch(() => {});
+    }, 900);
   }, []);
 
   // Reportar radar na localização atual (modal: velocidade + tipo).
@@ -1475,9 +1486,9 @@ export default function Home({ onOpenEditor }: HomeProps) {
     setNearbyRadarIds(proximityNearbyRadarIds);
   }, [isNavigating, proximityNearbyRadarIds]);
 
-  // Memoizar conversão de Set para Array para evitar nova referência a cada render
+  // Array ordenado para animação pulsante no Mapbox (ordem consistente = hash estável no nativo)
   const nearbyRadarIdsArray = useMemo(
-    () => Array.from(nearbyRadarIds),
+    () => Array.from(nearbyRadarIds).sort(),
     [nearbyRadarIds],
   );
 
@@ -1645,13 +1656,14 @@ export default function Home({ onOpenEditor }: HomeProps) {
         radarZeroTimeRef2.current = Date.now();
         setRadarPassedLoading(true);
         if (postPassTimerRef.current) clearTimeout(postPassTimerRef.current);
+        const passedRadar = activeRadar; // Capturar em closure para o callback
         postPassTimerRef.current = setTimeout(() => {
           postPassTimerRef.current = null;
           radarZeroTimeRef2.current = null;
           setRadarPassedLoading(false);
           hideRadarModal();
-          openRadarFeedbackCard(activeRadar);
-        }, 5000);
+          openRadarFeedbackCard(passedRadar);
+        }, 5500); // 5.5s para garantir os 5s visíveis + transição
       }
       setNearestRadar({ radar: activeRadar, distance: 0 });
     } else if (deveAbrirModal) {
@@ -2112,16 +2124,6 @@ export default function Home({ onOpenEditor }: HomeProps) {
                 setReportLocationMode("map");
                 setShowReportModal(true);
               }}
-              onMapIdle={() => {
-                const r = selectedRadarDetailRef.current;
-                if (!r || !mainMapRef.current?.getPointInView) return;
-                mainMapRef.current
-                  .getPointInView(r.longitude, r.latitude)
-                  .then((pt) => {
-                    if (pt && pt.length >= 2)
-                      setVignetteCenter({ x: pt[0], y: pt[1] });
-                  });
-              }}
             />
           </Suspense>
 
@@ -2157,6 +2159,19 @@ export default function Home({ onOpenEditor }: HomeProps) {
             }}
             centerX={vignetteCenter?.x ?? null}
             centerY={vignetteCenter?.y ?? null}
+            radarIconSource={
+              (() => {
+                const t = normalizeRadarType(selectedRadarDetail.type);
+                if (t.includes("semaforo") || t.includes("camera") || t.includes("fotografica"))
+                  return radarImages.radarSemaforico;
+                if (t.includes("movel") || t.includes("mobile"))
+                  return radarImages.radarMovel;
+                return (
+                  radarImages[getClosestPlacaName(selectedRadarDetail.speedLimit)] ||
+                  radarImages.placa60
+                );
+              })()
+            }
           />
         <View
           style={{
@@ -2393,8 +2408,24 @@ export default function Home({ onOpenEditor }: HomeProps) {
       )}
 
       {isNavigating && showRadarFeedbackCard && radarFeedbackTarget && (
-        <View style={styles.radarFeedbackOverlay} pointerEvents="box-none">
-          <View style={styles.radarFeedbackCard}>
+        <Modal
+          visible={true}
+          transparent
+          animationType="fade"
+          statusBarTranslucent
+          onRequestClose={closeRadarFeedbackCard}
+        >
+          <View style={{ flex: 1, justifyContent: "flex-end" }}>
+            <TouchableOpacity
+              style={[
+                StyleSheet.absoluteFill,
+                { backgroundColor: "rgba(0,0,0,0.5)" },
+              ]}
+              activeOpacity={1}
+              onPress={closeRadarFeedbackCard}
+            />
+            <View style={styles.radarFeedbackOverlay} pointerEvents="box-none">
+              <View style={styles.radarFeedbackCard}>
             <Text style={styles.radarFeedbackTitle}>
               Esse radar ainda existe?
             </Text>
@@ -2427,7 +2458,8 @@ export default function Home({ onOpenEditor }: HomeProps) {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+          </View>
+        </Modal>
       )}
 
       {/* Modal: Reportar radar (Multi-step, button-based for safety while driving) */}
