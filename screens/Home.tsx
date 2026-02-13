@@ -12,14 +12,13 @@ import {
   Alert,
   Animated,
   Image,
-  InteractionManager,
   Modal,
   PermissionsAndroid,
   Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 // Geolocation: carregar sob demanda para evitar "Requiring unknown module 'undefined'" no startup
@@ -53,7 +52,7 @@ import {
   denyRadar,
   getRadarsNearLocation,
   Radar,
-  reportRadar
+  reportRadar,
 } from "../services/api";
 import {
   geocodeAddress,
@@ -63,7 +62,10 @@ import {
   RouteResponse,
 } from "../services/mapbox";
 import { areMapboxRadarArraysEqual } from "../utils/radarDiff";
-import { calculateDistance, getCumulativeDistances } from "../utils/radarGeometry";
+import {
+  calculateDistance,
+  getCumulativeDistances,
+} from "../utils/radarGeometry";
 // TTS: carregar só no primeiro uso para evitar "Requiring unknown module 'undefined'" no startup
 let TtsCache: any = undefined; // undefined = ainda não tentou; null = tentou e falhou
 function getTts(): any {
@@ -92,7 +94,7 @@ function playAlertRadar3Times(): void {
           if (Tts && typeof Tts.speak === "function") {
             try {
               Tts.speak("Atenção radar muito próximo");
-            } catch { }
+            } catch {}
           }
           return;
         }
@@ -114,7 +116,7 @@ function playAlertRadar3Times(): void {
           });
         };
         playOnce(3);
-      }
+      },
     );
   } catch (e) {
     // react-native-sound pode não estar linkado
@@ -193,10 +195,7 @@ const normalizeRadarPayload = (raw: any): Radar | null => {
     latitude,
     longitude,
     speedLimit:
-      raw.speedLimit ??
-      raw.velocidadeLeve ??
-      raw.velocidade ??
-      undefined,
+      raw.speedLimit ?? raw.velocidadeLeve ?? raw.velocidade ?? undefined,
     type: raw.type ?? raw.tipoRadar ?? raw.tipo ?? "unknown",
     situacao: raw.situacao ?? null,
     ativo: raw.ativo,
@@ -217,9 +216,13 @@ export default function Home({ onOpenEditor }: HomeProps) {
   const [isNavigating, setIsNavigating] = useState(false);
   const [isPreparingNavigation, setIsPreparingNavigation] = useState(false);
   // Radares do CSV: 16k+ radares fixos, carregados 1x, NUNCA mudam
-  const [csvRadarsMap, setCsvRadarsMap] = useState<Map<string, Radar>>(new Map());
+  const [csvRadarsMap, setCsvRadarsMap] = useState<Map<string, Radar>>(
+    new Map(),
+  );
   // Radares reportados: apenas radares criados por usuários, lista pequena e dinâmica
-  const [reportedRadarsMap, setReportedRadarsMap] = useState<Map<string, Radar>>(new Map());
+  const [reportedRadarsMap, setReportedRadarsMap] = useState<
+    Map<string, Radar>
+  >(new Map());
   const [loading, setLoading] = useState(false);
   const [geocoding, setGeocoding] = useState(false);
   const [currentLocation, setCurrentLocation] = useState<LatLng | null>(null);
@@ -242,10 +245,15 @@ export default function Home({ onOpenEditor }: HomeProps) {
   const [MapboxNavComponent, setMapboxNavComponent] =
     useState<React.ComponentType<any> | null>(null);
   const [mapboxNavError, setMapboxNavError] = useState<string | null>(null);
+  const [geoJsonRefreshKey, setGeoJsonRefreshKey] = useState(0);
+  const refreshGeoJsonRef = useRef<() => void>(() => {});
+  refreshGeoJsonRef.current = () => setGeoJsonRefreshKey((k) => k + 1);
 
   // Multi-step report modal states
   const [reportStep, setReportStep] = useState<1 | 2 | 3>(1);
-  const [reportSelectedSpeed, setReportSelectedSpeed] = useState<number | null>(null);
+  const [reportSelectedSpeed, setReportSelectedSpeed] = useState<number | null>(
+    null,
+  );
   const [reportLocationMode, setReportLocationMode] = useState<
     "current" | "map"
   >("current");
@@ -254,18 +262,23 @@ export default function Home({ onOpenEditor }: HomeProps) {
   const [showMapPicker, setShowMapPicker] = useState(false);
 
   const [mapPickerCenter, setMapPickerCenter] = useState<LatLng | null>(null);
-  const [pickerPreviewCoords, setPickerPreviewCoords] = useState<LatLng | null>(null); // Preview lat/lon durante marcação
-  const pickerPreviewIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [pickerPreviewCoords, setPickerPreviewCoords] = useState<LatLng | null>(
+    null,
+  ); // Preview lat/lon durante marcação
+  const pickerPreviewIntervalRef = useRef<ReturnType<
+    typeof setInterval
+  > | null>(null);
   const [radarPassedLoading, setRadarPassedLoading] = useState(false); // Loading 5s no modal após passar do radar
   const [deviceUserId, setDeviceUserId] = useState<string | null>(null);
-  const [liveRadarOverlayMap, setLiveRadarOverlayMap] = useState<Map<string, Radar>>(
-    new Map()
-  );
-  const [liveDeletedRadarIdsSetState, setLiveDeletedRadarIdsSetState] = useState<Set<string>>(
-    new Set()
-  );
+  const [liveRadarOverlayMap, setLiveRadarOverlayMap] = useState<
+    Map<string, Radar>
+  >(new Map());
+  const [liveDeletedRadarIdsSetState, setLiveDeletedRadarIdsSetState] =
+    useState<Set<string>>(new Set());
   const [showRadarFeedbackCard, setShowRadarFeedbackCard] = useState(false);
-  const [radarFeedbackTarget, setRadarFeedbackTarget] = useState<Radar | null>(null);
+  const [radarFeedbackTarget, setRadarFeedbackTarget] = useState<Radar | null>(
+    null,
+  );
   const [radarFeedbackSubmitting, setRadarFeedbackSubmitting] = useState(false);
   const [modalConfig, setModalConfig] = useState<{
     visible: boolean;
@@ -284,23 +297,30 @@ export default function Home({ onOpenEditor }: HomeProps) {
   });
 
   // CSV radars: converter Map → Array apenas quando CSV muda (raro)
-  const csvRadars = useMemo(() => Array.from(csvRadarsMap.values()), [csvRadarsMap]);
+  const csvRadars = useMemo(
+    () => Array.from(csvRadarsMap.values()),
+    [csvRadarsMap],
+  );
 
   // Reported radars: converter Map → Array quando reportados mudam (frequente, mas lista pequena)
-  const reportedRadars = useMemo(() => Array.from(reportedRadarsMap.values()), [reportedRadarsMap]);
+  const reportedRadars = useMemo(
+    () => Array.from(reportedRadarsMap.values()),
+    [reportedRadarsMap],
+  );
 
   // Combinar: concat é MUITO mais rápido que criar novo Map gigante
   // csvRadars raramente muda (16k array criado 1x), reportedRadars é pequeno
   const radars = useMemo(() => {
     // Dedup: se reported tem mesmo ID que CSV, reported ganha
-    const reportedIds = new Set(reportedRadars.map(r => r.id));
-    const filtered = csvRadars.filter(r => !reportedIds.has(r.id));
+    const reportedIds = new Set(reportedRadars.map((r) => r.id));
+    const filtered = csvRadars.filter((r) => !reportedIds.has(r.id));
     return [...filtered, ...reportedRadars];
   }, [csvRadars, reportedRadars]);
 
   // setRadars: APENAS para radares CSV (carga inicial)
   const setCsvRadars = useCallback((nextValue: RadarArrayUpdater) => {
-    const nextArray = typeof nextValue === "function" ? nextValue([]) : nextValue;
+    const nextArray =
+      typeof nextValue === "function" ? nextValue([]) : nextValue;
     const nextMap = new Map<string, Radar>();
     for (const radar of nextArray) {
       if (!radar?.id) continue;
@@ -332,7 +352,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
 
   const liveRadarOverlay = useMemo(
     () => Array.from(liveRadarOverlayMap.values()),
-    [liveRadarOverlayMap]
+    [liveRadarOverlayMap],
   );
   const setLiveRadarOverlay = useCallback((nextValue: RadarArrayUpdater) => {
     setLiveRadarOverlayMap((prevMap) => {
@@ -352,41 +372,43 @@ export default function Home({ onOpenEditor }: HomeProps) {
 
   const liveDeletedRadarIds = useMemo(
     () => Array.from(liveDeletedRadarIdsSetState.values()),
-    [liveDeletedRadarIdsSetState]
+    [liveDeletedRadarIdsSetState],
   );
-  const setLiveDeletedRadarIds = useCallback((nextValue: RadarIdArrayUpdater) => {
-    setLiveDeletedRadarIdsSetState((prevSet) => {
-      const prevArray = Array.from(prevSet.values());
-      const nextArray =
-        typeof nextValue === "function"
-          ? (nextValue as (prev: string[]) => string[])(prevArray)
-          : nextValue;
-      return new Set(nextArray.filter(Boolean));
-    });
-  }, []);
-
+  const setLiveDeletedRadarIds = useCallback(
+    (nextValue: RadarIdArrayUpdater) => {
+      setLiveDeletedRadarIdsSetState((prevSet) => {
+        const prevArray = Array.from(prevSet.values());
+        const nextArray =
+          typeof nextValue === "function"
+            ? (nextValue as (prev: string[]) => string[])(prevArray)
+            : nextValue;
+        return new Set(nextArray.filter(Boolean));
+      });
+    },
+    [],
+  );
 
   const REPORT_RADAR_TYPES: {
     value: "móvel" | "semaforo" | "placa";
     label: string;
     icon: number;
   }[] = [
-      {
-        value: "móvel",
-        label: "Radar Móvel",
-        icon: require("../assets/images/radarMovel.png"),
-      },
-      {
-        value: "semaforo",
-        label: "Semáforo c/ Radar",
-        icon: require("../assets/images/radarSemaforico.png"),
-      },
-      {
-        value: "placa",
-        label: "Placa de Velocidade",
-        icon: require("../assets/images/placa60.png"),
-      },
-    ];
+    {
+      value: "móvel",
+      label: "Radar Móvel",
+      icon: require("../assets/images/radarMovel.png"),
+    },
+    {
+      value: "semaforo",
+      label: "Semáforo c/ Radar",
+      icon: require("../assets/images/radarSemaforico.png"),
+    },
+    {
+      value: "placa",
+      label: "Placa de Velocidade",
+      icon: require("../assets/images/placa60.png"),
+    },
+  ];
 
   const locationWatchRef = useRef<any>(null);
   const modalOpacity = useRef(new Animated.Value(0)).current;
@@ -396,7 +418,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
   const alertedRadarIds = useRef<Set<string>>(new Set()); // Rastrear radares já alertados (apenas uma vez)
   const lastLocationUpdate = useRef<number>(0);
   const locationUpdateDebounce = useRef<ReturnType<typeof setTimeout> | null>(
-    null
+    null,
   );
   const radarZeroTimeRef2 = useRef<number | null>(null); // Timestamp quando chegou a 0 metros
   const isNavigatingRef = useRef(false);
@@ -404,45 +426,61 @@ export default function Home({ onOpenEditor }: HomeProps) {
   const isMountedRef = useRef(true);
   const postPassTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null); // Timer 5s para modal pós-passagem
   const radarCriticalSoundPlayedIds = useRef<Set<string>>(new Set()); // Som crítico aos 10m (independente do som de 30m)
-  const radarFeedbackDismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const radarFeedbackDismissTimerRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
   const radarFeedbackActionIds = useRef<Set<string>>(new Set()); // 1 confirmação/negação por usuário no app (sessão)
   const mapPickerCenterRef = useRef<LatLng | null>(null); // Fallback centro ao abrir picker
-  const mapPickerMapRef = useRef<{ getCenter: () => Promise<LatLng | null> } | null>(null); // Ref do Map no picker para getCenter()
+  const mapPickerMapRef = useRef<{
+    getCenter: () => Promise<LatLng | null>;
+  } | null>(null); // Ref do Map no picker para getCenter()
   const reportCustomLocationRef = useRef<LatLng | null>(null); // Backup da localização escolhida no mapa
   const hasInitialRadarLoadRef = useRef(false);
   const routePointsRef = useRef<LatLng[]>([]);
   const routeCumulativeRef = useRef<number[]>([]);
+  // Rota do Mapbox durante navegação (handleRouteChanged) — força re-render para useRadarProximity
+  const [routePointsFromNav, setRoutePointsFromNav] = useState<LatLng[] | null>(
+    null,
+  );
   const lastNearbyRadarIdRef = useRef<string | null>(null);
   const lastRouteSignatureRef = useRef<string>("");
   const lastRouteChangedHandledAtRef = useRef<number>(0);
   const lastRouteGeometryRawRef = useRef<string>("");
   const wsDeferredSyncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null
+    null,
   );
   const lastPushedBaseRef = useRef<any[] | null>(null);
   const lastPushedOverlayRef = useRef<any[] | null>(null);
   const wsFlushScheduledRef = useRef(false);
-  const overlayPushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const overlayPushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
-  const upsertLiveRadarOverlay = useCallback((radar: Radar) => {
-    if (!radar?.id) return;
-    setLiveRadarOverlayMap((prevMap) => {
-      const nextMap = new Map(prevMap);
-      const current = nextMap.get(radar.id);
-      nextMap.set(radar.id, current ? { ...current, ...radar } : radar);
-      return nextMap;
-    });
-  }, [setLiveRadarOverlayMap]);
+  const upsertLiveRadarOverlay = useCallback(
+    (radar: Radar) => {
+      if (!radar?.id) return;
+      setLiveRadarOverlayMap((prevMap) => {
+        const nextMap = new Map(prevMap);
+        const current = nextMap.get(radar.id);
+        nextMap.set(radar.id, current ? { ...current, ...radar } : radar);
+        return nextMap;
+      });
+    },
+    [setLiveRadarOverlayMap],
+  );
 
-  const removeLiveRadarOverlay = useCallback((radarId: string) => {
-    if (!radarId) return;
-    setLiveRadarOverlayMap((prevMap) => {
-      if (!prevMap.has(radarId)) return prevMap;
-      const nextMap = new Map(prevMap);
-      nextMap.delete(radarId);
-      return nextMap;
-    });
-  }, [setLiveRadarOverlayMap]);
+  const removeLiveRadarOverlay = useCallback(
+    (radarId: string) => {
+      if (!radarId) return;
+      setLiveRadarOverlayMap((prevMap) => {
+        if (!prevMap.has(radarId)) return prevMap;
+        const nextMap = new Map(prevMap);
+        nextMap.delete(radarId);
+        return nextMap;
+      });
+    },
+    [setLiveRadarOverlayMap],
+  );
 
   const syncAllRadarsFromCurrentLocation = useCallback(
     (clearOverlay: boolean = true) => {
@@ -478,7 +516,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
           });
       }, 200);
     },
-    []
+    [],
   );
 
   // Preview de lat/lon no picker: polling a cada 400ms para mostrar onde o pin está
@@ -568,23 +606,52 @@ export default function Home({ onOpenEditor }: HomeProps) {
     };
   }, []);
 
-  useEffect(() => {
+  // routePoints síncrono para useRadarProximity — evita race com refs que não disparam re-render
+  const routePointsFromData = useMemo(() => {
     const coordinates = routeData?.route?.geometry?.coordinates;
-    if (!Array.isArray(coordinates) || coordinates.length < 2) {
-      routePointsRef.current = [];
-      routeCumulativeRef.current = [];
-      return;
-    }
-    const points: LatLng[] = coordinates
+    if (!Array.isArray(coordinates) || coordinates.length < 2) return [];
+    return coordinates
       .map((coord: number[]) => {
         if (!Array.isArray(coord) || coord.length < 2) return null;
         return { latitude: coord[1], longitude: coord[0] };
       })
       .filter((p: LatLng | null): p is LatLng => p !== null);
-    routePointsRef.current = points;
-    routeCumulativeRef.current =
-      points.length >= 2 ? getCumulativeDistances(points) : [];
   }, [routeData?.route?.geometry?.coordinates]);
+
+  const routeCumulativeFromData = useMemo(
+    () =>
+      routePointsFromData.length >= 2
+        ? getCumulativeDistances(routePointsFromData)
+        : [],
+    [routePointsFromData],
+  );
+
+  const routePointsForProximity = useMemo(() => {
+    if (
+      isNavigating &&
+      routePointsFromNav != null &&
+      routePointsFromNav.length >= 2
+    ) {
+      return routePointsFromNav;
+    }
+    return routePointsFromData;
+  }, [isNavigating, routePointsFromNav, routePointsFromData]);
+
+  const routeCumulativeForProximity = useMemo(() => {
+    if (
+      isNavigating &&
+      routePointsFromNav != null &&
+      routePointsFromNav.length >= 2
+    ) {
+      return getCumulativeDistances(routePointsFromNav);
+    }
+    return routeCumulativeFromData;
+  }, [isNavigating, routePointsFromNav, routeCumulativeFromData]);
+
+  useEffect(() => {
+    routePointsRef.current = routePointsFromData;
+    routeCumulativeRef.current = routeCumulativeFromData;
+  }, [routePointsFromData, routeCumulativeFromData]);
 
   useEffect(() => {
     let mounted = true;
@@ -601,18 +668,16 @@ export default function Home({ onOpenEditor }: HomeProps) {
     };
   }, []);
 
-
-
   const requestLocationPermission = async () => {
     try {
       if (Platform.OS === "android") {
         const granted = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
         );
         if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
           Alert.alert(
             "Permissão negada",
-            "É necessário permitir acesso à localização para usar o app"
+            "É necessário permitir acesso à localização para usar o app",
           );
           return;
         }
@@ -634,13 +699,16 @@ export default function Home({ onOpenEditor }: HomeProps) {
             getRadarsNearLocation(loc.latitude, loc.longitude, 50000)
               .then((nearbyRadars) => {
                 console.log(
-                  `✅ ${nearbyRadars.length} radares encontrados na inicialização`
+                  `✅ ${nearbyRadars.length} radares encontrados na inicialização`,
                 );
                 // Carga inicial de radares CSV
                 setCsvRadars(nearbyRadars);
               })
               .catch((error) => {
-                console.error("Erro ao buscar radares na inicialização:", error);
+                console.error(
+                  "Erro ao buscar radares na inicialização:",
+                  error,
+                );
               });
           }
         },
@@ -652,7 +720,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
           enableHighAccuracy: true,
           timeout: 20000,
           maximumAge: 5000,
-        }
+        },
       );
     } catch (error) {
       console.error("Erro ao solicitar permissão:", error);
@@ -729,7 +797,10 @@ export default function Home({ onOpenEditor }: HomeProps) {
         getRadarsNearLocation(origin.latitude, origin.longitude, 50000)
           .then((initialRadars) => setCsvRadars(initialRadars))
           .catch((err) => {
-            console.error("Erro ao carregar radares iniciais na navegação:", err);
+            console.error(
+              "Erro ao carregar radares iniciais na navegação:",
+              err,
+            );
           });
       }
     } catch (error: any) {
@@ -746,7 +817,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
       Alert.alert(
         "Erro",
         error.message ||
-        "Não foi possível calcular a rota. Verifique o endereço digitado."
+          "Não foi possível calcular a rota. Verifique o endereço digitado.",
       );
     } finally {
       setLoading(false);
@@ -780,7 +851,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
         interval: 5000,
         fastestInterval: 3000,
         forceLocationManager: true,
-      }
+      },
     );
 
     if (!locationWatchRef.current) {
@@ -811,9 +882,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
     type?: "móvel" | "semaforo" | "placa";
     location?: LatLng;
   }) => {
-
-    const speedLimit =
-      opts?.speedLimit ?? reportSelectedSpeed;
+    const speedLimit = opts?.speedLimit ?? reportSelectedSpeed;
     const type = opts?.type ?? reportRadarType;
 
     // Validação: velocidade obrigatória e máximo 120 km/h
@@ -854,14 +923,27 @@ export default function Home({ onOpenEditor }: HomeProps) {
           longitude: pickerPoint.longitude,
         };
       } else {
-        setModalConfig({ visible: true, title: "Erro", message: "Selecione uma localização no mapa", type: "error" });
+        setModalConfig({
+          visible: true,
+          title: "Erro",
+          message: "Selecione uma localização no mapa",
+          type: "error",
+        });
         return;
       }
     } else if (!reportCoords) {
       if (currentLocation) {
-        reportCoords = { latitude: currentLocation.latitude, longitude: currentLocation.longitude };
+        reportCoords = {
+          latitude: currentLocation.latitude,
+          longitude: currentLocation.longitude,
+        };
       } else {
-        setModalConfig({ visible: true, title: "Erro", message: "Localização atual indisponível", type: "error" });
+        setModalConfig({
+          visible: true,
+          title: "Erro",
+          message: "Localização atual indisponível",
+          type: "error",
+        });
         return;
       }
     }
@@ -877,7 +959,9 @@ export default function Home({ onOpenEditor }: HomeProps) {
     };
 
     // Feedback visual primeiro
-    setSuccessMessage("Radar reportado com sucesso! ✅\n\nObrigado por ajudar!");
+    setSuccessMessage(
+      "Radar reportado com sucesso! ✅\n\nObrigado por ajudar!",
+    );
     setShowSuccessModal(true);
     setReportSpeedLimit("");
     setReportRadarType("móvel");
@@ -902,36 +986,39 @@ export default function Home({ onOpenEditor }: HomeProps) {
       speedLimit: speedLimit,
       type,
       reportedBy: deviceUserId || undefined,
-    }).then((realRadar) => {
-      console.log("✅ Radar confirmado pelo servidor");
-      // Substituir temp pelo real
-      startTransition(() => {
-        if (!isMountedRef.current) return;
-        removeReportedRadar(tempRadar.id);
-        addReportedRadar(realRadar);
-        if (isNavigating) {
-          removeLiveRadarOverlay(tempRadar.id);
-          upsertLiveRadarOverlay(realRadar);
-        }
-      });
-    }).catch(err => {
-      console.error("❌ Erro ao reportar radar:", err);
-      // Remover radar temporário
-      startTransition(() => {
-        if (isMountedRef.current) {
+    })
+      .then((realRadar) => {
+        console.log("✅ Radar confirmado pelo servidor");
+        // Substituir temp pelo real
+        startTransition(() => {
+          if (!isMountedRef.current) return;
           removeReportedRadar(tempRadar.id);
+          addReportedRadar(realRadar);
           if (isNavigating) {
             removeLiveRadarOverlay(tempRadar.id);
+            upsertLiveRadarOverlay(realRadar);
           }
-          setModalConfig({
-            visible: true,
-            title: "Erro ao Reportar",
-            message: "Não foi possível enviar o radar. Verifique sua conexão e tente novamente.",
-            type: "error",
-          });
-        }
+        });
+      })
+      .catch((err) => {
+        console.error("❌ Erro ao reportar radar:", err);
+        // Remover radar temporário
+        startTransition(() => {
+          if (isMountedRef.current) {
+            removeReportedRadar(tempRadar.id);
+            if (isNavigating) {
+              removeLiveRadarOverlay(tempRadar.id);
+            }
+            setModalConfig({
+              visible: true,
+              title: "Erro ao Reportar",
+              message:
+                "Não foi possível enviar o radar. Verifique sua conexão e tente novamente.",
+              type: "error",
+            });
+          }
+        });
       });
-    });
   };
 
   // Atualizações de radares em tempo real: APENAS via WebSocket (radar:new, radar:update, radar:delete).
@@ -956,17 +1043,6 @@ export default function Home({ onOpenEditor }: HomeProps) {
   currentLocationRef.current = currentLocation;
 
   // Preparar radares para o MapboxNavigation
-  const baseMapboxRadars = useMemo(() => {
-    if (!isNavigating || radars.length === 0) return [];
-    return radars.map((r: any) => ({
-      id: r.id,
-      latitude: r.latitude,
-      longitude: r.longitude,
-      speedLimit: r.speedLimit ?? r.velocidadeLeve ?? 0,
-      type: normalizeRadarType(r.type ?? r.tipoRadar ?? "unknown"),
-    }));
-  }, [isNavigating, radars]);
-
   const liveOverlayMapboxRadars = useMemo(() => {
     if (!isNavigating || liveRadarOverlay.length === 0) return [];
     return liveRadarOverlay.map((r: any) => ({
@@ -980,26 +1056,61 @@ export default function Home({ onOpenEditor }: HomeProps) {
 
   const liveDeletedRadarIdsSet = useMemo(
     () => new Set(liveDeletedRadarIds),
-    [liveDeletedRadarIds]
+    [liveDeletedRadarIds],
   );
 
-  // Base vem do servidor via URL no nativo; mapboxRadars usado apenas para lógica JS (proximity usa radars)
+  // Base via bridge (igual overlay) — URL GeoJSON não renderizava ícones no nativo
+  const baseMapboxRadars = useMemo(() => {
+    if (!isNavigating || radars.length === 0) return [];
+    const overlayIds = new Set(
+      liveOverlayMapboxRadars
+        .filter((r) => !liveDeletedRadarIdsSet.has(r.id))
+        .map((r) => r.id),
+    );
+    return radars
+      .filter((r) => r?.id && !overlayIds.has(r.id))
+      .map((r: any) => ({
+        id: r.id,
+        latitude: r.latitude,
+        longitude: r.longitude,
+        speedLimit: r.speedLimit ?? r.velocidadeLeve ?? 0,
+        type: normalizeRadarType(r.type ?? r.tipoRadar ?? "unknown"),
+      }));
+  }, [isNavigating, radars, liveOverlayMapboxRadars, liveDeletedRadarIdsSet]);
+
+  // Base: sincronizar baseMapboxRadars para mapboxBaseForNative (bridge)
+  useEffect(() => {
+    if (!isNavigating) return;
+    setMapboxBaseForNative(baseMapboxRadars);
+  }, [isNavigating, baseMapboxRadars]);
+
+  // mapboxRadars usado para lógica JS (proximity usa radars)
   const mapboxRadars = useMemo(() => {
     if (!isNavigating) return EMPTY_MAPBOX_RADARS;
     const overlayIds = new Set(
-      liveOverlayMapboxRadars.filter((r) => !liveDeletedRadarIdsSet.has(r.id)).map((r) => r.id)
+      liveOverlayMapboxRadars
+        .filter((r) => !liveDeletedRadarIdsSet.has(r.id))
+        .map((r) => r.id),
     );
     const overlayFirst = liveOverlayMapboxRadars.filter(
-      (r) => r?.id && !liveDeletedRadarIdsSet.has(r.id)
+      (r) => r?.id && !liveDeletedRadarIdsSet.has(r.id),
     );
-    const rest = (csvRadars as Array<{ id?: string; latitude?: number; longitude?: number; speedLimit?: number; type?: string }>)
+    const rest = (
+      csvRadars as Array<{
+        id?: string;
+        latitude?: number;
+        longitude?: number;
+        speedLimit?: number;
+        type?: string;
+      }>
+    )
       .filter(
         (r) =>
           r?.id &&
           !liveDeletedRadarIdsSet.has(r.id) &&
           !overlayIds.has(r.id) &&
           r.latitude != null &&
-          r.longitude != null
+          r.longitude != null,
       )
       .map((r) => ({
         id: r.id!,
@@ -1009,11 +1120,17 @@ export default function Home({ onOpenEditor }: HomeProps) {
         type: normalizeRadarType(r.type ?? (r as any).tipoRadar ?? "unknown"),
       }));
     return [...overlayFirst, ...rest];
-  }, [isNavigating, csvRadars, liveOverlayMapboxRadars, liveDeletedRadarIdsSet]);
+  }, [
+    isNavigating,
+    csvRadars,
+    liveOverlayMapboxRadars,
+    liveDeletedRadarIdsSet,
+  ]);
 
   // Para cálculo do modal/metros, usamos base + overlay em tempo real (somente JS).
   const radarsForProximity = useMemo(() => {
-    if (liveRadarOverlay.length === 0 && liveDeletedRadarIds.length === 0) return radars;
+    if (liveRadarOverlay.length === 0 && liveDeletedRadarIds.length === 0)
+      return radars;
     const deletedIdsSet = new Set(liveDeletedRadarIds);
     const map = new Map<string, Radar>();
     for (const radar of radars) {
@@ -1035,8 +1152,8 @@ export default function Home({ onOpenEditor }: HomeProps) {
 
   const proximity = useRadarProximity({
     currentLocation,
-    routePoints: routePointsRef.current,
-    cumulativeDistances: routeCumulativeRef.current,
+    routePoints: routePointsForProximity,
+    cumulativeDistances: routeCumulativeForProximity,
     radars: radarsForProximity,
   });
   const {
@@ -1050,28 +1167,44 @@ export default function Home({ onOpenEditor }: HomeProps) {
     resetProximityState,
   } = proximity;
 
-  const rearmRadarRuntimeState = useCallback((radarIds: string[]) => {
-    if (!radarIds || radarIds.length === 0) return;
-    radarIds.forEach((id) => {
-      if (!id) return;
-      alertedRadarIds.current.delete(id);
-      radarCriticalSoundPlayedIds.current.delete(id);
-      radarFeedbackActionIds.current.delete(id);
-      if (lastNearbyRadarIdRef.current === id) lastNearbyRadarIdRef.current = null;
-    });
-    rearmRadarState(radarIds);
-  }, [rearmRadarState]);
+  const rearmRadarRuntimeState = useCallback(
+    (radarIds: string[]) => {
+      if (!radarIds || radarIds.length === 0) return;
+      radarIds.forEach((id) => {
+        if (!id) return;
+        alertedRadarIds.current.delete(id);
+        radarCriticalSoundPlayedIds.current.delete(id);
+        radarFeedbackActionIds.current.delete(id);
+        if (lastNearbyRadarIdRef.current === id)
+          lastNearbyRadarIdRef.current = null;
+      });
+      rearmRadarState(radarIds);
+    },
+    [rearmRadarState],
+  );
 
   // Base: CSV ao longo da rota — enviada UMA vez, nunca muda ao reportar
   const [mapboxBaseForNative, setMapboxBaseForNative] = useState<
-    Array<{ id: string; latitude: number; longitude: number; speedLimit: number; type: string }>
+    Array<{
+      id: string;
+      latitude: number;
+      longitude: number;
+      speedLimit: number;
+      type: string;
+    }>
   >([]);
   // Overlay: SOMENTE radares reportados — enviada ao reportar (lista pequena, 1–10 itens)
   const [mapboxOverlayForNative, setMapboxOverlayForNative] = useState<
-    Array<{ id: string; latitude: number; longitude: number; speedLimit: number; type: string }>
+    Array<{
+      id: string;
+      latitude: number;
+      longitude: number;
+      speedLimit: number;
+      type: string;
+    }>
   >([]);
 
-  // Base: nativo carrega TODOS os radares via URL (GET /radars/geojson) — sem bridge, como Waze/RadarBot
+  // Base: passar radares via bridge (igual Map/overlay) — URL GeoJSON não renderizava ícones no nativo
   useEffect(() => {
     if (!isNavigating) {
       setLiveDeletedRadarIds([]);
@@ -1080,26 +1213,35 @@ export default function Home({ onOpenEditor }: HomeProps) {
       setMapboxOverlayForNative([]);
       return;
     }
-    setMapboxBaseForNative([]);
   }, [isNavigating]);
 
   // Overlay: push SOMENTE quando reporta (lista pequena)
   const overlayToPush = useMemo(() => {
     if (!isNavigating) return [];
-    return liveOverlayMapboxRadars.filter((r) => r?.id && !liveDeletedRadarIdsSet.has(r.id));
+    return liveOverlayMapboxRadars.filter(
+      (r) => r?.id && !liveDeletedRadarIdsSet.has(r.id),
+    );
   }, [isNavigating, liveOverlayMapboxRadars, liveDeletedRadarIdsSet]);
 
   useEffect(() => {
     if (!isNavigating) return;
-    if (overlayPushTimeoutRef.current) clearTimeout(overlayPushTimeoutRef.current);
+    if (overlayPushTimeoutRef.current)
+      clearTimeout(overlayPushTimeoutRef.current);
     overlayPushTimeoutRef.current = setTimeout(() => {
       overlayPushTimeoutRef.current = null;
-      if (areMapboxRadarArraysEqual(lastPushedOverlayRef.current as typeof overlayToPush | null, overlayToPush)) return;
+      if (
+        areMapboxRadarArraysEqual(
+          lastPushedOverlayRef.current as typeof overlayToPush | null,
+          overlayToPush,
+        )
+      )
+        return;
       lastPushedOverlayRef.current = overlayToPush;
-      InteractionManager.runAfterInteractions(() => setMapboxOverlayForNative(overlayToPush));
-    }, 150);
+      setMapboxOverlayForNative(overlayToPush);
+    }, 0);
     return () => {
-      if (overlayPushTimeoutRef.current) clearTimeout(overlayPushTimeoutRef.current);
+      if (overlayPushTimeoutRef.current)
+        clearTimeout(overlayPushTimeoutRef.current);
     };
   }, [isNavigating, overlayToPush]);
 
@@ -1159,65 +1301,64 @@ export default function Home({ onOpenEditor }: HomeProps) {
           rearmRadarRuntimeState(Array.from(overlayUpserts.keys()));
         }
 
-        // startTransition: updates baixa prioridade, UI não trava durante reconciliação
-        startTransition(() => {
-          if (overlayUpserts.size > 0 || overlayDeletes.size > 0) {
-            setLiveDeletedRadarIdsSetState((prevSet) => {
-              const nextSet = new Set(prevSet);
-              overlayUpserts.forEach((_, id) => nextSet.delete(id));
-              overlayDeletes.forEach((id) => nextSet.add(id));
-              return nextSet;
+        if (overlayDeletes.size > 0 || baseDeletes.size > 0) {
+          refreshGeoJsonRef.current();
+        }
+        if (overlayUpserts.size > 0 || overlayDeletes.size > 0) {
+          setLiveDeletedRadarIdsSetState((prevSet) => {
+            const nextSet = new Set(prevSet);
+            overlayUpserts.forEach((_, id) => nextSet.delete(id));
+            overlayDeletes.forEach((id) => nextSet.add(id));
+            return nextSet;
+          });
+          setLiveRadarOverlayMap((prevMap) => {
+            if (prevMap.size === 0 && overlayUpserts.size === 0) return prevMap;
+            const nextMap = new Map(prevMap);
+            overlayDeletes.forEach((id) => nextMap.delete(id));
+            overlayUpserts.forEach((radar, id) => {
+              const current = nextMap.get(id);
+              nextMap.set(id, current ? { ...current, ...radar } : radar);
             });
-            setLiveRadarOverlayMap((prevMap) => {
-              if (prevMap.size === 0 && overlayUpserts.size === 0) return prevMap;
-              const nextMap = new Map(prevMap);
-              overlayDeletes.forEach((id) => nextMap.delete(id));
-              overlayUpserts.forEach((radar, id) => {
-                const current = nextMap.get(id);
-                nextMap.set(id, current ? { ...current, ...radar } : radar);
-              });
-              return nextMap;
-            });
-          }
+            return nextMap;
+          });
+        }
 
-          if (baseUpserts.size > 0 || baseDeletes.size > 0) {
-            // WebSocket updates: podem ser CSV (bulk) ou reportados (individual)
-            // Por enquanto, atualiza ambas as listas
-            setCsvRadarsMap((prevMap) => {
-              const nextMap = new Map(prevMap);
-              baseDeletes.forEach((id) => nextMap.delete(id));
-              baseUpserts.forEach((radar, id) => {
-                const current = nextMap.get(id);
-                nextMap.set(id, current ? { ...current, ...radar } : radar);
-              });
-              return nextMap;
+        if (baseUpserts.size > 0 || baseDeletes.size > 0) {
+          setCsvRadarsMap((prevMap) => {
+            const nextMap = new Map(prevMap);
+            baseDeletes.forEach((id) => nextMap.delete(id));
+            baseUpserts.forEach((radar, id) => {
+              const current = nextMap.get(id);
+              nextMap.set(id, current ? { ...current, ...radar } : radar);
             });
-          }
+            return nextMap;
+          });
+        }
 
-          if (baseDeletes.size > 0) {
-            setNearbyRadarIds((prev) => {
-              let changed = false;
-              const nextSet = new Set(prev);
-              baseDeletes.forEach((id) => {
-                if (nextSet.delete(id)) changed = true;
-              });
-              return changed ? nextSet : prev;
+        if (baseDeletes.size > 0) {
+          setNearbyRadarIds((prev) => {
+            let changed = false;
+            const nextSet = new Set(prev);
+            baseDeletes.forEach((id) => {
+              if (nextSet.delete(id)) changed = true;
             });
-          }
-        });
+            return changed ? nextSet : prev;
+          });
+        }
 
         if (shouldRefreshAll && !isNavigatingRef.current) {
           syncAllRadarsFromCurrentLocation(true);
         }
 
-        // Reagenda se ainda houver eventos
-        if (queuedEvents.length > 0 && isMountedRef.current && !wsFlushScheduledRef.current) {
+        if (
+          queuedEvents.length > 0 &&
+          isMountedRef.current &&
+          !wsFlushScheduledRef.current
+        ) {
           wsFlushScheduledRef.current = true;
           setTimeout(() => {
             wsFlushScheduledRef.current = false;
-            startTransition(() => {
-              flushQueuedWsEvents();
-            });
+            flushQueuedWsEvents();
           }, 0);
         }
       } catch (err) {
@@ -1228,7 +1369,9 @@ export default function Home({ onOpenEditor }: HomeProps) {
     const connect = () => {
       try {
         if (!API_BASE_URL) {
-          console.warn("⚠️ WebSocket: API_BASE_URL não definida, aguardando...");
+          console.warn(
+            "⚠️ WebSocket: API_BASE_URL não definida, aguardando...",
+          );
           reconnectTimeout = setTimeout(connect, 2000);
           return;
         }
@@ -1256,14 +1399,10 @@ export default function Home({ onOpenEditor }: HomeProps) {
           queuedEvents.push({ event, payload });
           if (wsFlushScheduledRef.current) return;
           wsFlushScheduledRef.current = true;
-          // Throttling: 150ms durante navegação para agrupar mais eventos, 50ms fora
-          const delay = isNavigatingRef.current ? 150 : 50;
+          const delay = 16;
           setTimeout(() => {
             wsFlushScheduledRef.current = false;
-            // startTransition: impede que atualizações de radar bloqueiem navegação
-            startTransition(() => {
-              flushQueuedWsEvents();
-            });
+            flushQueuedWsEvents();
           }, delay);
         };
 
@@ -1297,7 +1436,10 @@ export default function Home({ onOpenEditor }: HomeProps) {
   }, [isNavigating, proximityNearbyRadarIds]);
 
   // Memoizar conversão de Set para Array para evitar nova referência a cada render
-  const nearbyRadarIdsArray = useMemo(() => Array.from(nearbyRadarIds), [nearbyRadarIds]);
+  const nearbyRadarIdsArray = useMemo(
+    () => Array.from(nearbyRadarIds),
+    [nearbyRadarIds],
+  );
 
   const closeRadarFeedbackCard = useCallback(() => {
     if (radarFeedbackDismissTimerRef.current) {
@@ -1309,21 +1451,24 @@ export default function Home({ onOpenEditor }: HomeProps) {
     setRadarFeedbackSubmitting(false);
   }, []);
 
-  const openRadarFeedbackCard = useCallback((radar: Radar) => {
-    if (!radar?.id) return;
-    if (radarFeedbackActionIds.current.has(radar.id)) return;
+  const openRadarFeedbackCard = useCallback(
+    (radar: Radar) => {
+      if (!radar?.id) return;
+      if (radarFeedbackActionIds.current.has(radar.id)) return;
 
-    if (radarFeedbackDismissTimerRef.current) {
-      clearTimeout(radarFeedbackDismissTimerRef.current);
-      radarFeedbackDismissTimerRef.current = null;
-    }
+      if (radarFeedbackDismissTimerRef.current) {
+        clearTimeout(radarFeedbackDismissTimerRef.current);
+        radarFeedbackDismissTimerRef.current = null;
+      }
 
-    setRadarFeedbackTarget(radar);
-    setShowRadarFeedbackCard(true);
-    radarFeedbackDismissTimerRef.current = setTimeout(() => {
-      closeRadarFeedbackCard();
-    }, 12000);
-  }, [closeRadarFeedbackCard]);
+      setRadarFeedbackTarget(radar);
+      setShowRadarFeedbackCard(true);
+      radarFeedbackDismissTimerRef.current = setTimeout(() => {
+        closeRadarFeedbackCard();
+      }, 12000);
+    },
+    [closeRadarFeedbackCard],
+  );
 
   const applyRadarUpdateLocally = useCallback((updated: Radar) => {
     // Atualiza radar existente (pode ser CSV ou reportado)
@@ -1343,31 +1488,34 @@ export default function Home({ onOpenEditor }: HomeProps) {
     });
   }, []);
 
-  const handleRadarFeedbackAction = useCallback(async (action: "confirm" | "deny") => {
-    if (!radarFeedbackTarget?.id || !deviceUserId) {
+  const handleRadarFeedbackAction = useCallback(
+    async (action: "confirm" | "deny") => {
+      if (!radarFeedbackTarget?.id || !deviceUserId) {
+        closeRadarFeedbackCard();
+        return;
+      }
+
+      setRadarFeedbackSubmitting(true);
+      const radarId = radarFeedbackTarget.id;
+      const updated =
+        action === "confirm"
+          ? await confirmRadar(radarId, deviceUserId)
+          : await denyRadar(radarId, deviceUserId);
+
+      radarFeedbackActionIds.current.add(radarId);
+      if (updated) {
+        applyRadarUpdateLocally(updated);
+      }
+
       closeRadarFeedbackCard();
-      return;
-    }
-
-    setRadarFeedbackSubmitting(true);
-    const radarId = radarFeedbackTarget.id;
-    const updated =
-      action === "confirm"
-        ? await confirmRadar(radarId, deviceUserId)
-        : await denyRadar(radarId, deviceUserId);
-
-    radarFeedbackActionIds.current.add(radarId);
-    if (updated) {
-      applyRadarUpdateLocally(updated);
-    }
-
-    closeRadarFeedbackCard();
-  }, [
-    applyRadarUpdateLocally,
-    closeRadarFeedbackCard,
-    deviceUserId,
-    radarFeedbackTarget?.id,
-  ]);
+    },
+    [
+      applyRadarUpdateLocally,
+      closeRadarFeedbackCard,
+      deviceUserId,
+      radarFeedbackTarget?.id,
+    ],
+  );
 
   const handleLocationChange = useCallback((location: any) => {
     if (!location || location.latitude == null || location.longitude == null) {
@@ -1390,7 +1538,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
           currentLocationRef.current.latitude,
           currentLocationRef.current.longitude,
           newLocation.latitude,
-          newLocation.longitude
+          newLocation.longitude,
         );
         if (distance > 200 && now - lastLocationUpdate.current < 2000) {
           return;
@@ -1475,11 +1623,19 @@ export default function Home({ onOpenEditor }: HomeProps) {
       hideRadarModal();
     }
 
-    if (!alertedRadarIds.current.has(activeRadar.id) && activeDistance <= 300 && activeDistance > 0) {
+    if (
+      !alertedRadarIds.current.has(activeRadar.id) &&
+      activeDistance <= 300 &&
+      activeDistance > 0
+    ) {
       alertedRadarIds.current.add(activeRadar.id);
       let radarType = "Radar";
       const type = normalizeRadarType(activeRadar.type);
-      if (type.includes("semaforo") || type.includes("camera") || type.includes("fotografica")) {
+      if (
+        type.includes("semaforo") ||
+        type.includes("camera") ||
+        type.includes("fotografica")
+      ) {
         radarType = "Radar Semafórico";
       } else if (type.includes("movel") || type.includes("mobile")) {
         radarType = "Radar Móvel";
@@ -1545,10 +1701,17 @@ export default function Home({ onOpenEditor }: HomeProps) {
       if (!event) return;
       // Corrigir acesso ao nativeEvent (RN Bridge envia dentro de nativeEvent)
       const nativeEvent = event.nativeEvent || event;
-      const geometry = nativeEvent.geometry || (nativeEvent.items && nativeEvent.items.length > 0 ? nativeEvent.items[0].geometry : null);
+      const geometry =
+        nativeEvent.geometry ||
+        (nativeEvent.items && nativeEvent.items.length > 0
+          ? nativeEvent.items[0].geometry
+          : null);
 
       if (!geometry) {
-        console.log("Evento routeChanged sem geometria válida:", JSON.stringify(nativeEvent).substring(0, 200));
+        console.log(
+          "Evento routeChanged sem geometria válida:",
+          JSON.stringify(nativeEvent).substring(0, 200),
+        );
         return;
       }
 
@@ -1556,7 +1719,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
       try {
         // O evento pode vir como string JSON (nossa conversão nativa) ou objeto direto
         // Tentamos parsear se for string, senão assumimos que é objeto ou array
-        if (typeof geometry === 'string') {
+        if (typeof geometry === "string") {
           const nowRaw = Date.now();
           if (
             geometry === lastRouteGeometryRawRef.current &&
@@ -1566,8 +1729,13 @@ export default function Home({ onOpenEditor }: HomeProps) {
           }
           lastRouteGeometryRawRef.current = geometry;
           // Verificar se é Polyline (não começa com { ou [) - Fallback se a conversão nativa falhou
-          if (!geometry.trim().startsWith("{") && !geometry.trim().startsWith("[")) {
-            console.warn("⚠️ Recebido Polyline em vez de GeoJSON. A conversão nativa pode ter falhado.");
+          if (
+            !geometry.trim().startsWith("{") &&
+            !geometry.trim().startsWith("[")
+          ) {
+            console.warn(
+              "⚠️ Recebido Polyline em vez de GeoJSON. A conversão nativa pode ter falhado.",
+            );
             // Aqui idealmente decodificaríamos Polyline no JS, mas melhor garantir o nativo.
             // A modificação no MapboxNavigationView.kt deve garantir que isso venha como GeoJSON.
             return;
@@ -1603,6 +1771,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
       if (points.length < 2) return;
       routePointsRef.current = points;
       routeCumulativeRef.current = getCumulativeDistances(points);
+      setRoutePointsFromNav(points);
     } catch (error) {
       console.error("Erro ao processar mudança de rota:", error);
     }
@@ -1620,6 +1789,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
 
   const handleArrive = useCallback(() => {
     Alert.alert("Chegada", "Você chegou ao destino!");
+    setRoutePointsFromNav(null);
     if (locationUpdateDebounce.current) {
       clearTimeout(locationUpdateDebounce.current);
       locationUpdateDebounce.current = null;
@@ -1651,6 +1821,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
   }, [resetProximityState]);
 
   const handleCancelNavigation = useCallback(() => {
+    setRoutePointsFromNav(null);
     if (locationUpdateDebounce.current) {
       clearTimeout(locationUpdateDebounce.current);
       locationUpdateDebounce.current = null;
@@ -1688,9 +1859,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
       }
       console.error("Erro na navegação:", error);
       const errorMessage =
-        error?.message ||
-        error?.toString() ||
-        "Erro na navegação";
+        error?.message || error?.toString() || "Erro na navegação";
       Alert.alert("Erro", errorMessage);
     } catch (e) {
       console.error("Erro ao processar erro de navegação:", e);
@@ -1716,7 +1885,8 @@ export default function Home({ onOpenEditor }: HomeProps) {
   // Render do MapboxNavComponent com props memoizadas
   // Simplificado para evitar erros de renderização
   const navigationView = useMemo(() => {
-    if (!MapboxNavComponent || !isNavigating || !origin || !destination) return null;
+    if (!MapboxNavComponent || !isNavigating || !origin || !destination)
+      return null;
 
     return (
       <MapboxNavComponent
@@ -1732,8 +1902,8 @@ export default function Home({ onOpenEditor }: HomeProps) {
         }}
         distanceUnit="metric"
         language="pt-BR"
-        // @ts-ignore
-        radarsGeoJsonUrl={isNavigating && API_BASE_URL ? `${API_BASE_URL}/radars/geojson` : undefined}
+        // @ts-ignore — usar bridge (radars); URL GeoJSON não renderizava ícones no nativo
+        radarsGeoJsonUrl={undefined}
         // @ts-ignore
         radars={mapboxBaseForNative}
         // @ts-ignore
@@ -1741,9 +1911,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
         // @ts-ignore
         nearbyRadarIds={nearbyRadarIdsArray}
         // @ts-ignore
-        bottomPadding={
-          nearestRadar ? (Platform.OS === "ios" ? 180 : 240) : 0
-        }
+        bottomPadding={nearestRadar ? (Platform.OS === "ios" ? 180 : 240) : 0}
         onLocationChange={handleLocationChange}
         onRouteProgressChange={handleRouteProgressChange}
         onArrive={handleArrive}
@@ -1754,10 +1922,22 @@ export default function Home({ onOpenEditor }: HomeProps) {
       />
     );
   }, [
-    MapboxNavComponent, isNavigating, origin, destination, destinationText,
-    mapboxBaseForNative, mapboxOverlayForNative, nearbyRadarIdsArray, nearestRadar,
-    handleLocationChange, handleRouteProgressChange, handleArrive, handleCancelNavigation, handleError, handleRouteAlternativeSelected, handleRouteChanged,
-    API_BASE_URL
+    MapboxNavComponent,
+    isNavigating,
+    origin,
+    destination,
+    destinationText,
+    mapboxBaseForNative,
+    mapboxOverlayForNative,
+    nearbyRadarIdsArray,
+    nearestRadar,
+    handleLocationChange,
+    handleRouteProgressChange,
+    handleArrive,
+    handleCancelNavigation,
+    handleError,
+    handleRouteAlternativeSelected,
+    handleRouteChanged,
   ]);
 
   return (
@@ -1830,13 +2010,11 @@ export default function Home({ onOpenEditor }: HomeProps) {
                 {isReportingRadar ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
-
                   <Image
                     source={require("../assets/images/reportIcon.png")}
                     style={styles.reportRadarButtonImage}
                     resizeMode="contain"
                   />
-
                 )}
               </TouchableOpacity>
             </>
@@ -1901,8 +2079,9 @@ export default function Home({ onOpenEditor }: HomeProps) {
         nearestRadar &&
         (() => {
           console.log(
-            `🎯 Renderizando modal: isNavigating=${isNavigating}, nearestRadar=${!!nearestRadar}, distance=${nearestRadar.distance
-            }m`
+            `🎯 Renderizando modal: isNavigating=${isNavigating}, nearestRadar=${!!nearestRadar}, distance=${
+              nearestRadar.distance
+            }m`,
           );
           return null;
         })()}
@@ -1943,7 +2122,11 @@ export default function Home({ onOpenEditor }: HomeProps) {
             {radarPassedLoading ? (
               <>
                 <View style={styles.radarAlertTextContainer}>
-                  <ActivityIndicator size="large" color="#0ea5e9" style={{ marginVertical: 8 }} />
+                  <ActivityIndicator
+                    size="large"
+                    color="#0ea5e9"
+                    style={{ marginVertical: 8 }}
+                  />
                   <Text style={styles.radarAlertTitle}>Passou do radar</Text>
                   <Text style={styles.radarAlertDistance}>Aguarde...</Text>
                 </View>
@@ -1955,15 +2138,34 @@ export default function Home({ onOpenEditor }: HomeProps) {
                     const type = normalizeRadarType(nearestRadar.radar.type);
                     let iconSource = radarImages.radarMovel;
 
-                    if (type.includes("semaforo") || type.includes("camera") || type.includes("fotografica")) {
+                    if (
+                      type.includes("semaforo") ||
+                      type.includes("camera") ||
+                      type.includes("fotografica")
+                    ) {
                       iconSource = radarImages.radarSemaforico;
-                    } else if (type.includes("movel") || type.includes("mobile")) {
+                    } else if (
+                      type.includes("movel") ||
+                      type.includes("mobile")
+                    ) {
                       iconSource = radarImages.radarMovel;
-                    } else if (type.includes("fixo") || type.includes("placa") || type.includes("velocidade")) {
-                      iconSource = radarImages[getClosestPlacaName(nearestRadar.radar.speedLimit)] || radarImages.placa60;
+                    } else if (
+                      type.includes("fixo") ||
+                      type.includes("placa") ||
+                      type.includes("velocidade")
+                    ) {
+                      iconSource =
+                        radarImages[
+                          getClosestPlacaName(nearestRadar.radar.speedLimit)
+                        ] || radarImages.placa60;
                     }
 
-                    return <Image source={iconSource} style={styles.radarAlertIconLarge} />;
+                    return (
+                      <Image
+                        source={iconSource}
+                        style={styles.radarAlertIconLarge}
+                      />
+                    );
                   })()}
                 </View>
                 <View style={styles.radarAlertTextContainer}>
@@ -1971,9 +2173,11 @@ export default function Home({ onOpenEditor }: HomeProps) {
                     {(() => {
                       const type = normalizeRadarType(nearestRadar.radar.type);
                       let typeName = "Radar";
-                      if (type.includes("semaforo")) typeName = "Radar Semafórico";
+                      if (type.includes("semaforo"))
+                        typeName = "Radar Semafórico";
                       else if (type.includes("movel")) typeName = "Radar Móvel";
-                      else if (type.includes("fixo") || type.includes("placa")) typeName = "Placa de Velocidade";
+                      else if (type.includes("fixo") || type.includes("placa"))
+                        typeName = "Placa de Velocidade";
 
                       return nearestRadar.distance <= 30
                         ? `${typeName} Próximo!`
@@ -2001,13 +2205,18 @@ export default function Home({ onOpenEditor }: HomeProps) {
       {isNavigating && showRadarFeedbackCard && radarFeedbackTarget && (
         <View style={styles.radarFeedbackOverlay} pointerEvents="box-none">
           <View style={styles.radarFeedbackCard}>
-            <Text style={styles.radarFeedbackTitle}>Esse radar ainda existe?</Text>
+            <Text style={styles.radarFeedbackTitle}>
+              Esse radar ainda existe?
+            </Text>
             <Text style={styles.radarFeedbackSubtitle}>
               Responda para melhorar o mapa (crowdsourcing).
             </Text>
             <View style={styles.radarFeedbackActions}>
               <TouchableOpacity
-                style={[styles.radarFeedbackButton, styles.radarFeedbackConfirm]}
+                style={[
+                  styles.radarFeedbackButton,
+                  styles.radarFeedbackConfirm,
+                ]}
                 onPress={() => handleRadarFeedbackAction("confirm")}
                 disabled={radarFeedbackSubmitting}
                 activeOpacity={0.8}
@@ -2091,7 +2300,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
                     style={[
                       styles.reportModalTypeCard,
                       reportRadarType === t.value &&
-                      styles.reportModalTypeCardActive,
+                        styles.reportModalTypeCardActive,
                     ]}
                     onPress={() => setReportRadarType(t.value)}
                     activeOpacity={0.7}
@@ -2099,7 +2308,9 @@ export default function Home({ onOpenEditor }: HomeProps) {
                     <Image
                       source={
                         t.value === "placa"
-                          ? radarImages[getClosestPlacaName(reportSelectedSpeed || 60)]
+                          ? radarImages[
+                              getClosestPlacaName(reportSelectedSpeed || 60)
+                            ]
                           : t.icon
                       }
                       style={styles.reportModalTypeIcon}
@@ -2109,7 +2320,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
                       style={[
                         styles.reportModalTypeCardText,
                         reportRadarType === t.value &&
-                        styles.reportModalTypeCardTextActive,
+                          styles.reportModalTypeCardTextActive,
                       ]}
                       numberOfLines={2}
                     >
@@ -2122,17 +2333,26 @@ export default function Home({ onOpenEditor }: HomeProps) {
 
             {/* Step 2: Speed Limit Selection */}
             {reportStep === 2 && (
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12, marginVertical: 16 }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  flexWrap: "wrap",
+                  gap: 12,
+                  marginVertical: 16,
+                }}
+              >
                 {[30, 40, 50, 60, 70, 80, 90, 100, 110, 120].map((speed) => (
                   <TouchableOpacity
                     key={speed}
                     style={{
                       width: "30%",
                       padding: 16,
-                      backgroundColor: reportSelectedSpeed === speed ? "#3b82f6" : "#f3f4f6",
+                      backgroundColor:
+                        reportSelectedSpeed === speed ? "#3b82f6" : "#f3f4f6",
                       borderRadius: 12,
                       borderWidth: 2,
-                      borderColor: reportSelectedSpeed === speed ? "#3b82f6" : "#e5e7eb",
+                      borderColor:
+                        reportSelectedSpeed === speed ? "#3b82f6" : "#e5e7eb",
                       alignItems: "center",
                       justifyContent: "center",
                     }}
@@ -2143,7 +2363,8 @@ export default function Home({ onOpenEditor }: HomeProps) {
                       style={{
                         fontSize: 24,
                         fontWeight: "700",
-                        color: reportSelectedSpeed === speed ? "#fff" : "#1f2937",
+                        color:
+                          reportSelectedSpeed === speed ? "#fff" : "#1f2937",
                       }}
                     >
                       {speed}
@@ -2160,10 +2381,12 @@ export default function Home({ onOpenEditor }: HomeProps) {
                 <TouchableOpacity
                   style={{
                     padding: 16,
-                    backgroundColor: reportLocationMode === "current" ? "#3b82f6" : "#f3f4f6",
+                    backgroundColor:
+                      reportLocationMode === "current" ? "#3b82f6" : "#f3f4f6",
                     borderRadius: 12,
                     borderWidth: 2,
-                    borderColor: reportLocationMode === "current" ? "#3b82f6" : "#e5e7eb",
+                    borderColor:
+                      reportLocationMode === "current" ? "#3b82f6" : "#e5e7eb",
                   }}
                   onPress={() => {
                     setReportLocationMode("current");
@@ -2173,47 +2396,80 @@ export default function Home({ onOpenEditor }: HomeProps) {
                   }}
                   activeOpacity={0.7}
                 >
-                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                    }}
+                  >
                     <Ionicons
                       name="location"
                       size={20}
-                      color={reportLocationMode === "current" ? "#fff" : "#3b82f6"}
+                      color={
+                        reportLocationMode === "current" ? "#fff" : "#3b82f6"
+                      }
                     />
-                    <Text style={{ fontSize: 16, fontWeight: "600", color: reportLocationMode === "current" ? "#fff" : "#1f2937" }}>
+                    <Text
+                      style={{
+                        fontSize: 16,
+                        fontWeight: "600",
+                        color:
+                          reportLocationMode === "current" ? "#fff" : "#1f2937",
+                      }}
+                    >
                       Usar Localização Atual
                     </Text>
                   </View>
                 </TouchableOpacity>
 
-
-
                 {/* Map Pin */}
                 <TouchableOpacity
                   style={{
                     padding: 16,
-                    backgroundColor: reportLocationMode === "map" ? "#3b82f6" : "#f3f4f6",
+                    backgroundColor:
+                      reportLocationMode === "map" ? "#3b82f6" : "#f3f4f6",
                     borderRadius: 12,
                     borderWidth: 2,
-                    borderColor: reportLocationMode === "map" ? "#3b82f6" : "#e5e7eb",
+                    borderColor:
+                      reportLocationMode === "map" ? "#3b82f6" : "#e5e7eb",
                   }}
                   onPress={() => {
                     setReportLocationMode("map");
                     setShowMapPicker(true);
                     const initialLoc = currentLocation
-                      ? { latitude: currentLocation.latitude, longitude: currentLocation.longitude }
-                      : { latitude: -23.550520, longitude: -46.633308 };
+                      ? {
+                          latitude: currentLocation.latitude,
+                          longitude: currentLocation.longitude,
+                        }
+                      : { latitude: -23.55052, longitude: -46.633308 };
                     setMapPickerCenter(initialLoc);
                     mapPickerCenterRef.current = initialLoc;
                   }}
                   activeOpacity={0.7}
                 >
-                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                    }}
+                  >
                     <Ionicons
                       name="map"
                       size={20}
                       color={reportLocationMode === "map" ? "#fff" : "#3b82f6"}
                     />
-                    <Text style={{ fontSize: 16, fontWeight: "600", color: reportLocationMode === "map" ? "#fff" : "#1f2937" }}>
+                    <Text
+                      style={{
+                        fontSize: 16,
+                        fontWeight: "600",
+                        color:
+                          reportLocationMode === "map" ? "#fff" : "#1f2937",
+                      }}
+                    >
                       Marcar no Mapa
                     </Text>
                   </View>
@@ -2226,7 +2482,9 @@ export default function Home({ onOpenEditor }: HomeProps) {
               {reportStep > 1 && (
                 <TouchableOpacity
                   style={[styles.reportModalCancel, { flex: 1 }]}
-                  onPress={() => setReportStep((prev) => Math.max(1, prev - 1) as 1 | 2 | 3)}
+                  onPress={() =>
+                    setReportStep((prev) => Math.max(1, prev - 1) as 1 | 2 | 3)
+                  }
                 >
                   <Text style={styles.reportModalCancelText}>← Voltar</Text>
                 </TouchableOpacity>
@@ -2242,7 +2500,9 @@ export default function Home({ onOpenEditor }: HomeProps) {
                       setReportStep(3);
                     }
                   }}
-                  disabled={reportStep === 1 ? !reportRadarType : !reportSelectedSpeed}
+                  disabled={
+                    reportStep === 1 ? !reportRadarType : !reportSelectedSpeed
+                  }
                 >
                   <Text style={styles.reportModalSubmitText}>Próximo →</Text>
                 </TouchableOpacity>
@@ -2274,7 +2534,19 @@ export default function Home({ onOpenEditor }: HomeProps) {
           {mapPickerCenter && (
             <View style={{ flex: 1, position: "relative" }}>
               {/* Map View for picking location */}
-              <Suspense fallback={<View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}><ActivityIndicator size="large" color="#3b82f6" /></View>}>
+              <Suspense
+                fallback={
+                  <View
+                    style={{
+                      flex: 1,
+                      justifyContent: "center",
+                      alignItems: "center",
+                    }}
+                  >
+                    <ActivityIndicator size="large" color="#3b82f6" />
+                  </View>
+                }
+              >
                 <MapComponent
                   ref={mapPickerMapRef}
                   radars={[]}
@@ -2285,7 +2557,18 @@ export default function Home({ onOpenEditor }: HomeProps) {
               </Suspense>
 
               {/* Pin fixo no centro: usuário arrasta o mapa; o pin marca o local que será reportado */}
-              <View pointerEvents="none" style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, justifyContent: "center", alignItems: "center" }}>
+              <View
+                pointerEvents="none"
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  justifyContent: "center",
+                  alignItems: "center",
+                }}
+              >
                 <View style={{ marginTop: -48 }}>
                   <Ionicons name="location" size={48} color="#ef4444" />
                 </View>
@@ -2293,36 +2576,109 @@ export default function Home({ onOpenEditor }: HomeProps) {
 
               {/* Preview lat/lon: mostra em tempo real onde o pin está (atualizado a cada 400ms) */}
               {pickerPreviewCoords != null && (
-                <View pointerEvents="none" style={{ position: "absolute", top: 56, left: 12, right: 12, backgroundColor: "rgba(255,255,255,0.95)", padding: 10, borderRadius: 10, borderWidth: 1, borderColor: "#e5e7eb" }}>
-                  <Text style={{ fontSize: 11, color: "#6b7280", marginBottom: 4 }}>Posição do pin (será reportada)</Text>
-                  <Text style={{ fontSize: 13, fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace", color: "#111827" }} numberOfLines={1}>
-                    lat: {pickerPreviewCoords.latitude.toFixed(6)}  lon: {pickerPreviewCoords.longitude.toFixed(6)}
+                <View
+                  pointerEvents="none"
+                  style={{
+                    position: "absolute",
+                    top: 56,
+                    left: 12,
+                    right: 12,
+                    backgroundColor: "rgba(255,255,255,0.95)",
+                    padding: 10,
+                    borderRadius: 10,
+                    borderWidth: 1,
+                    borderColor: "#e5e7eb",
+                  }}
+                >
+                  <Text
+                    style={{ fontSize: 11, color: "#6b7280", marginBottom: 4 }}
+                  >
+                    Posição do pin (será reportada)
+                  </Text>
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+                      color: "#111827",
+                    }}
+                    numberOfLines={1}
+                  >
+                    lat: {pickerPreviewCoords.latitude.toFixed(6)} lon:{" "}
+                    {pickerPreviewCoords.longitude.toFixed(6)}
                   </Text>
                 </View>
               )}
 
               {/* Control Overlay */}
-              <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, backgroundColor: "#fff", padding: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20, shadowColor: "#000", shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 5 }}>
-                <Text style={{ fontSize: 14, color: "#6b7280", marginBottom: 12, textAlign: "center" }}>
-                  Arraste o mapa para posicionar o pin no local do radar. Depois toque em Confirmar.
+              <View
+                style={{
+                  position: "absolute",
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  backgroundColor: "#fff",
+                  padding: 20,
+                  borderTopLeftRadius: 20,
+                  borderTopRightRadius: 20,
+                  shadowColor: "#000",
+                  shadowOffset: { width: 0, height: -2 },
+                  shadowOpacity: 0.1,
+                  shadowRadius: 8,
+                  elevation: 5,
+                }}
+              >
+                <Text
+                  style={{
+                    fontSize: 14,
+                    color: "#6b7280",
+                    marginBottom: 12,
+                    textAlign: "center",
+                  }}
+                >
+                  Arraste o mapa para posicionar o pin no local do radar. Depois
+                  toque em Confirmar.
                 </Text>
                 <View style={{ flexDirection: "row", gap: 12 }}>
                   <TouchableOpacity
-                    style={{ flex: 1, padding: 16, backgroundColor: "#f3f4f6", borderRadius: 12, alignItems: "center" }}
+                    style={{
+                      flex: 1,
+                      padding: 16,
+                      backgroundColor: "#f3f4f6",
+                      borderRadius: 12,
+                      alignItems: "center",
+                    }}
                     onPress={() => {
                       setShowMapPicker(false);
                       mapPickerCenterRef.current = null;
                     }}
                   >
-                    <Text style={{ fontSize: 16, fontWeight: "600", color: "#374151" }}>Cancelar</Text>
+                    <Text
+                      style={{
+                        fontSize: 16,
+                        fontWeight: "600",
+                        color: "#374151",
+                      }}
+                    >
+                      Cancelar
+                    </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={{ flex: 1, padding: 16, backgroundColor: "#3b82f6", borderRadius: 12, alignItems: "center" }}
+                    style={{
+                      flex: 1,
+                      padding: 16,
+                      backgroundColor: "#3b82f6",
+                      borderRadius: 12,
+                      alignItems: "center",
+                    }}
                     onPress={async () => {
-                      const center = await mapPickerMapRef.current?.getCenter?.();
+                      const center =
+                        await mapPickerMapRef.current?.getCenter?.();
                       const selected = center ?? mapPickerCenterRef.current;
                       if (!selected) {
-                        Alert.alert("Erro", "Não foi possível obter a posição do mapa. Tente novamente.");
+                        Alert.alert(
+                          "Erro",
+                          "Não foi possível obter a posição do mapa. Tente novamente.",
+                        );
                         return;
                       }
                       const picked = {
@@ -2337,7 +2693,11 @@ export default function Home({ onOpenEditor }: HomeProps) {
                       mapPickerCenterRef.current = null;
                     }}
                   >
-                    <Text style={{ fontSize: 16, fontWeight: "600", color: "#fff" }}>Confirmar Localização</Text>
+                    <Text
+                      style={{ fontSize: 16, fontWeight: "600", color: "#fff" }}
+                    >
+                      Confirmar Localização
+                    </Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -2363,16 +2723,40 @@ export default function Home({ onOpenEditor }: HomeProps) {
             onStartShouldSetResponder={() => true}
           >
             <View style={{ alignItems: "center", marginBottom: 12 }}>
-              <Ionicons name="location-outline" size={64} color="#ef4444" style={{ marginBottom: 12 }} />
-              <Text style={[styles.reportModalTitle, { textAlign: "center", fontSize: 20 }]}>
+              <Ionicons
+                name="location-outline"
+                size={64}
+                color="#ef4444"
+                style={{ marginBottom: 12 }}
+              />
+              <Text
+                style={[
+                  styles.reportModalTitle,
+                  { textAlign: "center", fontSize: 20 },
+                ]}
+              >
                 Ops! Localização Indisponível
               </Text>
             </View>
-            <Text style={[styles.reportModalSubtitle, { textAlign: "center", fontSize: 14, lineHeight: 20, marginBottom: 20 }]}>
-              Não conseguimos obter sua posição atual. Por favor, verifique se o seu GPS está ligado e tente novamente.
+            <Text
+              style={[
+                styles.reportModalSubtitle,
+                {
+                  textAlign: "center",
+                  fontSize: 14,
+                  lineHeight: 20,
+                  marginBottom: 20,
+                },
+              ]}
+            >
+              Não conseguimos obter sua posição atual. Por favor, verifique se o
+              seu GPS está ligado e tente novamente.
             </Text>
             <TouchableOpacity
-              style={[styles.reportModalSubmit, { width: "100%", marginHorizontal: 0 }]}
+              style={[
+                styles.reportModalSubmit,
+                { width: "100%", marginHorizontal: 0 },
+              ]}
               onPress={() => {
                 setShowLocationErrorModal(false);
                 requestLocationPermission();
@@ -2401,12 +2785,27 @@ export default function Home({ onOpenEditor }: HomeProps) {
             onStartShouldSetResponder={() => true}
           >
             <View style={{ alignItems: "center", marginBottom: 12 }}>
-              <Ionicons name="checkmark-circle-outline" size={64} color="#10b981" style={{ marginBottom: 12 }} />
-              <Text style={[styles.reportModalTitle, { textAlign: "center", fontSize: 20 }]}>
+              <Ionicons
+                name="checkmark-circle-outline"
+                size={64}
+                color="#10b981"
+                style={{ marginBottom: 12 }}
+              />
+              <Text
+                style={[
+                  styles.reportModalTitle,
+                  { textAlign: "center", fontSize: 20 },
+                ]}
+              >
                 Obrigado!
               </Text>
             </View>
-            <Text style={[styles.reportModalSubtitle, { textAlign: "center", fontSize: 14, lineHeight: 20 }]}>
+            <Text
+              style={[
+                styles.reportModalSubtitle,
+                { textAlign: "center", fontSize: 14, lineHeight: 20 },
+              ]}
+            >
               {successMessage}
             </Text>
           </View>
