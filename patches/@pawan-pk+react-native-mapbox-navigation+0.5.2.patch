@@ -75,7 +75,7 @@ index 7d28df3..f6c5272 100644
    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
    implementation 'androidx.cardview:cardview:1.0.0'
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
-index 41a3ba0..4affc44 100644
+index 41a3ba0..665e466 100644
 --- a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
 +++ b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
 @@ -3,25 +3,38 @@ package com.mapboxnavigation
@@ -1666,7 +1666,7 @@ index 41a3ba0..4affc44 100644
    }
  
    fun setLocal(language: String) {
-@@ -820,4 +1225,1704 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -820,4 +1225,1723 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
    fun setShowCancelButton(show: Boolean) {
      binding.stop.visibility = if (show) View.VISIBLE else View.INVISIBLE
    }
@@ -1846,6 +1846,10 @@ index 41a3ba0..4affc44 100644
 +
 +  private fun loadRadarImages(style: com.mapbox.maps.Style) {
 +    try {
++      // Usar applicationContext para garantir recursos do app (não da lib)
++      val appCtx = context.applicationContext ?: context
++      val res = appCtx.resources
++      val pkg = appCtx.packageName.ifEmpty { "com.radarbot" }
 +      val imageNames =
 +              listOf(
 +                      "placa0",
@@ -1880,14 +1884,17 @@ index 41a3ba0..4affc44 100644
 +            return@forEach
 +          }
 +
-+          // Lista de possíveis nomes de recursos no Android para esta imagem
++          // Android drawable: apenas a-z, 0-9, underscore. camelCase -> snake_case.
++          val snakeCase = imageName.replace(Regex("[A-Z]")) { "_${it.value.lowercase()}" }
 +          val possibleResourceNames =
 +                  listOf(
-+                                  "assets_images_$imageName", // Padrão React Native
-+                                  "assets_images_${imageName.lowercase()}", // Padrão Android
-+                                  // (minúsculo)
-+                                  imageName, // Nome direto
-+                                  imageName.lowercase() // Nome direto minúsculo
++                                  "assets_images_$imageName",
++                                  "assets_images_${imageName.lowercase()}",
++                                  "assets_images_$snakeCase", // radarMovel -> radar_movel
++                                  imageName,
++                                  imageName.lowercase(),
++                                  snakeCase,
++                                  snakeCase.lowercase()
 +                          )
 +                          .distinct()
 +
@@ -1895,7 +1902,7 @@ index 41a3ba0..4affc44 100644
 +          var finalResourceName = ""
 +
 +          for (resName in possibleResourceNames) {
-+            val id = context.resources.getIdentifier(resName, "drawable", context.packageName)
++            val id = res.getIdentifier(resName, "drawable", pkg)
 +            if (id != 0) {
 +              resourceId = id
 +              finalResourceName = resName
@@ -1914,15 +1921,14 @@ index 41a3ba0..4affc44 100644
 +            return@forEach
 +          }
 +
-+          val bitmap = BitmapFactory.decodeResource(context.resources, resourceId)
++          val bitmap = BitmapFactory.decodeResource(res, resourceId)
 +          if (bitmap == null) {
 +            Log.w("MapboxNavigationView", "⚠️ Bitmap null para $finalResourceName")
 +            return@forEach
 +          }
 +
-+          // Adicionar ao estilo (mesmo que já exista, para garantir que o estilo atual tenha a
-+          // imagem)
-+          style.addImage(imageName, bitmap)
++          // Mapbox API: addImage(id, bitmap, sdf). sdf=false para PNGs normais.
++          style.addImage(imageName, bitmap, false)
 +          loadedIconNames.add(imageName)
 +          // Log.d("MapboxNavigationView", "✅ Imagem $imageName carregada ($finalResourceName)")
 +
@@ -1946,11 +1952,18 @@ index 41a3ba0..4affc44 100644
 +        val currentStyle = binding.mapView.mapboxMap.style ?: return@subscribeStyleImageMissing
 +
 +        try {
-+          val resourceName = "assets_images_$missingId"
-+          val resourceId =
-+                  context.resources.getIdentifier(resourceName, "drawable", context.packageName)
++          val appCtx = context.applicationContext ?: context
++          val res = appCtx.resources
++          val pkg = appCtx.packageName
++          val snakeCase = missingId.replace(Regex("[A-Z]")) { "_${it.value.lowercase()}" }
++          val namesToTry = listOf("assets_images_$missingId", "assets_images_$snakeCase", missingId, snakeCase).distinct()
++          var resourceId = 0
++          for (resourceName in namesToTry) {
++            resourceId = res.getIdentifier(resourceName, "drawable", pkg)
++            if (resourceId != 0) break
++          }
 +          if (resourceId != 0) {
-+            val bitmap = BitmapFactory.decodeResource(context.resources, resourceId)
++            val bitmap = BitmapFactory.decodeResource(res, resourceId)
 +            if (bitmap != null) {
 +              val imageExists =
 +                      try {
@@ -1960,7 +1973,7 @@ index 41a3ba0..4affc44 100644
 +                      }
 +
 +              if (!imageExists) {
-+                currentStyle.addImage(missingId, bitmap)
++                currentStyle.addImage(missingId, bitmap, false)
 +                Log.d("MapboxNavigationView", "✅ Imagem faltante $missingId carregada via listener")
 +              }
 +            }
@@ -2510,6 +2523,7 @@ index 41a3ba0..4affc44 100644
 +  private fun performUpdateRadarsFromUrl(style: com.mapbox.maps.Style, url: String) {
 +    try {
 +      loadRadarImages(style)
++      registerImageMissingListener(style)
 +      val urlChanged = url != lastRadarsGeoJsonUrlUsed
 +      if (!style.styleSourceExists("radars-source")) {
 +        val escapedUrl = url.replace("\\", "\\\\").replace("\"", "\\\"")
@@ -2520,7 +2534,7 @@ index 41a3ba0..4affc44 100644
 +              "data": "$escapedUrl",
 +              "cluster": true,
 +              "clusterRadius": 50,
-+              "clusterMaxZoom": 14
++              "clusterMaxZoom": 11
 +            }
 +          """.trimIndent()
 +        val sourceVal = com.mapbox.bindgen.Value.fromJson(sourceJson)
@@ -2549,6 +2563,29 @@ index 41a3ba0..4affc44 100644
 +
 +  private fun addBaseRadarLayersIfNeeded(style: com.mapbox.maps.Style) {
 +    if (style.styleLayerExists("radars-cluster-layer")) return
++    val aboveRoute =
++        if (style.styleLayerExists(TOP_LEVEL_ROUTE_LINE_LAYER_ID))
++          LayerPosition(TOP_LEVEL_ROUTE_LINE_LAYER_ID, null, null)
++        else null
++    // Ordem conforme docs Mapbox: unclustered PRIMEIRO, depois clusters
++    val baseSymbolFilter = buildBaseSymbolFilterJson()
++    val symbolJson =
++        """
++        {
++          "id": "radars-layer-symbol", "type": "symbol", "source": "radars-source",
++          "filter": $baseSymbolFilter,
++          "layout": {
++            "icon-image": ["coalesce", ["get", "iconImage"], "radar_movel"],
++            "icon-size": ["coalesce", ["get", "iconSize"], 0.05],
++            "icon-allow-overlap": true,
++            "icon-ignore-placement": true,
++            "icon-anchor": "center",
++            "icon-pitch-alignment": "viewport",
++            "icon-rotation-alignment": "viewport"
++          }
++        }
++      """.trimIndent()
++    com.mapbox.bindgen.Value.fromJson(symbolJson).value?.let { style.addStyleLayer(it, aboveRoute) }
 +    val clusterJson =
 +        """
 +        {
@@ -2561,7 +2598,7 @@ index 41a3ba0..4affc44 100644
 +          }
 +        }
 +      """.trimIndent()
-+    com.mapbox.bindgen.Value.fromJson(clusterJson).value?.let { style.addStyleLayer(it, null) }
++    com.mapbox.bindgen.Value.fromJson(clusterJson).value?.let { style.addStyleLayer(it, aboveRoute) }
 +    val countJson =
 +        """
 +        {
@@ -2575,7 +2612,7 @@ index 41a3ba0..4affc44 100644
 +          "paint": { "text-color": "#ffffff" }
 +        }
 +      """.trimIndent()
-+    com.mapbox.bindgen.Value.fromJson(countJson).value?.let { style.addStyleLayer(it, null) }
++    com.mapbox.bindgen.Value.fromJson(countJson).value?.let { style.addStyleLayer(it, aboveRoute) }
 +    val highlightFilter = buildHighlightFilterForBaseJson()
 +    val highlightJson =
 +        """
@@ -2592,25 +2629,7 @@ index 41a3ba0..4affc44 100644
 +          }
 +        }
 +      """.trimIndent()
-+    com.mapbox.bindgen.Value.fromJson(highlightJson).value?.let { style.addStyleLayer(it, null) }
-+    val baseSymbolFilter = buildBaseSymbolFilterJson()
-+    val symbolJson =
-+        """
-+        {
-+          "id": "radars-layer-symbol", "type": "symbol", "source": "radars-source",
-+          "filter": $baseSymbolFilter,
-+          "layout": {
-+            "icon-image": ["get", "iconImage"],
-+            "icon-size": ["get", "iconSize"],
-+            "icon-allow-overlap": true,
-+            "icon-ignore-placement": true,
-+            "icon-anchor": "center",
-+            "icon-pitch-alignment": "viewport",
-+            "icon-rotation-alignment": "viewport"
-+          }
-+        }
-+      """.trimIndent()
-+    com.mapbox.bindgen.Value.fromJson(symbolJson).value?.let { style.addStyleLayer(it, null) }
++    com.mapbox.bindgen.Value.fromJson(highlightJson).value?.let { style.addStyleLayer(it, aboveRoute) }
 +    if (nearbyRadarIds.isNotEmpty()) startRadarPulseAnimation(style)
 +  }
 +

@@ -1059,32 +1059,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
     [liveDeletedRadarIds],
   );
 
-  // Base via bridge (igual overlay) — URL GeoJSON não renderizava ícones no nativo
-  const baseMapboxRadars = useMemo(() => {
-    if (!isNavigating || radars.length === 0) return [];
-    const overlayIds = new Set(
-      liveOverlayMapboxRadars
-        .filter((r) => !liveDeletedRadarIdsSet.has(r.id))
-        .map((r) => r.id),
-    );
-    return radars
-      .filter((r) => r?.id && !overlayIds.has(r.id))
-      .map((r: any) => ({
-        id: r.id,
-        latitude: r.latitude,
-        longitude: r.longitude,
-        speedLimit: r.speedLimit ?? r.velocidadeLeve ?? 0,
-        type: normalizeRadarType(r.type ?? r.tipoRadar ?? "unknown"),
-      }));
-  }, [isNavigating, radars, liveOverlayMapboxRadars, liveDeletedRadarIdsSet]);
-
-  // Base: sincronizar baseMapboxRadars para mapboxBaseForNative (bridge)
-  useEffect(() => {
-    if (!isNavigating) return;
-    setMapboxBaseForNative(baseMapboxRadars);
-  }, [isNavigating, baseMapboxRadars]);
-
-  // mapboxRadars usado para lógica JS (proximity usa radars)
+  // Base vem do servidor via URL no nativo; mapboxRadars usado apenas para lógica JS (proximity)
   const mapboxRadars = useMemo(() => {
     if (!isNavigating) return EMPTY_MAPBOX_RADARS;
     const overlayIds = new Set(
@@ -1204,7 +1179,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
     }>
   >([]);
 
-  // Base: passar radares via bridge (igual Map/overlay) — URL GeoJSON não renderizava ícones no nativo
+  // Base: nativo carrega via URL GeoJSON (GET /radars/geojson) — sem bridge, otimizado
   useEffect(() => {
     if (!isNavigating) {
       setLiveDeletedRadarIds([]);
@@ -1213,6 +1188,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
       setMapboxOverlayForNative([]);
       return;
     }
+    setMapboxBaseForNative([]);
   }, [isNavigating]);
 
   // Overlay: push SOMENTE quando reporta (lista pequena)
@@ -1902,8 +1878,12 @@ export default function Home({ onOpenEditor }: HomeProps) {
         }}
         distanceUnit="metric"
         language="pt-BR"
-        // @ts-ignore — usar bridge (radars); URL GeoJSON não renderizava ícones no nativo
-        radarsGeoJsonUrl={undefined}
+        // @ts-ignore — base via GeoJSON URL (GET /radars/geojson), otimizado
+        radarsGeoJsonUrl={
+          isNavigating && API_BASE_URL
+            ? `${API_BASE_URL}/radars/geojson?t=${geoJsonRefreshKey}`
+            : undefined
+        }
         // @ts-ignore
         radars={mapboxBaseForNative}
         // @ts-ignore
@@ -1938,6 +1918,8 @@ export default function Home({ onOpenEditor }: HomeProps) {
     handleError,
     handleRouteAlternativeSelected,
     handleRouteChanged,
+    API_BASE_URL,
+    geoJsonRefreshKey,
   ]);
 
   return (
