@@ -69,6 +69,51 @@ def enableProguardInReleaseBuilds = false
  */
 def jscFlavor = 'org.webkit:android-jsc:+'
 
+// Copia ícones de radar de assets/images para res/drawable (nativo Mapbox usa getIdentifier)
+def radarAssetsDir = file("${project.rootProject.projectDir.parent}/assets/images")
+def drawableDir = file("${project.projectDir}/src/main/res/drawable")
+task copyRadarIconsToDrawable {
+    doLast {
+        if (!radarAssetsDir.exists()) {
+            println "copyRadarIconsToDrawable: assets/images não encontrado, ignorando."
+            return
+        }
+        drawableDir.mkdirs()
+        // Mapeamento: arquivo fonte -> lista de nomes drawable (camelCase + snake_case para GeoJSON)
+        def radarFiles = [
+            "radarMovel.png": ["assets_images_radarMovel", "assets_images_radar_movel"],
+            "radarSemaforico.png": ["assets_images_radarSemaforico", "assets_images_radar_semaforico"],
+            "radarFixo.png": ["assets_images_radarFixo", "assets_images_radar_fixo"],
+        ]
+        // Placas: placa0 e placa10 têm arquivos próprios; se não existirem, usa placa20 como fallback
+        for (int i = 0; i <= 160; i += 10) {
+            def f = new File(radarAssetsDir, "placa${i}.png")
+            if (!f.exists() && i < 20) f = new File(radarAssetsDir, "placa20.png")
+            if (f.exists()) {
+                def name = "assets_images_placa${i}"
+                def dest = new File(drawableDir, "${name}.png")
+                if (!dest.exists() || f.lastModified() > dest.lastModified()) {
+                    java.nio.file.Files.copy(f.toPath(), dest.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                    println "  Copiado ${f.name} -> ${name}.png"
+                }
+            }
+        }
+        radarFiles.each { sourceName, destNames ->
+            def src = new File(radarAssetsDir, sourceName)
+            if (src.exists()) {
+                destNames.each { baseName ->
+                    def dest = new File(drawableDir, "${baseName}.png")
+                    if (!dest.exists() || src.lastModified() > dest.lastModified()) {
+                        java.nio.file.Files.copy(src.toPath(), dest.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                        println "  Copiado ${sourceName} -> ${baseName}.png"
+                    }
+                }
+            }
+        }
+        println "copyRadarIconsToDrawable concluído."
+    }
+}
+
 // Task para aplicar patch ANTES do build - APENAS SE O ARQUIVO FOI MODIFICADO
 // Desabilitado para permitir edições manuais sem reversão
 task applyPatch {
@@ -193,3 +238,8 @@ dependencies {
 
 apply from: file("../../node_modules/@react-native-community/cli-platform-android/native_modules.gradle"); applyNativeModulesAppBuildGradle(project)
 apply from: "../../node_modules/react-native-vector-icons/fonts.gradle"
+
+// Garantir ícones de radar em res/drawable antes do build
+afterEvaluate {
+    preBuild.dependsOn copyRadarIconsToDrawable
+}
