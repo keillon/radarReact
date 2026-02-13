@@ -388,18 +388,6 @@ export default function Home({ onOpenEditor }: HomeProps) {
   const wsFlushScheduledRef = useRef(false);
   const mapboxPushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  function rearmRadarRuntimeState(radarIds: string[]) {
-    if (!radarIds || radarIds.length === 0) return;
-    radarIds.forEach((id) => {
-      if (!id) return;
-      alertedRadarIds.current.delete(id);
-      radarCriticalSoundPlayedIds.current.delete(id);
-      radarFeedbackActionIds.current.delete(id);
-      if (lastNearbyRadarIdRef.current === id) lastNearbyRadarIdRef.current = null;
-    });
-    rearmRadarState(radarIds);
-  }
-
   const upsertLiveRadarOverlay = useCallback((radar: Radar) => {
     if (!radar?.id) return;
     setLiveRadarOverlayMap((prevMap) => {
@@ -996,6 +984,18 @@ export default function Home({ onOpenEditor }: HomeProps) {
     resetProximityState,
   } = proximity;
 
+  const rearmRadarRuntimeState = useCallback((radarIds: string[]) => {
+    if (!radarIds || radarIds.length === 0) return;
+    radarIds.forEach((id) => {
+      if (!id) return;
+      alertedRadarIds.current.delete(id);
+      radarCriticalSoundPlayedIds.current.delete(id);
+      radarFeedbackActionIds.current.delete(id);
+      if (lastNearbyRadarIdRef.current === id) lastNearbyRadarIdRef.current = null;
+    });
+    rearmRadarState(radarIds);
+  }, [rearmRadarState]);
+
   const [mapboxRadarsForNative, setMapboxRadarsForNative] = useState<
     Array<(typeof mapboxRadars)[number]>
   >([]);
@@ -1018,7 +1018,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
       if (areMapboxRadarArraysEqual(previousRadars, mapboxRadars)) return;
       lastPushedMapboxRadarsRef.current = mapboxRadars;
       setMapboxRadarsForNative(mapboxRadars);
-    }, 120);
+    }, 180);
     return () => {
       if (mapboxPushTimeoutRef.current) {
         clearTimeout(mapboxPushTimeoutRef.current);
@@ -2314,7 +2314,7 @@ const styles = StyleSheet.create({
   radarAlertContainer: {
     position: "absolute",
     // Acima do trip progress: quando o radar aparece a câmera sobe e o trip progress fica embaixo
-    bottom: Platform.OS === "ios" ? 300 : 120,
+    bottom: Platform.OS === "ios" ? 300 : 80,
     left: 70,
     right: 16,
     zIndex: 1000,
