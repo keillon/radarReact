@@ -36,19 +36,19 @@ export default function App() {
     { value: "semaforo" as const, label: "Semáforo c/ Radar" },
   ];
 
-  // Calcular raio baseado no zoom para melhor performance
-  const getRadiusForZoom = useCallback((zoomLevel: number): number => {
-    if (zoomLevel >= 12) return 10000; // 10km em zoom alto
-    if (zoomLevel >= 10) return 25000; // 25km em zoom médio
-    return 50000; // 50km em zoom baixo
-  }, []);
+  // Admin: carregar TODOS os radares (sem limitar por zoom/raio da viewport)
+  const ADMIN_GLOBAL_RADIUS = 5_000_000; // ~5000km (fallback para backends que ainda filtram por raio)
 
   const loadRadars = useCallback(
-    async (lat: number, lng: number, radius: number) => {
+    async () => {
       setLoading(true);
       setError(null);
       try {
-        const list = await getRadarsNearLocation(lat, lng, radius);
+        const list = await getRadarsNearLocation(
+          DEFAULT_CENTER[1],
+          DEFAULT_CENTER[0],
+          ADMIN_GLOBAL_RADIUS
+        );
         setRadars(list);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Erro ao carregar radares");
@@ -60,23 +60,15 @@ export default function App() {
     []
   );
 
-  // Debounce no carregamento quando center/zoom muda
+  // Carregar todos os radares uma única vez ao abrir
   useEffect(() => {
-    if (loadTimeoutRef.current) {
-      clearTimeout(loadTimeoutRef.current);
-    }
-
-    loadTimeoutRef.current = setTimeout(() => {
-      const radius = getRadiusForZoom(zoom);
-      loadRadars(center[1], center[0], radius);
-    }, 500); // Aguardar 500ms após parar de mover o mapa
-
+    loadRadars();
     return () => {
       if (loadTimeoutRef.current) {
         clearTimeout(loadTimeoutRef.current);
       }
     };
-  }, [center, zoom, loadRadars, getRadiusForZoom]);
+  }, [loadRadars]);
 
   // WebSocket Connection for Real-time Updates
   useEffect(() => {
@@ -130,6 +122,8 @@ export default function App() {
                 setRadars((prev) => prev.filter((r) => r.id !== id));
                 setSelected((prev) => (prev && prev.id === id ? null : prev));
               }
+            } else if (message.event === "radar:refresh") {
+              loadRadars();
             }
           } catch (error) {
             console.error("❌ Admin: Erro ao processar mensagem do WebSocket:", error);
@@ -162,7 +156,7 @@ export default function App() {
         clearTimeout(reconnectTimeout);
       }
     };
-  }, []);
+  }, [loadRadars]);
 
   const handleSelectRadar = useCallback((radar: Radar) => {
     setSelected(radar);
@@ -333,8 +327,7 @@ export default function App() {
           <button
             type="button"
             onClick={() => {
-              const radius = getRadiusForZoom(zoom);
-              loadRadars(center[1], center[0], radius);
+              loadRadars();
             }}
             disabled={loading}
             style={{
@@ -734,8 +727,7 @@ export default function App() {
           )}
 
           <p style={{ marginTop: 16, fontSize: 13, color: "#9ca3af" }}>
-            {radars.length} radar(es) na região (raio{" "}
-            {getRadiusForZoom(zoom) / 1000} km, zoom {zoom.toFixed(1)}).
+            {radars.length} radar(es) carregados (base completa).
           </p>
           <p
             style={{
