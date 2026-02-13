@@ -10,6 +10,22 @@ import {
 
 const DEFAULT_CENTER: [number, number] = [-46.6333, -23.5505]; // [lng, lat] São Paulo
 
+function formatTimeAgo(ms: number): string {
+  const diff = Date.now() - ms;
+  const min = Math.floor(diff / 60000);
+  const h = Math.floor(diff / 3600000);
+  const d = Math.floor(diff / 86400000);
+  if (min < 1) return "Agora mesmo";
+  if (min < 60) return `Há ${min} min`;
+  if (h < 24) return `Há ${h}h`;
+  if (d < 7) return `Há ${d} dia${d > 1 ? "s" : ""}`;
+  return new Date(ms).toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 export default function App() {
   const [radars, setRadars] = useState<Radar[]>([]);
   const [loading, setLoading] = useState(true);
@@ -504,44 +520,28 @@ export default function App() {
         </div>
       )}
 
-      {/* Vignette + Modal radar no topo (ao clicar em um radar) */}
+      {/* Modal radar no topo (radar destacado no mapa, sem vignette) */}
       {selected && !pendingAdd && (
-        <>
-          <div
-            style={{
-              position: "fixed",
-              inset: 0,
-              background: "radial-gradient(ellipse at center, transparent 0%, rgba(0,0,0,0.4) 100%)",
-              pointerEvents: "none",
-              zIndex: 900,
-            }}
-            aria-hidden
-          />
-          <div
-            style={{
-              position: "fixed",
-              top: 16,
-              left: 16,
-              right: 16,
-              maxWidth: 400,
-              background: "#fff",
-              borderRadius: 12,
-              padding: 16,
-              boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
-              zIndex: 1001,
-              display: "flex",
-              alignItems: "center",
-              gap: 16,
-            }}
-          >
+        <div
+          style={{
+            position: "fixed",
+            top: 16,
+            left: 16,
+            right: 16,
+            maxWidth: 420,
+            background: "#fff",
+            borderRadius: 12,
+            padding: 16,
+            boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
+            zIndex: 1001,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 12 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <h3 style={{ margin: "0 0 4px", fontSize: 16, fontWeight: 600 }}>
                 {selected.type || "Radar"}
                 {selected.speedLimit != null && ` • ${selected.speedLimit} km/h`}
               </h3>
-              <p style={{ margin: 0, fontSize: 13, color: "#6b7280" }}>
-                {selected.latitude.toFixed(5)}, {selected.longitude.toFixed(5)}
-              </p>
               {selected.situacao === "Inativo" || selected.situacao === "inativo" ? (
                 <span style={{ fontSize: 12, color: "#9ca3af", fontWeight: 600 }}>Inativo</span>
               ) : null}
@@ -561,7 +561,22 @@ export default function App() {
               Fechar
             </button>
           </div>
-        </>
+          <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
+            {selected.rodovia || selected.municipio ? (
+              <p style={{ margin: 0, fontSize: 14, color: "#374151" }}>
+                📍 {selected.rodovia || `${selected.municipio}${selected.uf ? ` - ${selected.uf}` : ""}`}
+              </p>
+            ) : null}
+            <p style={{ margin: 0, fontSize: 14, color: "#374151" }}>
+              👤 {selected.source === "user" ? "Reportado pela comunidade" : selected.source ? `Fonte: ${selected.source}` : "Dados oficiais"}
+            </p>
+            {selected.createdAt && (
+              <p style={{ margin: 0, fontSize: 14, color: "#374151" }}>
+                🕐 {formatTimeAgo(new Date(selected.createdAt).getTime())}
+              </p>
+            )}
+          </div>
+        </div>
       )}
 
       <div style={{ display: "flex", flex: 1, minHeight: 0 }}>

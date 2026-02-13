@@ -14,6 +14,12 @@ export interface Radar {
   confirms?: number;
   denies?: number;
   reportedAt?: number;
+  /** Fonte: "user" = reportado por usuário, "csv" = dados oficiais, etc */
+  source?: string | null;
+  rodovia?: string | null;
+  municipio?: string | null;
+  uf?: string | null;
+  createdAt?: number; // timestamp ms
 }
 
 export interface RoutePoint {

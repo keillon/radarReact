@@ -65,6 +65,24 @@ export const geocodeAddress = async (address: string): Promise<LatLng> => {
   return { latitude, longitude };
 };
 
+/** Reverse geocode: coordenadas → endereço (rua, bairro, cidade) */
+export const reverseGeocode = async (
+  latitude: number,
+  longitude: number
+): Promise<string | null> => {
+  const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${longitude},${latitude}.json?access_token=${MAPBOX_TOKEN}&limit=1&language=pt&country=BR`;
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const json = await response.json();
+    const feature = json?.features?.[0];
+    if (!feature?.place_name) return null;
+    return feature.place_name as string;
+  } catch {
+    return null;
+  }
+};
+
 export const getRoute = async (
   origin: LatLng,
   destination: LatLng

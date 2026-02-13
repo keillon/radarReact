@@ -80,6 +80,8 @@ interface MapProps {
   hideUserLocation?: boolean;
   /** Ponto selecionado no modo picker (ex.: toque no mapa) — mostra marcador vermelho */
   pickerSelectedPoint?: { latitude: number; longitude: number } | null;
+  /** Radar destacado (iluminado) — sem vignette, só glow no ponto */
+  highlightedRadar?: { latitude: number; longitude: number } | null;
 }
 
 export type MapHandle = {
@@ -106,6 +108,7 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
     onCameraChanged,
     hideUserLocation = false,
     pickerSelectedPoint = null,
+    highlightedRadar = null,
   },
   ref,
 ) {
@@ -719,6 +722,48 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
                   iconSize: ["coalesce", ["get", "iconSize"], 0.2],
                   iconAllowOverlap: true,
                   iconIgnorePlacement: true,
+                }}
+              />
+            </ShapeSource>
+          )}
+
+        {/* Destaque do radar selecionado (glow iluminado, sem vignette) */}
+        {highlightedRadar != null &&
+          typeof highlightedRadar.latitude === "number" &&
+          typeof highlightedRadar.longitude === "number" && (
+            <ShapeSource
+              id="highlightedRadar"
+              shape={{
+                type: "Feature",
+                properties: {},
+                geometry: {
+                  type: "Point",
+                  coordinates: [
+                    highlightedRadar.longitude,
+                    highlightedRadar.latitude,
+                  ],
+                },
+              }}
+            >
+              <CircleLayer
+                id="highlightedRadarGlow"
+                style={{
+                  circleRadius: 45,
+                  circleColor: "#fbbf24",
+                  circleOpacity: 0.4,
+                  circleStrokeWidth: 4,
+                  circleStrokeColor: "#fcd34d",
+                  circleStrokeOpacity: 0.9,
+                }}
+              />
+              <CircleLayer
+                id="highlightedRadarRing"
+                style={{
+                  circleRadius: 25,
+                  circleColor: "transparent",
+                  circleStrokeWidth: 4,
+                  circleStrokeColor: "#fbbf24",
+                  circleStrokeOpacity: 1,
                 }}
               />
             </ShapeSource>

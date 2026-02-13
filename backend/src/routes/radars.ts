@@ -226,6 +226,8 @@ async function loadAllRadarsFast(): Promise<RadarResponseItem[]> {
       denies: true,
       source: true,
       rodovia: true,
+      municipio: true,
+      uf: true,
       createdAt: true,
       lastConfirmedAt: true,
     },

@@ -19,11 +19,20 @@ interface ApiRadarResponse {
   ativo?: boolean;
   confirms?: number;
   denies?: number;
+  source?: string | null;
+  createdAt?: string | number; // ISO string ou timestamp
+  reportedBy?: string | null;
   [key: string]: any; // outros campos que podem existir
 }
 
 // Mapear radares da API para o formato esperado
 const mapApiRadarToRadar = (apiRadar: ApiRadarResponse): Radar => {
+  let createdAtMs: number | undefined;
+  if (apiRadar.createdAt != null) {
+    if (typeof apiRadar.createdAt === "number") createdAtMs = apiRadar.createdAt;
+    else if (typeof apiRadar.createdAt === "string")
+      createdAtMs = new Date(apiRadar.createdAt).getTime();
+  }
   return {
     id: apiRadar.id,
     latitude: apiRadar.latitude,
@@ -34,6 +43,12 @@ const mapApiRadarToRadar = (apiRadar: ApiRadarResponse): Radar => {
     ativo: apiRadar.ativo,
     confirms: apiRadar.confirms,
     denies: apiRadar.denies,
+    source: apiRadar.source ?? undefined,
+    rodovia: apiRadar.rodovia ?? undefined,
+    municipio: apiRadar.municipio ?? undefined,
+    uf: apiRadar.uf ?? undefined,
+    createdAt: createdAtMs,
+    reportedAt: createdAtMs,
   };
 };
 

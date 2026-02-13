@@ -10,12 +10,14 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import Ionicons from "react-native-vector-icons/Ionicons";
 import Geolocation from "react-native-geolocation-service";
 import Map, {
   getClosestPlacaName,
   radarImages,
   type MapHandle,
 } from "../components/Map";
+import { reverseGeocode } from "../services/mapbox";
 import {
   API_BASE_URL,
   Radar,
@@ -27,6 +29,22 @@ import {
 
 const DEFAULT_CENTER = { latitude: -23.5505, longitude: -46.6333 };
 const LOAD_RADIUS_M = 30000;
+
+function formatTimeAgo(ms: number): string {
+  const diff = Date.now() - ms;
+  const min = Math.floor(diff / 60000);
+  const h = Math.floor(diff / 3600000);
+  const d = Math.floor(diff / 86400000);
+  if (min < 1) return "Agora mesmo";
+  if (min < 60) return `Há ${min} min`;
+  if (h < 24) return `Há ${h}h`;
+  if (d < 7) return `Há ${d} dia${d > 1 ? "s" : ""}`;
+  return new Date(ms).toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
 
 type EditorMode = "view" | "add" | "move";
 
@@ -49,6 +67,7 @@ export default function RadarEditorScreen({
   const [radarType, setRadarType] = useState<
     "móvel" | "semaforo" | "placa"
   >("placa");
+  const [radarDetailAddress, setRadarDetailAddress] = useState<string | null>(null);
   const editorMapRef = useRef<MapHandle | null>(null);
 
   const RADAR_TYPES: {
@@ -162,6 +181,31 @@ export default function RadarEditorScreen({
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
     };
   }, []);
+
+  useEffect(() => {
+    if (!selectedRadar) {
+      setRadarDetailAddress(null);
+      return;
+    }
+    const addr =
+      selectedRadar.rodovia ||
+      (selectedRadar.municipio
+        ? `${selectedRadar.municipio}${selectedRadar.uf ? ` - ${selectedRadar.uf}` : ""}`
+        : null);
+    if (addr) {
+      setRadarDetailAddress(addr);
+      return;
+    }
+    setRadarDetailAddress(null);
+    let cancelled = false;
+    reverseGeocode(selectedRadar.latitude, selectedRadar.longitude).then(
+      (place) => {
+        if (!cancelled)
+          setRadarDetailAddress(place ?? "Endereço não disponível");
+      }
+    );
+    return () => { cancelled = true; };
+  }, [selectedRadar?.id, selectedRadar?.latitude, selectedRadar?.longitude]);
 
   const handleRadarPress = (radar: Radar) => {
     if (mode === "add") return;
@@ -389,6 +433,11 @@ export default function RadarEditorScreen({
           onMapPress={handleMapPress}
           interactive={true}
           currentLocation={center}
+          highlightedRadar={
+            selectedRadar && mode === "view"
+              ? { latitude: selectedRadar.latitude, longitude: selectedRadar.longitude }
+              : null
+          }
         />
         {loading && (
           <View style={styles.loadingOverlay}>
@@ -398,74 +447,45 @@ export default function RadarEditorScreen({
         )}
       </View>
 
-      {/* Vignette + Modal radar no topo (ao clicar em um radar) */}
+      {/* Modal radar no topo (radar destacado no mapa, sem vignette) */}
       {selectedRadar && mode === "view" && (
-        <>
-          <View
-            style={[
-              StyleSheet.absoluteFill,
-              {
-                backgroundColor: "rgba(0,0,0,0.35)",
-                zIndex: 999,
-                elevation: 999,
-                pointerEvents: "box-none",
-              },
-            ]}
-          >
-            <TouchableOpacity
-              style={StyleSheet.absoluteFill}
-              activeOpacity={1}
-              onPress={() => setSelectedRadar(null)}
-            />
-          </View>
+        <View
+          style={{
+            position: "absolute",
+            top: 56,
+            left: 16,
+            right: 16,
+            zIndex: 1000,
+            elevation: 1000,
+          }}
+          pointerEvents="box-none"
+        >
           <View
             style={{
-              position: "absolute",
-              top: 56,
-              left: 16,
-              right: 16,
-              zIndex: 1000,
-              elevation: 1000,
+              flexDirection: "column",
+              padding: 16,
+              backgroundColor: "#fff",
+              borderRadius: 12,
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.3,
+              shadowRadius: 8,
+              elevation: 8,
+              maxWidth: 420,
+              alignSelf: "center",
             }}
-            pointerEvents="box-none"
           >
-            <View
-              style={{
-                flexDirection: "row",
-                  alignItems: "center",
-                  gap: 16,
-                  padding: 16,
-                  backgroundColor: "#fff",
-                  borderRadius: 12,
-                  shadowColor: "#000",
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.3,
-                  shadowRadius: 8,
-                  elevation: 8,
-                  maxWidth: 400,
-                  alignSelf: "center",
-                }}
-            >
+            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12 }}>
               <View>
                 <Image
                   source={
                     (() => {
-                      const t = String(selectedRadar.type || "")
-                        .trim()
-                        .toLowerCase();
-                      if (
-                        t.includes("semaforo") ||
-                        t.includes("camera") ||
-                        t.includes("fotografica")
-                      )
+                      const t = String(selectedRadar.type || "").trim().toLowerCase();
+                      if (t.includes("semaforo") || t.includes("camera") || t.includes("fotografica"))
                         return radarImages.radarSemaforico;
                       if (t.includes("movel") || t.includes("mobile"))
                         return radarImages.radarMovel;
-                      return (
-                        radarImages[
-                          getClosestPlacaName(selectedRadar.speedLimit)
-                        ] || radarImages.placa60
-                      );
+                      return radarImages[getClosestPlacaName(selectedRadar.speedLimit)] || radarImages.placa60;
                     })()
                   }
                   style={{ width: 56, height: 56 }}
@@ -475,33 +495,47 @@ export default function RadarEditorScreen({
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={{ fontSize: 16, fontWeight: "600", marginBottom: 4 }}>
                   {selectedRadar.type || "Radar"}
-                  {selectedRadar.speedLimit != null &&
-                    ` • ${selectedRadar.speedLimit} km/h`}
-                </Text>
-                <Text
-                  style={{ fontSize: 13, color: "#6b7280" }}
-                  numberOfLines={1}
-                >
-                  {selectedRadar.latitude.toFixed(5)},{" "}
-                  {selectedRadar.longitude.toFixed(5)}
+                  {selectedRadar.speedLimit != null && ` • ${selectedRadar.speedLimit} km/h`}
                 </Text>
               </View>
               <TouchableOpacity
-                style={{
-                  padding: 12,
-                  backgroundColor: "#e5e7eb",
-                  borderRadius: 8,
-                }}
+                style={{ padding: 12, backgroundColor: "#e5e7eb", borderRadius: 8 }}
                 onPress={() => setSelectedRadar(null)}
                 activeOpacity={0.8}
               >
-                <Text style={{ fontWeight: "600", color: "#374151" }}>
-                  Fechar
-                </Text>
+                <Text style={{ fontWeight: "600", color: "#374151" }}>Fechar</Text>
               </TouchableOpacity>
             </View>
+            <View style={{ borderTopWidth: 1, borderTopColor: "#e5e7eb", paddingTop: 12, gap: 6 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <Ionicons name="location" size={16} color="#6b7280" />
+                <Text style={{ fontSize: 14, color: "#374151", flex: 1 }} numberOfLines={2}>
+                  {radarDetailAddress ?? "Carregando endereço..."}
+                </Text>
+              </View>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <Ionicons name="people" size={16} color="#6b7280" />
+                <Text style={{ fontSize: 14, color: "#374151" }}>
+                  {selectedRadar.source === "user" || selectedRadar.source === "reportado"
+                    ? "Reportado pela comunidade"
+                    : selectedRadar.source
+                      ? `Fonte: ${selectedRadar.source}`
+                      : "Dados oficiais"}
+                </Text>
+              </View>
+              {(selectedRadar.createdAt ?? selectedRadar.reportedAt) && (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <Ionicons name="time" size={16} color="#6b7280" />
+                  <Text style={{ fontSize: 14, color: "#374151" }}>
+                    {formatTimeAgo(
+                      selectedRadar.createdAt ?? selectedRadar.reportedAt ?? 0
+                    )}
+                  </Text>
+                </View>
+              )}
+            </View>
           </View>
-        </>
+        </View>
       )}
 
       {/* Modal: Reportar radar (velocidade + tipo) */}

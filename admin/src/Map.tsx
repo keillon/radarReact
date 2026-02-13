@@ -381,7 +381,7 @@ function Map({
     }
   }, [radars]);
 
-  // Update feature-state for selected radar
+  // Update feature-state for selected radar + highlight circle (iluminado)
   useEffect(() => {
     const map = mapRef.current;
     const source = map?.getSource(SOURCE_ID);
@@ -405,7 +405,57 @@ function Map({
         // ignore if feature not found
       }
     }
-  }, [selectedId]);
+    // Highlight circle (radar iluminado/destacado)
+    const hlSource = map.getSource("selected-radar-highlight") as mapboxgl.GeoJSONSource | undefined;
+    if (selectedId) {
+      const radar = radarsRef.current.find((r) => r.id === selectedId);
+      if (radar) {
+        const geo: GeoJSON.FeatureCollection = {
+          type: "FeatureCollection",
+          features: [{
+            type: "Feature",
+            geometry: {
+              type: "Point",
+              coordinates: [radar.longitude, radar.latitude],
+            },
+            properties: {},
+          }],
+        };
+        if (hlSource) {
+          hlSource.setData(geo);
+        } else {
+          map.addSource("selected-radar-highlight", { type: "geojson", data: geo });
+          map.addLayer({
+            id: "selected-radar-highlight",
+            type: "circle",
+            source: "selected-radar-highlight",
+            paint: {
+              "circle-radius": 35,
+              "circle-color": "#fbbf24",
+              "circle-opacity": 0.35,
+              "circle-stroke-width": 4,
+              "circle-stroke-color": "#fcd34d",
+              "circle-stroke-opacity": 0.9,
+            },
+          });
+          map.addLayer({
+            id: "selected-radar-highlight-ring",
+            type: "circle",
+            source: "selected-radar-highlight",
+            paint: {
+              "circle-radius": 20,
+              "circle-color": "transparent",
+              "circle-stroke-width": 4,
+              "circle-stroke-color": "#fbbf24",
+              "circle-stroke-opacity": 1,
+            },
+          });
+        }
+      }
+    } else if (hlSource) {
+      hlSource.setData({ type: "FeatureCollection" as const, features: [] });
+    }
+  }, [selectedId, radars]);
 
   return <div ref={containerRef} style={{ width: "100%", height: "100%" }} />;
 }
