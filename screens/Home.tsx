@@ -63,7 +63,11 @@ import {
   RouteResponse,
 } from "../services/mapbox";
 import { areMapboxRadarArraysEqual } from "../utils/radarDiff";
-import { calculateDistance, getCumulativeDistances } from "../utils/radarGeometry";
+import {
+  calculateDistance,
+  calculateDistanceToRoute,
+  getCumulativeDistances,
+} from "../utils/radarGeometry";
 // TTS: carregar só no primeiro uso para evitar "Requiring unknown module 'undefined'" no startup
 let TtsCache: any = undefined; // undefined = ainda não tentou; null = tentou e falhou
 function getTts(): any {
@@ -252,6 +256,14 @@ export default function Home({ onOpenEditor }: HomeProps) {
   const [reportCustomLocation, setReportCustomLocation] =
     useState<LatLng | null>(null);
   const [showMapPicker, setShowMapPicker] = useState(false);
+
+  // Radares ao longo da rota (máx 1200) para enviar ao mapa nativo — evita ANR ao reportar (nunca enviar 16k+)
+  const [radarsAlongRouteForNative, setRadarsAlongRouteForNative] = useState<
+    Array<{ id: string; latitude: number; longitude: number; speedLimit: number; type: string }>
+  >([]);
+  const [routeFilterVersion, setRouteFilterVersion] = useState(0);
+  const MAX_RADARS_TO_NATIVE = 1200;
+  const ROUTE_RADAR_DISTANCE_METERS = 2000;
   const [mapPickerCenter, setMapPickerCenter] = useState<LatLng | null>(null);
   const [pickerPreviewCoords, setPickerPreviewCoords] = useState<LatLng | null>(null); // Preview lat/lon durante marcação
   const pickerPreviewIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -418,9 +430,10 @@ export default function Home({ onOpenEditor }: HomeProps) {
   const wsDeferredSyncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   );
-  const lastPushedMapboxRadarsRef = useRef<any[] | null>(null);
+  const lastPushedBaseRef = useRef<any[] | null>(null);
+  const lastPushedOverlayRef = useRef<any[] | null>(null);
   const wsFlushScheduledRef = useRef(false);
-  const mapboxPushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const overlayPushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const upsertLiveRadarOverlay = useCallback((radar: Radar) => {
     if (!radar?.id) return;
@@ -571,6 +584,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
     if (!Array.isArray(coordinates) || coordinates.length < 2) {
       routePointsRef.current = [];
       routeCumulativeRef.current = [];
+      setRadarsAlongRouteForNative([]);
       return;
     }
     const points: LatLng[] = coordinates
@@ -582,6 +596,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
     routePointsRef.current = points;
     routeCumulativeRef.current =
       points.length >= 2 ? getCumulativeDistances(points) : [];
+    setRouteFilterVersion((v) => v + 1);
   }, [routeData?.route?.geometry?.coordinates]);
 
   useEffect(() => {
@@ -880,11 +895,13 @@ export default function Home({ onOpenEditor }: HomeProps) {
     setReportSpeedLimit("");
     setReportRadarType("móvel");
 
-    // Adiciona à lista de reportados (pequena, rápido) + overlay visual durante navegação
-    addReportedRadar(tempRadar);
-    if (isNavigating) {
-      upsertLiveRadarOverlay(tempRadar);
-    }
+    // Atualização em baixa prioridade para não travar a UI (evita ANR ao reportar)
+    startTransition(() => {
+      addReportedRadar(tempRadar);
+      if (isNavigating) {
+        upsertLiveRadarOverlay(tempRadar);
+      }
+    });
 
     // Auto-dismiss modal
     setTimeout(() => {
@@ -951,7 +968,41 @@ export default function Home({ onOpenEditor }: HomeProps) {
   isNavigatingRef.current = isNavigating;
   currentLocationRef.current = currentLocation;
 
-  // Preparar radares para o MapboxNavigation
+  // Computar radares ao longo da rota (máx 1200) em background — só quando rota ou CSV muda. Reportados vão no overlay.
+  useEffect(() => {
+    if (!isNavigating || routePointsRef.current.length < 2) {
+      setRadarsAlongRouteForNative([]);
+      return;
+    }
+    const points = routePointsRef.current;
+    const csv = csvRadars;
+    const timer = setTimeout(() => {
+      const withDistance: Array<{ r: (typeof csv)[0]; d: number }> = [];
+      for (let i = 0; i < csv.length; i++) {
+        const r = csv[i];
+        if (!r?.id || r.latitude == null || r.longitude == null) continue;
+        const d = calculateDistanceToRoute(
+          { latitude: r.latitude, longitude: r.longitude },
+          points
+        );
+        if (d <= ROUTE_RADAR_DISTANCE_METERS) withDistance.push({ r, d });
+      }
+      withDistance.sort((a, b) => a.d - b.d);
+      const limited = withDistance.slice(0, MAX_RADARS_TO_NATIVE).map(({ r }) => ({
+        id: r.id,
+        latitude: r.latitude,
+        longitude: r.longitude,
+        speedLimit: r.speedLimit ?? (r as any).velocidadeLeve ?? 0,
+        type: normalizeRadarType(r.type ?? (r as any).tipoRadar ?? "unknown"),
+      }));
+      setRadarsAlongRouteForNative((prev) =>
+        prev.length === limited.length && prev[0]?.id === limited[0]?.id ? prev : limited
+      );
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [isNavigating, routeFilterVersion, csvRadars]);
+
+  // Preparar radares para o MapboxNavigation (base completo para outros usos; mapa nativo usa lista limitada)
   const baseMapboxRadars = useMemo(() => {
     if (!isNavigating || radars.length === 0) return [];
     return radars.map((r: any) => ({
@@ -979,7 +1030,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
     [liveDeletedRadarIds]
   );
 
-  // Base + overlay. Overlay primeiro para limite 80 priorizar novos.
+  // Lista enviada ao mapa nativo: APENAS overlay + radares ao longo da rota (máx 1200). Nunca 16k+ — evita ANR ao reportar.
   const mapboxRadars = useMemo(() => {
     if (!isNavigating) return EMPTY_MAPBOX_RADARS;
     const overlayIds = new Set(
@@ -988,11 +1039,11 @@ export default function Home({ onOpenEditor }: HomeProps) {
     const overlayFirst = liveOverlayMapboxRadars.filter(
       (r) => r?.id && !liveDeletedRadarIdsSet.has(r.id)
     );
-    const rest = baseMapboxRadars.filter(
+    const rest = radarsAlongRouteForNative.filter(
       (r) => r?.id && !liveDeletedRadarIdsSet.has(r.id) && !overlayIds.has(r.id)
     );
     return [...overlayFirst, ...rest];
-  }, [isNavigating, baseMapboxRadars, liveOverlayMapboxRadars, liveDeletedRadarIdsSet]);
+  }, [isNavigating, radarsAlongRouteForNative, liveOverlayMapboxRadars, liveDeletedRadarIdsSet]);
 
   // Para cálculo do modal/metros, usamos base + overlay em tempo real (somente JS).
   const radarsForProximity = useMemo(() => {
@@ -1045,39 +1096,50 @@ export default function Home({ onOpenEditor }: HomeProps) {
     rearmRadarState(radarIds);
   }, [rearmRadarState]);
 
-  const [mapboxRadarsForNative, setMapboxRadarsForNative] = useState<
-    Array<(typeof mapboxRadars)[number]>
+  // Base: CSV ao longo da rota — enviada UMA vez, nunca muda ao reportar
+  const [mapboxBaseForNative, setMapboxBaseForNative] = useState<
+    Array<{ id: string; latitude: number; longitude: number; speedLimit: number; type: string }>
+  >([]);
+  // Overlay: SOMENTE radares reportados — enviada ao reportar (lista pequena, 1–10 itens)
+  const [mapboxOverlayForNative, setMapboxOverlayForNative] = useState<
+    Array<{ id: string; latitude: number; longitude: number; speedLimit: number; type: string }>
   >([]);
 
-  // Push otimizado: evita flood no bridge quando conteúdo não mudou.
+  // Base: push UMA vez quando rota está pronta (radares CSV ao longo da rota)
   useEffect(() => {
     if (!isNavigating) {
       setLiveDeletedRadarIds([]);
-      lastPushedMapboxRadarsRef.current = null;
-      setMapboxRadarsForNative([]);
+      lastPushedBaseRef.current = null;
+      setMapboxBaseForNative([]);
+      setMapboxOverlayForNative([]);
       return;
     }
-    if (mapboxPushTimeoutRef.current) {
-      clearTimeout(mapboxPushTimeoutRef.current);
-      mapboxPushTimeoutRef.current = null;
-    }
-    mapboxPushTimeoutRef.current = setTimeout(() => {
-      mapboxPushTimeoutRef.current = null;
-      const previousRadars = lastPushedMapboxRadarsRef.current as typeof mapboxRadars | null;
-      if (areMapboxRadarArraysEqual(previousRadars, mapboxRadars)) return;
-      lastPushedMapboxRadarsRef.current = mapboxRadars;
-      // Nunca empurrar durante gesto/animacao - evita travar UI durante scroll/toque
-      InteractionManager.runAfterInteractions(() => {
-        setMapboxRadarsForNative(mapboxRadars);
-      });
-    }, 600);
+    const base = radarsAlongRouteForNative;
+    if (base.length === 0) return;
+    if (areMapboxRadarArraysEqual(lastPushedBaseRef.current as typeof base | null, base)) return;
+    lastPushedBaseRef.current = base;
+    InteractionManager.runAfterInteractions(() => setMapboxBaseForNative(base));
+  }, [isNavigating, radarsAlongRouteForNative]);
+
+  // Overlay: push SOMENTE quando reporta (lista pequena)
+  const overlayToPush = useMemo(() => {
+    if (!isNavigating) return [];
+    return liveOverlayMapboxRadars.filter((r) => r?.id && !liveDeletedRadarIdsSet.has(r.id));
+  }, [isNavigating, liveOverlayMapboxRadars, liveDeletedRadarIdsSet]);
+
+  useEffect(() => {
+    if (!isNavigating) return;
+    if (overlayPushTimeoutRef.current) clearTimeout(overlayPushTimeoutRef.current);
+    overlayPushTimeoutRef.current = setTimeout(() => {
+      overlayPushTimeoutRef.current = null;
+      if (areMapboxRadarArraysEqual(lastPushedOverlayRef.current as typeof overlayToPush | null, overlayToPush)) return;
+      lastPushedOverlayRef.current = overlayToPush;
+      InteractionManager.runAfterInteractions(() => setMapboxOverlayForNative(overlayToPush));
+    }, 150);
     return () => {
-      if (mapboxPushTimeoutRef.current) {
-        clearTimeout(mapboxPushTimeoutRef.current);
-        mapboxPushTimeoutRef.current = null;
-      }
+      if (overlayPushTimeoutRef.current) clearTimeout(overlayPushTimeoutRef.current);
     };
-  }, [isNavigating, mapboxRadars]);
+  }, [isNavigating, overlayToPush]);
 
   // WebSocket: única fonte de atualizações em tempo real (sem polling).
   // Alguém reporta radar → backend emite radar:new → cliente recebe e atualiza o mapa uma vez.
@@ -1573,7 +1635,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
       if (points.length < 2) return;
       routePointsRef.current = points;
       routeCumulativeRef.current = getCumulativeDistances(points);
-
+      setRouteFilterVersion((v) => v + 1);
     } catch (error) {
       console.error("Erro ao processar mudança de rota:", error);
     }
@@ -1704,7 +1766,9 @@ export default function Home({ onOpenEditor }: HomeProps) {
         distanceUnit="metric"
         language="pt-BR"
         // @ts-ignore
-        radars={mapboxRadarsForNative}
+        radars={mapboxBaseForNative}
+        // @ts-ignore
+        overlayRadars={mapboxOverlayForNative}
         // @ts-ignore
         nearbyRadarIds={nearbyRadarIdsArray}
         // @ts-ignore
@@ -1722,7 +1786,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
     );
   }, [
     MapboxNavComponent, isNavigating, origin, destination, destinationText,
-    mapboxRadarsForNative, nearbyRadarIdsArray, nearestRadar,
+    mapboxBaseForNative, mapboxOverlayForNative, nearbyRadarIdsArray, nearestRadar,
     handleLocationChange, handleRouteProgressChange, handleArrive, handleCancelNavigation, handleError, handleRouteAlternativeSelected, handleRouteChanged
   ]);
 
