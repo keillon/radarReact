@@ -12,6 +12,7 @@ import {
   Alert,
   Animated,
   Image,
+  InteractionManager,
   Modal,
   PermissionsAndroid,
   Platform,
@@ -42,8 +43,10 @@ function getGeolocation(): GeolocationApi {
   return GeolocationModule;
 }
 
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getClosestPlacaName, radarImages } from "../components/Map";
 import SearchContainer from "../components/SearchContainer";
+import { useRadarProximity } from "../hooks/useRadarProximity";
 import {
   API_BASE_URL,
   confirmRadar,
@@ -52,7 +55,6 @@ import {
   Radar,
   reportRadar
 } from "../services/api";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   geocodeAddress,
   getRoute,
@@ -60,7 +62,6 @@ import {
   LatLng,
   RouteResponse,
 } from "../services/mapbox";
-import { useRadarProximity } from "../hooks/useRadarProximity";
 import { areMapboxRadarArraysEqual } from "../utils/radarDiff";
 import { calculateDistance, getCumulativeDistances } from "../utils/radarGeometry";
 // TTS: carregar só no primeiro uso para evitar "Requiring unknown module 'undefined'" no startup
@@ -215,7 +216,10 @@ export default function Home({ onOpenEditor }: HomeProps) {
   const [routeData, setRouteData] = useState<RouteResponse | null>(null);
   const [isNavigating, setIsNavigating] = useState(false);
   const [isPreparingNavigation, setIsPreparingNavigation] = useState(false);
-  const [radarsMap, setRadarsMap] = useState<Map<string, Radar>>(new Map());
+  // Radares do CSV: 16k+ radares fixos, carregados 1x, NUNCA mudam
+  const [csvRadarsMap, setCsvRadarsMap] = useState<Map<string, Radar>>(new Map());
+  // Radares reportados: apenas radares criados por usuários, lista pequena e dinâmica
+  const [reportedRadarsMap, setReportedRadarsMap] = useState<Map<string, Radar>>(new Map());
   const [loading, setLoading] = useState(false);
   const [geocoding, setGeocoding] = useState(false);
   const [currentLocation, setCurrentLocation] = useState<LatLng | null>(null);
@@ -278,20 +282,50 @@ export default function Home({ onOpenEditor }: HomeProps) {
     type: "info",
   });
 
-  const radars = useMemo(() => Array.from(radarsMap.values()), [radarsMap]);
-  const setRadars = useCallback((nextValue: RadarArrayUpdater) => {
-    setRadarsMap((prevMap) => {
-      const prevArray = Array.from(prevMap.values());
-      const nextArray =
-        typeof nextValue === "function"
-          ? (nextValue as (prev: Radar[]) => Radar[])(prevArray)
-          : nextValue;
-      const nextMap = new Map<string, Radar>();
-      for (const radar of nextArray) {
-        if (!radar?.id) continue;
-        nextMap.set(radar.id, radar);
-      }
-      return nextMap;
+  // CSV radars: converter Map → Array apenas quando CSV muda (raro)
+  const csvRadars = useMemo(() => Array.from(csvRadarsMap.values()), [csvRadarsMap]);
+
+  // Reported radars: converter Map → Array quando reportados mudam (frequente, mas lista pequena)
+  const reportedRadars = useMemo(() => Array.from(reportedRadarsMap.values()), [reportedRadarsMap]);
+
+  // Combinar: concat é MUITO mais rápido que criar novo Map gigante
+  // csvRadars raramente muda (16k array criado 1x), reportedRadars é pequeno
+  const radars = useMemo(() => {
+    // Dedup: se reported tem mesmo ID que CSV, reported ganha
+    const reportedIds = new Set(reportedRadars.map(r => r.id));
+    const filtered = csvRadars.filter(r => !reportedIds.has(r.id));
+    return [...filtered, ...reportedRadars];
+  }, [csvRadars, reportedRadars]);
+
+  // setRadars: APENAS para radares CSV (carga inicial)
+  const setCsvRadars = useCallback((nextValue: RadarArrayUpdater) => {
+    const nextArray = typeof nextValue === "function" ? nextValue([]) : nextValue;
+    const nextMap = new Map<string, Radar>();
+    for (const radar of nextArray) {
+      if (!radar?.id) continue;
+      nextMap.set(radar.id, radar);
+    }
+    setCsvRadarsMap(nextMap);
+  }, []);
+
+  // Adicionar radar reportado (lista pequena, sempre rápido)
+  const addReportedRadar = useCallback((radar: Radar) => {
+    if (!radar?.id) return;
+    setReportedRadarsMap((prev) => {
+      const next = new Map(prev);
+      next.set(radar.id, radar);
+      return next;
+    });
+  }, []);
+
+  // Remover radar reportado
+  const removeReportedRadar = useCallback((radarId: string) => {
+    if (!radarId) return;
+    setReportedRadarsMap((prev) => {
+      if (!prev.has(radarId)) return prev;
+      const next = new Map(prev);
+      next.delete(radarId);
+      return next;
     });
   }, []);
 
@@ -420,18 +454,22 @@ export default function Home({ onOpenEditor }: HomeProps) {
         getRadarsNearLocation(loc.latitude, loc.longitude, 50000)
           .then((allRadars) => {
             if (!isMountedRef.current) return;
-            setRadarsMap(() => {
-              const nextMap = new Map<string, Radar>();
-              for (const radar of allRadars) {
-                if (!radar?.id) continue;
-                nextMap.set(radar.id, radar);
+            // startTransition: não bloqueia UI durante sync
+            startTransition(() => {
+              // CSV sync: atualiza radares fixos do CSV
+              setCsvRadarsMap(() => {
+                const nextMap = new Map<string, Radar>();
+                for (const radar of allRadars) {
+                  if (!radar?.id) continue;
+                  nextMap.set(radar.id, radar);
+                }
+                return nextMap;
+              });
+              if (clearOverlay) {
+                setLiveRadarOverlayMap(new Map());
+                setLiveDeletedRadarIdsSetState(new Set());
               }
-              return nextMap;
             });
-            if (clearOverlay) {
-              setLiveRadarOverlayMap(new Map());
-              setLiveDeletedRadarIdsSetState(new Set());
-            }
           })
           .catch((error) => {
             console.error("Erro ao sincronizar radares:", error);
@@ -596,7 +634,8 @@ export default function Home({ onOpenEditor }: HomeProps) {
                 console.log(
                   `✅ ${nearbyRadars.length} radares encontrados na inicialização`
                 );
-                setRadars(nearbyRadars);
+                // Carga inicial de radares CSV
+                setCsvRadars(nearbyRadars);
               })
               .catch((error) => {
                 console.error("Erro ao buscar radares na inicialização:", error);
@@ -686,7 +725,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
       if (radars.length === 0 && !hasInitialRadarLoadRef.current) {
         hasInitialRadarLoadRef.current = true;
         getRadarsNearLocation(origin.latitude, origin.longitude, 50000)
-          .then((initialRadars) => setRadars(initialRadars))
+          .then((initialRadars) => setCsvRadars(initialRadars))
           .catch((err) => {
             console.error("Erro ao carregar radares iniciais na navegação:", err);
           });
@@ -825,7 +864,8 @@ export default function Home({ onOpenEditor }: HomeProps) {
       }
     }
 
-    // OTIMIZAÇÃO: Reporte em background sem bloquear UI
+    // INSTANT FEEDBACK: adiciona à lista reportedRadars (pequena, dinâmica, nunca crashará)
+    // NUNCA toca na lista CSV de 16k+ radares
     const tempRadar: Radar = {
       id: `temp_${Date.now()}`,
       latitude: reportCoords.latitude,
@@ -834,29 +874,22 @@ export default function Home({ onOpenEditor }: HomeProps) {
       type: type,
     };
 
-    // UI Updates: mensagem e modal primeiro; atualizar lista em próximo tick para não travar (principalmente em navegação)
-    setSuccessMessage("Radar reportado com sucesso! ✅\n\n obrigado por ajudar!");
+    // Feedback visual primeiro
+    setSuccessMessage("Radar reportado com sucesso! ✅\n\nObrigado por ajudar!");
     setShowSuccessModal(true);
     setReportSpeedLimit("");
     setReportRadarType("móvel");
-    if (!isNavigating) {
-      // Fora da navegação mantém feedback otimista instantâneo
-      setTimeout(() => {
-        if (!isMountedRef.current) return;
-        setRadars((prev) => [tempRadar, ...prev]);
-      }, 0);
-    } else {
-      // Durante navegação, overlay leve para aparecer instantâneo sem re-render pesado da lista completa
-      setTimeout(() => {
-        if (!isMountedRef.current) return;
-        upsertLiveRadarOverlay(tempRadar);
-      }, 0);
+
+    // Adiciona à lista de reportados (pequena, rápido) + overlay visual durante navegação
+    addReportedRadar(tempRadar);
+    if (isNavigating) {
+      upsertLiveRadarOverlay(tempRadar);
     }
 
-    // Auto-dismiss
+    // Auto-dismiss modal
     setTimeout(() => {
       if (isMountedRef.current) setShowSuccessModal(false);
-    }, 4000);
+    }, 3000);
 
     // API em background
     reportRadar({
@@ -864,20 +897,36 @@ export default function Home({ onOpenEditor }: HomeProps) {
       longitude: reportCoords.longitude,
       speedLimit: speedLimit,
       type,
-    }).then(realRadar => {
-      if (!isMountedRef.current) return;
-      if (isNavigating) {
-        removeLiveRadarOverlay(tempRadar.id);
-        upsertLiveRadarOverlay(realRadar);
-      }
-      // Durante navegação, não força merge local para evitar re-render pesado;
-      // atualização chega via WebSocket. Fora da navegação, troca o temp pelo real.
-      if (!isNavigating && realRadar.id !== tempRadar.id) {
-        setRadars((prev) => prev.map((r) => (r.id === tempRadar.id ? realRadar : r)));
-      }
+      reportedBy: deviceUserId || undefined,
+    }).then((realRadar) => {
+      console.log("✅ Radar confirmado pelo servidor");
+      // Substituir temp pelo real
+      startTransition(() => {
+        if (!isMountedRef.current) return;
+        removeReportedRadar(tempRadar.id);
+        addReportedRadar(realRadar);
+        if (isNavigating) {
+          removeLiveRadarOverlay(tempRadar.id);
+          upsertLiveRadarOverlay(realRadar);
+        }
+      });
     }).catch(err => {
-      removeLiveRadarOverlay(tempRadar.id);
-      console.error("Erro no reporte background:", err);
+      console.error("❌ Erro ao reportar radar:", err);
+      // Remover radar temporário
+      startTransition(() => {
+        if (isMountedRef.current) {
+          removeReportedRadar(tempRadar.id);
+          if (isNavigating) {
+            removeLiveRadarOverlay(tempRadar.id);
+          }
+          setModalConfig({
+            visible: true,
+            title: "Erro ao Reportar",
+            message: "Não foi possível enviar o radar. Verifique sua conexão e tente novamente.",
+            type: "error",
+          });
+        }
+      });
     });
   };
 
@@ -1017,8 +1066,11 @@ export default function Home({ onOpenEditor }: HomeProps) {
       const previousRadars = lastPushedMapboxRadarsRef.current as typeof mapboxRadars | null;
       if (areMapboxRadarArraysEqual(previousRadars, mapboxRadars)) return;
       lastPushedMapboxRadarsRef.current = mapboxRadars;
-      setMapboxRadarsForNative(mapboxRadars);
-    }, 180);
+      // Nunca empurrar durante gesto/animacao - evita travar UI durante scroll/toque
+      InteractionManager.runAfterInteractions(() => {
+        setMapboxRadarsForNative(mapboxRadars);
+      });
+    }, 600);
     return () => {
       if (mapboxPushTimeoutRef.current) {
         clearTimeout(mapboxPushTimeoutRef.current);
@@ -1037,109 +1089,113 @@ export default function Home({ onOpenEditor }: HomeProps) {
     const flushQueuedWsEvents = () => {
       if (!isMountedRef.current || queuedEvents.length === 0) return;
       try {
-      const batch = queuedEvents.splice(0, Math.min(queuedEvents.length, 15));
-      const overlayUpserts = new Map<string, Radar>();
-      const overlayDeletes = new Set<string>();
-      const baseUpserts = new Map<string, Radar>();
-      const baseDeletes = new Set<string>();
-      let shouldRefreshAll = false;
+        const batch = queuedEvents.splice(0, Math.min(queuedEvents.length, 15));
+        const overlayUpserts = new Map<string, Radar>();
+        const overlayDeletes = new Set<string>();
+        const baseUpserts = new Map<string, Radar>();
+        const baseDeletes = new Set<string>();
+        let shouldRefreshAll = false;
 
-      for (const { event, payload } of batch) {
-        switch (event) {
-          case "radar:new":
-          case "radar:created":
-          case "radar:update":
-          case "radar:updated": {
-            const normalized = normalizeRadarPayload(payload);
-            if (!normalized) break;
-            overlayDeletes.delete(normalized.id);
-            overlayUpserts.set(normalized.id, normalized);
-            if (!isNavigatingRef.current) {
-              baseDeletes.delete(normalized.id);
-              baseUpserts.set(normalized.id, normalized);
+        for (const { event, payload } of batch) {
+          switch (event) {
+            case "radar:new":
+            case "radar:created":
+            case "radar:update":
+            case "radar:updated": {
+              const normalized = normalizeRadarPayload(payload);
+              if (!normalized) break;
+              overlayDeletes.delete(normalized.id);
+              overlayUpserts.set(normalized.id, normalized);
+              if (!isNavigatingRef.current) {
+                baseDeletes.delete(normalized.id);
+                baseUpserts.set(normalized.id, normalized);
+              }
+              break;
             }
-            break;
-          }
-          case "radar:delete":
-          case "radar:removed": {
-            const deletedId = String(payload?.id ?? "");
-            if (!deletedId) break;
-            overlayUpserts.delete(deletedId);
-            overlayDeletes.add(deletedId);
-            if (!isNavigatingRef.current) {
-              baseUpserts.delete(deletedId);
-              baseDeletes.add(deletedId);
+            case "radar:delete":
+            case "radar:removed": {
+              const deletedId = String(payload?.id ?? "");
+              if (!deletedId) break;
+              overlayUpserts.delete(deletedId);
+              overlayDeletes.add(deletedId);
+              if (!isNavigatingRef.current) {
+                baseUpserts.delete(deletedId);
+                baseDeletes.add(deletedId);
+              }
+              break;
             }
-            break;
-          }
-          case "radar:refresh": {
-            shouldRefreshAll = true;
-            break;
+            case "radar:refresh": {
+              shouldRefreshAll = true;
+              break;
+            }
           }
         }
-      }
 
-      if (overlayUpserts.size > 0 || overlayDeletes.size > 0) {
-        rearmRadarRuntimeState(Array.from(overlayUpserts.keys()));
-      }
-
-      // startTransition: updates baixa prioridade, UI não trava durante reconciliação
-      startTransition(() => {
         if (overlayUpserts.size > 0 || overlayDeletes.size > 0) {
-          setLiveDeletedRadarIdsSetState((prevSet) => {
-            const nextSet = new Set(prevSet);
-            overlayUpserts.forEach((_, id) => nextSet.delete(id));
-            overlayDeletes.forEach((id) => nextSet.add(id));
-            return nextSet;
-          });
-          setLiveRadarOverlayMap((prevMap) => {
-            if (prevMap.size === 0 && overlayUpserts.size === 0) return prevMap;
-            const nextMap = new Map(prevMap);
-            overlayDeletes.forEach((id) => nextMap.delete(id));
-            overlayUpserts.forEach((radar, id) => {
-              const current = nextMap.get(id);
-              nextMap.set(id, current ? { ...current, ...radar } : radar);
-            });
-            return nextMap;
-          });
+          rearmRadarRuntimeState(Array.from(overlayUpserts.keys()));
         }
 
-        if (baseUpserts.size > 0 || baseDeletes.size > 0) {
-          setRadarsMap((prevMap) => {
-            const nextMap = new Map(prevMap);
-            baseDeletes.forEach((id) => nextMap.delete(id));
-            baseUpserts.forEach((radar, id) => {
-              const current = nextMap.get(id);
-              nextMap.set(id, current ? { ...current, ...radar } : radar);
+        // startTransition: updates baixa prioridade, UI não trava durante reconciliação
+        startTransition(() => {
+          if (overlayUpserts.size > 0 || overlayDeletes.size > 0) {
+            setLiveDeletedRadarIdsSetState((prevSet) => {
+              const nextSet = new Set(prevSet);
+              overlayUpserts.forEach((_, id) => nextSet.delete(id));
+              overlayDeletes.forEach((id) => nextSet.add(id));
+              return nextSet;
             });
-            return nextMap;
-          });
+            setLiveRadarOverlayMap((prevMap) => {
+              if (prevMap.size === 0 && overlayUpserts.size === 0) return prevMap;
+              const nextMap = new Map(prevMap);
+              overlayDeletes.forEach((id) => nextMap.delete(id));
+              overlayUpserts.forEach((radar, id) => {
+                const current = nextMap.get(id);
+                nextMap.set(id, current ? { ...current, ...radar } : radar);
+              });
+              return nextMap;
+            });
+          }
+
+          if (baseUpserts.size > 0 || baseDeletes.size > 0) {
+            // WebSocket updates: podem ser CSV (bulk) ou reportados (individual)
+            // Por enquanto, atualiza ambas as listas
+            setCsvRadarsMap((prevMap) => {
+              const nextMap = new Map(prevMap);
+              baseDeletes.forEach((id) => nextMap.delete(id));
+              baseUpserts.forEach((radar, id) => {
+                const current = nextMap.get(id);
+                nextMap.set(id, current ? { ...current, ...radar } : radar);
+              });
+              return nextMap;
+            });
+          }
+
+          if (baseDeletes.size > 0) {
+            setNearbyRadarIds((prev) => {
+              let changed = false;
+              const nextSet = new Set(prev);
+              baseDeletes.forEach((id) => {
+                if (nextSet.delete(id)) changed = true;
+              });
+              return changed ? nextSet : prev;
+            });
+          }
+        });
+
+        if (shouldRefreshAll && !isNavigatingRef.current) {
+          syncAllRadarsFromCurrentLocation(true);
         }
 
-        if (baseDeletes.size > 0) {
-          setNearbyRadarIds((prev) => {
-            let changed = false;
-            const nextSet = new Set(prev);
-            baseDeletes.forEach((id) => {
-              if (nextSet.delete(id)) changed = true;
+        // Reagenda se ainda houver eventos
+        if (queuedEvents.length > 0 && isMountedRef.current && !wsFlushScheduledRef.current) {
+          wsFlushScheduledRef.current = true;
+          setTimeout(() => {
+            wsFlushScheduledRef.current = false;
+            startTransition(() => {
+              flushQueuedWsEvents();
             });
-            return changed ? nextSet : prev;
-          });
+          }, 0);
         }
-      });
-
-      if (shouldRefreshAll && !isNavigatingRef.current) {
-        syncAllRadarsFromCurrentLocation(true);
-      }
-
-      // Reagenda se ainda houver eventos
-      if (queuedEvents.length > 0 && isMountedRef.current && !wsFlushScheduledRef.current) {
-        wsFlushScheduledRef.current = true;
-        setTimeout(() => {
-          wsFlushScheduledRef.current = false;
-          flushQueuedWsEvents();
-        }, 0);
-      }
       } catch (err) {
         console.error("Erro ao processar WebSocket:", err);
       }
@@ -1176,10 +1232,15 @@ export default function Home({ onOpenEditor }: HomeProps) {
           queuedEvents.push({ event, payload });
           if (wsFlushScheduledRef.current) return;
           wsFlushScheduledRef.current = true;
+          // Throttling: 150ms durante navegação para agrupar mais eventos, 50ms fora
+          const delay = isNavigatingRef.current ? 150 : 50;
           setTimeout(() => {
             wsFlushScheduledRef.current = false;
-            flushQueuedWsEvents();
-          }, 0);
+            // startTransition: impede que atualizações de radar bloqueiem navegação
+            startTransition(() => {
+              flushQueuedWsEvents();
+            });
+          }, delay);
         };
 
         ws.onclose = () => {
@@ -1235,7 +1296,21 @@ export default function Home({ onOpenEditor }: HomeProps) {
   }, [closeRadarFeedbackCard]);
 
   const applyRadarUpdateLocally = useCallback((updated: Radar) => {
-    setRadars((prev) => prev.map((r) => (r.id === updated.id ? { ...r, ...updated } : r)));
+    // Atualiza radar existente (pode ser CSV ou reportado)
+    setCsvRadarsMap((prev: Map<string, Radar>) => {
+      if (!prev.has(updated.id)) return prev;
+      const next = new Map(prev);
+      const existing = prev.get(updated.id);
+      next.set(updated.id, existing ? { ...existing, ...updated } : updated);
+      return next;
+    });
+    setReportedRadarsMap((prev: Map<string, Radar>) => {
+      if (!prev.has(updated.id)) return prev;
+      const next = new Map(prev);
+      const existing = prev.get(updated.id);
+      next.set(updated.id, existing ? { ...existing, ...updated } : updated);
+      return next;
+    });
   }, []);
 
   const handleRadarFeedbackAction = useCallback(async (action: "confirm" | "deny") => {

@@ -83,7 +83,7 @@ index 0000000..0d259dd
 +o/classes
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/.transforms/23978c70d7bab505a8531c1073d5a143/transformed/classes/classes_dex/classes.dex b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/.transforms/23978c70d7bab505a8531c1073d5a143/transformed/classes/classes_dex/classes.dex
 new file mode 100644
-index 0000000..406e25c
+index 0000000..1b898f9
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/.transforms/23978c70d7bab505a8531c1073d5a143/transformed/classes/classes_dex/classes.dex differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/generated/data_binding_base_class_source_out/debug/out/com/mapboxnavigation/databinding/NavigationViewBinding.java b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/generated/data_binding_base_class_source_out/debug/out/com/mapboxnavigation/databinding/NavigationViewBinding.java
 new file mode 100644
@@ -387,7 +387,7 @@ index 0000000..9e26dfe
 \ No newline at end of file
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/intermediates/compile_library_classes_jar/debug/bundleLibCompileToJarDebug/classes.jar b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/intermediates/compile_library_classes_jar/debug/bundleLibCompileToJarDebug/classes.jar
 new file mode 100644
-index 0000000..0acf578
+index 0000000..c3389ac
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/intermediates/compile_library_classes_jar/debug/bundleLibCompileToJarDebug/classes.jar differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/intermediates/compile_r_class_jar/debug/generateDebugRFile/R.jar b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/intermediates/compile_r_class_jar/debug/generateDebugRFile/R.jar
 new file mode 100644
@@ -989,7 +989,7 @@ index 0000000..3025d2e
 \ No newline at end of file
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/intermediates/runtime_library_classes_jar/debug/bundleLibRuntimeToJarDebug/classes.jar b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/intermediates/runtime_library_classes_jar/debug/bundleLibRuntimeToJarDebug/classes.jar
 new file mode 100644
-index 0000000..18f45cb
+index 0000000..e6c54fd
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/intermediates/runtime_library_classes_jar/debug/bundleLibRuntimeToJarDebug/classes.jar differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/intermediates/symbol_list_with_package_name/debug/generateDebugRFile/package-aware-r.txt b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/intermediates/symbol_list_with_package_name/debug/generateDebugRFile/package-aware-r.txt
 new file mode 100644
@@ -1021,7 +1021,7 @@ index 0000000..fbbb3aa
 +style TripProgressSecondaryTextAppearance
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/inputs/source-to-output.tab b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/inputs/source-to-output.tab
 new file mode 100644
-index 0000000..976bb16
+index 0000000..e71f538
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/inputs/source-to-output.tab differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/inputs/source-to-output.tab.keystream b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/inputs/source-to-output.tab.keystream
 new file mode 100644
@@ -1037,7 +1037,7 @@ index 0000000..ec8f944
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/inputs/source-to-output.tab.len differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/inputs/source-to-output.tab.values.at b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/inputs/source-to-output.tab.values.at
 new file mode 100644
-index 0000000..0211b62
+index 0000000..4c5b630
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/inputs/source-to-output.tab.values.at differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/inputs/source-to-output.tab_i b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/inputs/source-to-output.tab_i
 new file mode 100644
@@ -1049,7 +1049,7 @@ index 0000000..131e265
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/inputs/source-to-output.tab_i.len differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/class-attributes.tab b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/class-attributes.tab
 new file mode 100644
-index 0000000..92b3a81
+index 0000000..26ea8a2
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/class-attributes.tab differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/class-attributes.tab.keystream b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/class-attributes.tab.keystream
 new file mode 100644
@@ -1065,7 +1065,7 @@ index 0000000..eb0b8a0
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/class-attributes.tab.len differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/class-attributes.tab.values.at b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/class-attributes.tab.values.at
 new file mode 100644
-index 0000000..56876a5
+index 0000000..275616d
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/class-attributes.tab.values.at differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/class-attributes.tab_i b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/class-attributes.tab_i
 new file mode 100644
@@ -1077,7 +1077,7 @@ index 0000000..131e265
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/class-attributes.tab_i.len differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/class-fq-name-to-source.tab b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/class-fq-name-to-source.tab
 new file mode 100644
-index 0000000..bc21fab
+index 0000000..a54bd6e
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/class-fq-name-to-source.tab differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/class-fq-name-to-source.tab.keystream b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/class-fq-name-to-source.tab.keystream
 new file mode 100644
@@ -1093,7 +1093,7 @@ index 0000000..eb0b8a0
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/class-fq-name-to-source.tab.len differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/class-fq-name-to-source.tab.values.at b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/class-fq-name-to-source.tab.values.at
 new file mode 100644
-index 0000000..2cc3255
+index 0000000..a663ace
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/class-fq-name-to-source.tab.values.at differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/class-fq-name-to-source.tab_i b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/class-fq-name-to-source.tab_i
 new file mode 100644
@@ -1105,7 +1105,7 @@ index 0000000..131e265
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/class-fq-name-to-source.tab_i.len differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/constants.tab b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/constants.tab
 new file mode 100644
-index 0000000..3f96856
+index 0000000..7d54514
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/constants.tab differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/constants.tab.keystream b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/constants.tab.keystream
 new file mode 100644
@@ -1121,7 +1121,7 @@ index 0000000..2a17e6e
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/constants.tab.len differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/constants.tab.values.at b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/constants.tab.values.at
 new file mode 100644
-index 0000000..19b64db
+index 0000000..0cfc222
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/constants.tab.values.at differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/constants.tab_i b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/constants.tab_i
 new file mode 100644
@@ -1133,7 +1133,7 @@ index 0000000..131e265
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/constants.tab_i.len differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/internal-name-to-source.tab b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/internal-name-to-source.tab
 new file mode 100644
-index 0000000..3eb7205
+index 0000000..132248c
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/internal-name-to-source.tab differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/internal-name-to-source.tab.keystream b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/internal-name-to-source.tab.keystream
 new file mode 100644
@@ -1149,7 +1149,7 @@ index 0000000..fa43224
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/internal-name-to-source.tab.len differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/internal-name-to-source.tab.values.at b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/internal-name-to-source.tab.values.at
 new file mode 100644
-index 0000000..8645d10
+index 0000000..11e152f
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/internal-name-to-source.tab.values.at differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/internal-name-to-source.tab_i b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/internal-name-to-source.tab_i
 new file mode 100644
@@ -1189,7 +1189,7 @@ index 0000000..131e265
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/java-sources-proto-map.tab_i.len differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/proto.tab b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/proto.tab
 new file mode 100644
-index 0000000..9178671
+index 0000000..a837c0a
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/proto.tab differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/proto.tab.keystream b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/proto.tab.keystream
 new file mode 100644
@@ -1205,7 +1205,7 @@ index 0000000..eb0b8a0
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/proto.tab.len differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/proto.tab.values.at b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/proto.tab.values.at
 new file mode 100644
-index 0000000..86b57b7
+index 0000000..737d514
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/proto.tab.values.at differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/proto.tab_i b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/proto.tab_i
 new file mode 100644
@@ -1217,7 +1217,7 @@ index 0000000..131e265
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/proto.tab_i.len differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/source-to-classes.tab b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/source-to-classes.tab
 new file mode 100644
-index 0000000..ed84c78
+index 0000000..dae640d
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/source-to-classes.tab differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/source-to-classes.tab.keystream b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/source-to-classes.tab.keystream
 new file mode 100644
@@ -1233,7 +1233,7 @@ index 0000000..9e27f73
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/source-to-classes.tab.len differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/source-to-classes.tab.values.at b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/source-to-classes.tab.values.at
 new file mode 100644
-index 0000000..c919167
+index 0000000..dedcc6a
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/source-to-classes.tab.values.at differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/source-to-classes.tab_i b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/source-to-classes.tab_i
 new file mode 100644
@@ -1245,7 +1245,7 @@ index 0000000..131e265
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/source-to-classes.tab_i.len differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/subtypes.tab b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/subtypes.tab
 new file mode 100644
-index 0000000..5958509
+index 0000000..87397a6
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/subtypes.tab differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/subtypes.tab.keystream b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/subtypes.tab.keystream
 new file mode 100644
@@ -1261,7 +1261,7 @@ index 0000000..ec8f944
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/subtypes.tab.len differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/subtypes.tab.values.at b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/subtypes.tab.values.at
 new file mode 100644
-index 0000000..8a299d7
+index 0000000..0da0c47
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/subtypes.tab.values.at differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/subtypes.tab_i b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/subtypes.tab_i
 new file mode 100644
@@ -1273,7 +1273,7 @@ index 0000000..131e265
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/subtypes.tab_i.len differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/supertypes.tab b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/supertypes.tab
 new file mode 100644
-index 0000000..34820fb
+index 0000000..3b36a85
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/supertypes.tab differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/supertypes.tab.keystream b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/supertypes.tab.keystream
 new file mode 100644
@@ -1289,7 +1289,7 @@ index 0000000..ec8f944
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/supertypes.tab.len differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/supertypes.tab.values.at b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/supertypes.tab.values.at
 new file mode 100644
-index 0000000..f6e6119
+index 0000000..7b14fc8
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/supertypes.tab.values.at differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/supertypes.tab_i b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/supertypes.tab_i
 new file mode 100644
@@ -1301,16 +1301,16 @@ index 0000000..131e265
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/jvm/kotlin/supertypes.tab_i.len differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/counters.tab b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/counters.tab
 new file mode 100644
-index 0000000..4a12dea
+index 0000000..3d952e7
 --- /dev/null
 +++ b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/counters.tab
 @@ -0,0 +1,2 @@
-+5
++7
 +0
 \ No newline at end of file
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/file-to-id.tab b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/file-to-id.tab
 new file mode 100644
-index 0000000..a291dc3
+index 0000000..17bfe20
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/file-to-id.tab differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/file-to-id.tab.keystream b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/file-to-id.tab.keystream
 new file mode 100644
@@ -1326,7 +1326,7 @@ index 0000000..ec8f944
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/file-to-id.tab.len differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/file-to-id.tab.values.at b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/file-to-id.tab.values.at
 new file mode 100644
-index 0000000..f6a4f17
+index 0000000..25454f3
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/file-to-id.tab.values.at differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/file-to-id.tab_i b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/file-to-id.tab_i
 new file mode 100644
@@ -1338,27 +1338,27 @@ index 0000000..131e265
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/file-to-id.tab_i.len differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/id-to-file.tab b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/id-to-file.tab
 new file mode 100644
-index 0000000..74fa194
+index 0000000..274b635
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/id-to-file.tab differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/id-to-file.tab.keystream b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/id-to-file.tab.keystream
 new file mode 100644
-index 0000000..1dd772c
+index 0000000..2459ed6
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/id-to-file.tab.keystream differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/id-to-file.tab.keystream.len b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/id-to-file.tab.keystream.len
 new file mode 100644
-index 0000000..62f3e6f
+index 0000000..379d85c
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/id-to-file.tab.keystream.len differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/id-to-file.tab.len b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/id-to-file.tab.len
 new file mode 100644
-index 0000000..ec8f944
+index 0000000..817b326
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/id-to-file.tab.len differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/id-to-file.tab.values.at b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/id-to-file.tab.values.at
 new file mode 100644
-index 0000000..3aea4fa
+index 0000000..f4bff69
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/id-to-file.tab.values.at differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/id-to-file.tab_i b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/id-to-file.tab_i
 new file mode 100644
-index 0000000..e6ff6ac
+index 0000000..0667ccd
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/id-to-file.tab_i differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/id-to-file.tab_i.len b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/id-to-file.tab_i.len
 new file mode 100644
@@ -1366,27 +1366,39 @@ index 0000000..131e265
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/id-to-file.tab_i.len differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/lookups.tab b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/lookups.tab
 new file mode 100644
-index 0000000..bfd7a33
+index 0000000..908d5de
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/lookups.tab differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/lookups.tab.keystream b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/lookups.tab.keystream
 new file mode 100644
-index 0000000..65376a7
+index 0000000..e81457c
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/lookups.tab.keystream differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/lookups.tab.keystream.len b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/lookups.tab.keystream.len
 new file mode 100644
-index 0000000..f97f4c5
+index 0000000..d64ae76
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/lookups.tab.keystream.len differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/lookups.tab.len b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/lookups.tab.len
 new file mode 100644
-index 0000000..b48d2d2
+index 0000000..888c17b
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/lookups.tab.len differ
+diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/lookups.tab.values b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/lookups.tab.values
+new file mode 100644
+index 0000000..470dfa4
+Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/lookups.tab.values differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/lookups.tab.values.at b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/lookups.tab.values.at
 new file mode 100644
-index 0000000..656d24f
+index 0000000..ca57f8e
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/lookups.tab.values.at differ
+diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/lookups.tab.values.s b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/lookups.tab.values.s
+new file mode 100644
+index 0000000..e7f8971
+--- /dev/null
++++ b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/lookups.tab.values.s
+@@ -0,0 +1 @@
++ü:ð·
+\ No newline at end of file
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/lookups.tab_i b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/lookups.tab_i
 new file mode 100644
-index 0000000..13f4ff1
+index 0000000..733a988
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/lookups.tab_i differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/lookups.tab_i.len b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/lookups.tab_i.len
 new file mode 100644
@@ -1394,7 +1406,7 @@ index 0000000..4424406
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/caches-jvm/lookups/lookups.tab_i.len differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/last-build.bin b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/last-build.bin
 new file mode 100644
-index 0000000..dd618c1
+index 0000000..fa92e7a
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/cacheable/last-build.bin differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/classpath-snapshot/shrunk-classpath-snapshot.bin b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/classpath-snapshot/shrunk-classpath-snapshot.bin
 new file mode 100644
@@ -1402,7 +1414,7 @@ index 0000000..284fe40
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/classpath-snapshot/shrunk-classpath-snapshot.bin differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/local-state/build-history.bin b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/local-state/build-history.bin
 new file mode 100644
-index 0000000..21e2393
+index 0000000..06db00e
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/kotlin/compileDebugKotlin/local-state/build-history.bin differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/outputs/logs/manifest-merger-debug-report.txt b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/outputs/logs/manifest-merger-debug-report.txt
 new file mode 100644
@@ -1476,7 +1488,7 @@ index 0000000..a0bf84e
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/tmp/kotlin-classes/debug/com/mapboxnavigation/MapboxNavigationView$overviewPadding$2.class differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/tmp/kotlin-classes/debug/com/mapboxnavigation/MapboxNavigationView$performUpdateRadarsOnMap$1$applyUpdate$1.class b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/tmp/kotlin-classes/debug/com/mapboxnavigation/MapboxNavigationView$performUpdateRadarsOnMap$1$applyUpdate$1.class
 new file mode 100644
-index 0000000..e533016
+index 0000000..561e313
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/tmp/kotlin-classes/debug/com/mapboxnavigation/MapboxNavigationView$performUpdateRadarsOnMap$1$applyUpdate$1.class differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/tmp/kotlin-classes/debug/com/mapboxnavigation/MapboxNavigationView$routeArrowApi$2.class b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/tmp/kotlin-classes/debug/com/mapboxnavigation/MapboxNavigationView$routeArrowApi$2.class
 new file mode 100644
@@ -1524,15 +1536,15 @@ index 0000000..80146cf
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/tmp/kotlin-classes/debug/com/mapboxnavigation/MapboxNavigationView$updateRadarsOnMap_OLD$$inlined$sortedBy$1.class differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/tmp/kotlin-classes/debug/com/mapboxnavigation/MapboxNavigationView.class b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/tmp/kotlin-classes/debug/com/mapboxnavigation/MapboxNavigationView.class
 new file mode 100644
-index 0000000..0824d31
+index 0000000..f3f7c7e
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/tmp/kotlin-classes/debug/com/mapboxnavigation/MapboxNavigationView.class differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/tmp/kotlin-classes/debug/com/mapboxnavigation/MapboxNavigationViewManager$Companion.class b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/tmp/kotlin-classes/debug/com/mapboxnavigation/MapboxNavigationViewManager$Companion.class
 new file mode 100644
-index 0000000..5da7074
+index 0000000..9a3bfcd
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/tmp/kotlin-classes/debug/com/mapboxnavigation/MapboxNavigationViewManager$Companion.class differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/tmp/kotlin-classes/debug/com/mapboxnavigation/MapboxNavigationViewManager.class b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/tmp/kotlin-classes/debug/com/mapboxnavigation/MapboxNavigationViewManager.class
 new file mode 100644
-index 0000000..f612956
+index 0000000..3c0b788
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/tmp/kotlin-classes/debug/com/mapboxnavigation/MapboxNavigationViewManager.class differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/tmp/kotlin-classes/debug/com/mapboxnavigation/MapboxNavigationViewManagerSpec.class b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/tmp/kotlin-classes/debug/com/mapboxnavigation/MapboxNavigationViewManagerSpec.class
 new file mode 100644
@@ -1551,7 +1563,7 @@ new file mode 100644
 index 0000000..0a8a039
 Binary files /dev/null and b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/build/tmp/kotlin-classes/debug/com/mapboxnavigation/WaypointLegs.class differ
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
-index 41a3ba0..1a3621e 100644
+index 41a3ba0..ce412a2 100644
 --- a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
 +++ b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
 @@ -3,25 +3,38 @@ package com.mapboxnavigation
@@ -1768,7 +1780,7 @@ index 41a3ba0..1a3621e 100644
 +  private var lastNearbyRadarIdsHash: Int = 0
 +  private var lastAppliedRadarsGeoJsonHash: Int = 0
 +  private var lastStyleUpdateTimeMs: Long = 0
-+  private val STYLE_UPDATE_MIN_INTERVAL_MS = 450L
++  private val STYLE_UPDATE_MIN_INTERVAL_MS = 1200L
 +
 +  // Auto-recenter timer logic
 +  private val autoRecenterHandler = android.os.Handler(android.os.Looper.getMainLooper())
@@ -3141,7 +3153,7 @@ index 41a3ba0..1a3621e 100644
    }
  
    fun setLocal(language: String) {
-@@ -820,4 +1220,1293 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -820,4 +1220,1294 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
    fun setShowCancelButton(show: Boolean) {
      binding.stop.visibility = if (show) View.VISIBLE else View.INVISIBLE
    }
@@ -3939,8 +3951,9 @@ index 41a3ba0..1a3621e 100644
 +
 +    throttledUpdateRunnable = Runnable { performUpdateRadarsOnMap() }
 +
-+    // 400ms throttle delay - coalesce rapid updates (report/move/WS)
-+    throttleHandler.postDelayed(throttledUpdateRunnable!!, 400)
++    // 1000ms throttle delay - coalesce rapid updates (report/move/WS + local state)
++    // This ensures local update + WebSocket update are batched together
++    throttleHandler.postDelayed(throttledUpdateRunnable!!, 1000)
 +  }
 +
 +  private fun performUpdateRadarsOnMap() {
@@ -4436,19 +4449,20 @@ index 41a3ba0..1a3621e 100644
 +  }
  }
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationViewManager.kt b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationViewManager.kt
-index 03fad26..86a558d 100644
+index 03fad26..031ac1f 100644
 --- a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationViewManager.kt
 +++ b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationViewManager.kt
-@@ -11,6 +11,8 @@ import com.mapbox.geojson.Point
+@@ -11,6 +11,9 @@ import com.mapbox.geojson.Point
  
  @ReactModule(name = MapboxNavigationViewManager.NAME)
  class MapboxNavigationViewManager(private var reactContext: ReactApplicationContext): MapboxNavigationViewManagerSpec<MapboxNavigationView>() {
 +  private var lastRadarsPayloadHash: Int = 0
++  private var lastNearbyRadarIdsHash: Int = 0
 +
    override fun getName(): String {
      return NAME
    }
-@@ -25,13 +27,17 @@ class MapboxNavigationViewManager(private var reactContext: ReactApplicationCont
+@@ -25,13 +28,17 @@ class MapboxNavigationViewManager(private var reactContext: ReactApplicationCont
    }
  
    override fun getExportedCustomDirectEventTypeConstants(): MutableMap<String, Map<String, String>> {
@@ -4473,77 +4487,66 @@ index 03fad26..86a558d 100644
    }
  
    @ReactProp(name = "startOrigin")
-@@ -109,6 +115,81 @@ class MapboxNavigationViewManager(private var reactContext: ReactApplicationCont
+@@ -109,6 +116,70 @@ class MapboxNavigationViewManager(private var reactContext: ReactApplicationCont
      view?.setMute(value)
    }
  
 +  @ReactProp(name = "radars")
 +  fun setRadars(view: MapboxNavigationView?, value: ReadableArray?) {
-+    if (value == null) {
-+      view?.setRadars(listOf())
-+      lastRadarsPayloadHash = 0
-+      return
-+    }
-+    val payloadHashBuilder = StringBuilder(value.size() * 24)
-+    for (i in 0 until value.size()) {
-+      val item = value.getMap(i) ?: continue
-+      val id = item.getString("id") ?: ""
-+      val lat = if (item.hasKey("latitude")) item.getDouble("latitude") else 0.0
-+      val lon = if (item.hasKey("longitude")) item.getDouble("longitude") else 0.0
-+      val speedLimit = when {
-+        item.hasKey("speedLimit") -> item.getDouble("speedLimit")
-+        item.hasKey("velocidadeLeve") -> item.getDouble("velocidadeLeve")
-+        else -> 0.0
++    val v = view
++    reactContext.runOnUiQueueThread {
++      if (v == null) return@runOnUiQueueThread
++      if (value == null) {
++        lastRadarsPayloadHash = 0
++        v.setRadars(listOf())
++        return@runOnUiQueueThread
 +      }
-+      val type = when {
-+        item.hasKey("type") -> item.getString("type") ?: ""
-+        item.hasKey("tipoRadar") -> item.getString("tipoRadar") ?: ""
-+        else -> ""
++      val list = mutableListOf<RadarPoint>()
++      val hashBuilder = StringBuilder(value.size() * 24)
++      for (i in 0 until value.size()) {
++        val item = value.getMap(i) ?: continue
++        val id = item.getString("id") ?: ""
++        if (!item.hasKey("latitude") || !item.hasKey("longitude")) continue
++        val lat = item.getDouble("latitude")
++        val lon = item.getDouble("longitude")
++        val speedLimit = when {
++          item.hasKey("speedLimit") -> item.getDouble("speedLimit")
++          item.hasKey("velocidadeLeve") -> item.getDouble("velocidadeLeve")
++          else -> null
++        }
++        val type = when {
++          item.hasKey("type") -> item.getString("type")
++          item.hasKey("tipoRadar") -> item.getString("tipoRadar")
++          else -> null
++        }
++        hashBuilder.append(id).append(':').append(lat).append(':').append(lon)
++          .append(':').append(speedLimit ?: 0.0).append(':').append(type ?: "").append('|')
++        list.add(RadarPoint(id, lat, lon, speedLimit, type))
 +      }
-+      payloadHashBuilder.append(id).append(':').append(lat).append(':').append(lon)
-+        .append(':').append(speedLimit).append(':').append(type).append('|')
++      val payloadHash = hashBuilder.toString().hashCode()
++      if (payloadHash == lastRadarsPayloadHash) return@runOnUiQueueThread
++      lastRadarsPayloadHash = payloadHash
++      v.setRadars(list)
 +    }
-+    val payloadHash = payloadHashBuilder.toString().hashCode()
-+    if (payloadHash == lastRadarsPayloadHash) {
-+      return
-+    }
-+    lastRadarsPayloadHash = payloadHash
-+    val list = mutableListOf<RadarPoint>()
-+    for (i in 0 until value.size()) {
-+      val item = value.getMap(i) ?: continue
-+      val id = item.getString("id") ?: ""
-+      if (!item.hasKey("latitude") || !item.hasKey("longitude")) continue
-+      val lat = item.getDouble("latitude")
-+      val lon = item.getDouble("longitude")
-+      val speedLimit = if (item.hasKey("speedLimit")) {
-+        item.getDouble("speedLimit")
-+      } else if (item.hasKey("velocidadeLeve")) {
-+        item.getDouble("velocidadeLeve")
-+      } else {
-+        null
-+      }
-+      val type = if (item.hasKey("type")) {
-+        item.getString("type")
-+      } else if (item.hasKey("tipoRadar")) {
-+        item.getString("tipoRadar")
-+      } else {
-+        null
-+      }
-+      list.add(RadarPoint(id, lat, lon, speedLimit, type))
-+    }
-+    view?.setRadars(list)
 +  }
 +
 +  @ReactProp(name = "nearbyRadarIds")
 +  fun setNearbyRadarIds(view: MapboxNavigationView?, value: ReadableArray?) {
 +    if (value == null) {
++      lastNearbyRadarIdsHash = 0
 +      view?.setNearbyRadarIds(emptySet())
 +      return
 +    }
++    val hashBuilder = StringBuilder(value.size() * 12)
 +    val set = mutableSetOf<String>()
 +    for (i in 0 until value.size()) {
-+      set.add(value.getString(i))
++      val s = value.getString(i) ?: ""
++      set.add(s)
++      hashBuilder.append(s).append('|')
 +    }
++    val h = hashBuilder.toString().hashCode()
++    if (h == lastNearbyRadarIdsHash) return
++    lastNearbyRadarIdsHash = h
 +    view?.setNearbyRadarIds(set)
 +  }
 +
