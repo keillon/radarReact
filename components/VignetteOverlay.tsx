@@ -1,16 +1,18 @@
 import React from "react";
 import {
   Dimensions,
+  Image,
   StyleSheet,
   TouchableOpacity,
   View,
 } from "react-native";
+import MaskedView from "@react-native-masked-view/masked-view";
 
 const HOLE_RADIUS = 52;
 
 /**
- * Overlay com foco REDONDO em volta do radar.
- * Usa 4 barras com borderRadius nos cantos internos para formar um círculo — sem react-native-svg.
+ * Overlay estilo Waze: tela escura com UM CÍRCULO em volta do radar.
+ * Máscara PNG: branco com círculo transparente = spotlight perfeito.
  */
 export function VignetteOverlay({
   onPress,
@@ -26,14 +28,10 @@ export function VignetteOverlay({
   const { width, height } = Dimensions.get("window");
   const cx = centerX ?? width / 2;
   const cy = centerY ?? height / 2;
-  const r = radius;
 
-  const holeTop = Math.max(0, cy - r);
-  const holeBottom = Math.min(height, cy + r);
-  const holeLeft = Math.max(0, cx - r);
-  const holeRight = Math.min(width, cx + r);
-
-  const barStyle = { backgroundColor: "rgba(0,0,0,0.55)" as const };
+  // Máscara 512x512, círculo r=10 no centro → escalar para radius no ecrã
+  const scale = radius / 10;
+  const maskSize = 512 * scale;
 
   return (
     <View
@@ -45,74 +43,29 @@ export function VignetteOverlay({
         activeOpacity={1}
         onPress={onPress}
       />
-      <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
-        {/* Topo — bordas inferiores arredondadas (parte superior do círculo) */}
+      <MaskedView
+        style={StyleSheet.absoluteFill}
+        maskElement={
+          <Image
+            source={require("../assets/images/vignetteMask.png")}
+            style={{
+              position: "absolute",
+              width: maskSize,
+              height: maskSize,
+              left: cx - maskSize / 2,
+              top: cy - maskSize / 2,
+            }}
+            resizeMode="stretch"
+          />
+        }
+      >
         <View
           style={[
-            styles.bar,
-            barStyle,
-            {
-              height: holeTop,
-              top: 0,
-              left: 0,
-              right: 0,
-              borderBottomLeftRadius: r,
-              borderBottomRightRadius: r,
-            },
+            StyleSheet.absoluteFillObject,
+            { backgroundColor: "rgba(0,0,0,0.55)" },
           ]}
         />
-        {/* Fundo — bordas superiores arredondadas */}
-        <View
-          style={[
-            styles.bar,
-            barStyle,
-            {
-              height: height - holeBottom,
-              bottom: 0,
-              left: 0,
-              right: 0,
-              borderTopLeftRadius: r,
-              borderTopRightRadius: r,
-            },
-          ]}
-        />
-        {/* Esquerda — bordas direitas arredondadas */}
-        <View
-          style={[
-            styles.bar,
-            barStyle,
-            {
-              width: holeLeft,
-              left: 0,
-              top: holeTop,
-              height: holeBottom - holeTop,
-              borderTopRightRadius: r,
-              borderBottomRightRadius: r,
-            },
-          ]}
-        />
-        {/* Direita — bordas esquerdas arredondadas */}
-        <View
-          style={[
-            styles.bar,
-            barStyle,
-            {
-              width: width - holeRight,
-              right: 0,
-              top: holeTop,
-              height: holeBottom - holeTop,
-              borderTopLeftRadius: r,
-              borderBottomLeftRadius: r,
-            },
-          ]}
-        />
-      </View>
+      </MaskedView>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  bar: {
-    position: "absolute",
-  },
-});

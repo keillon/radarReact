@@ -21,6 +21,7 @@
   "dependencies": {
     "@pawan-pk/react-native-mapbox-navigation": "^0.5.2",
     "@react-native-async-storage/async-storage": "^2.2.0",
+    "@react-native-masked-view/masked-view": "^0.3.2",
     "@rnmapbox/maps": "^10.2.10",
     "@types/react-native-vector-icons": "^6.4.18",
     "nativewind": "^2.0.11",
@@ -48,6 +49,7 @@
     "babel-plugin-module-resolver": "^5.0.0",
     "patch-package": "^8.0.1",
     "postinstall-postinstall": "^2.1.0",
+    "pureimage": "^0.4.18",
     "tailwindcss": "^3.3.2",
     "typescript": "^5.3.3"
   },
