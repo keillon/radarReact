@@ -75,7 +75,7 @@ index 7d28df3..f6c5272 100644
    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
    implementation 'androidx.cardview:cardview:1.0.0'
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
-index 41a3ba0..513c75e 100644
+index 41a3ba0..0c93507 100644
 --- a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
 +++ b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
 @@ -3,25 +3,38 @@ package com.mapboxnavigation
@@ -992,7 +992,7 @@ index 41a3ba0..513c75e 100644
      }
    }
  
-@@ -477,156 +717,266 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -477,156 +717,265 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
    }
  
    private fun onCreate() {
@@ -1186,10 +1186,9 @@ index 41a3ba0..513c75e 100644
 -      context,
 -      locale.language
 -    )
-+        // Carregar imagens de radar e registrar listener
++        // Carregar imagens de radar (sem fallback dinâmico de image-missing)
 +        try {
 +          loadRadarImages(style)
-+          registerImageMissingListener(style)
 +          // Atualizar radares: bridge (radars) OU URL (radarsGeoJsonUrl)
 +          val urlForRadars = radarsGeoJsonUrl
 +          if (radars.isNotEmpty() || (urlForRadars != null && urlForRadars.isNotBlank())) {
@@ -1379,7 +1378,7 @@ index 41a3ba0..513c75e 100644
        puckBearingEnabled = true
        enabled = true
      }
-@@ -634,31 +984,34 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -634,31 +983,34 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
      startRoute()
    }
  
@@ -1434,7 +1433,7 @@ index 41a3ba0..513c75e 100644
      }
    }
  
-@@ -669,8 +1022,8 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -669,8 +1021,8 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
  
    private val measureAndLayout = Runnable {
      measure(
@@ -1445,7 +1444,7 @@ index 41a3ba0..513c75e 100644
      )
      layout(left, top, right, bottom)
    }
-@@ -687,53 +1040,94 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -687,53 +1039,94 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
      names.add(destinationTitle)
  
      mapboxNavigation?.requestRoutes(
@@ -1579,7 +1578,7 @@ index 41a3ba0..513c75e 100644
      // register event listeners
      mapboxNavigation?.registerRoutesObserver(routesObserver)
      mapboxNavigation?.registerArrivalObserver(arrivalObserver)
-@@ -741,39 +1135,48 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -741,39 +1134,48 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
      mapboxNavigation?.registerLocationObserver(locationObserver)
      mapboxNavigation?.registerVoiceInstructionsObserver(voiceInstructionsObserver)
  
@@ -1602,7 +1601,9 @@ index 41a3ba0..513c75e 100644
      mapboxNavigation?.unregisterVoiceInstructionsObserver(voiceInstructionsObserver)
 +    onDestroy()
 +  }
-+
+ 
+-    // Clear routs and end
+-    mapboxNavigation?.setNavigationRoutes(listOf())
 +  private fun startAutoRecenterTimer() {
 +    stopAutoRecenterTimer()
 +    autoRecenterRunnable = Runnable {
@@ -1614,18 +1615,16 @@ index 41a3ba0..513c75e 100644
 +    autoRecenterRunnable?.let { autoRecenterHandler.postDelayed(it, AUTO_RECENTER_DELAY) }
 +  }
  
--    // Clear routs and end
--    mapboxNavigation?.setNavigationRoutes(listOf())
-+  private fun stopAutoRecenterTimer() {
-+    autoRecenterRunnable?.let { autoRecenterHandler.removeCallbacks(it) }
-+    autoRecenterRunnable = null
-+  }
- 
 -    // hide UI elements
 -    binding.soundButton.visibility = View.INVISIBLE
 -    binding.maneuverView.visibility = View.INVISIBLE
 -    binding.routeOverview.visibility = View.INVISIBLE
 -    binding.tripProgressCard.visibility = View.INVISIBLE
++  private fun stopAutoRecenterTimer() {
++    autoRecenterRunnable?.let { autoRecenterHandler.removeCallbacks(it) }
++    autoRecenterRunnable = null
++  }
++
 +  private fun cleanup() {
 +    try {
 +      pulseHandler.removeCallbacksAndMessages(null)
@@ -1644,7 +1643,7 @@ index 41a3ba0..513c75e 100644
    }
  
    fun onDropViewInstance() {
-@@ -782,10 +1185,12 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -782,10 +1184,12 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
  
    fun setStartOrigin(origin: Point?) {
      this.origin = origin
@@ -1657,7 +1656,7 @@ index 41a3ba0..513c75e 100644
    }
  
    fun setDestinationTitle(title: String) {
-@@ -802,7 +1207,7 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -802,7 +1206,7 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
  
    fun setDirectionUnit(unit: String) {
      this.distanceUnit = unit
@@ -1666,7 +1665,7 @@ index 41a3ba0..513c75e 100644
    }
  
    fun setLocal(language: String) {
-@@ -820,4 +1225,1739 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -820,4 +1224,1852 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
    fun setShowCancelButton(show: Boolean) {
      binding.stop.visibility = if (show) View.VISIBLE else View.INVISIBLE
    }
@@ -2519,45 +2518,172 @@ index 41a3ba0..513c75e 100644
 +
 +  private var lastRadarsGeoJsonUrlUsed: String? = null
 +
-+  /** Base via URL (todos os radares) + overlay via props. Zero bridge para base. */
++  private var cachedBaseGeoJson: String? = null
++  private var cachedBaseGeoJsonUrl: String? = null
++
++  /** Base via URL + overlay merge (reportados entram no cluster). */
 +  private fun performUpdateRadarsFromUrl(style: com.mapbox.maps.Style, url: String) {
 +    try {
 +      loadRadarImages(style)
-+      registerImageMissingListener(style)
-+      val urlChanged = url != lastRadarsGeoJsonUrlUsed
-+      if (!style.styleSourceExists("radars-source")) {
-+        val escapedUrl = url.replace("\\", "\\\\").replace("\"", "\\\"")
-+        // cluster:false para debug — sem clustering, todos os pontos mostram círculo/ícone
-+        val sourceJson =
-+            """
-+            {
-+              "type": "geojson",
-+              "data": "$escapedUrl",
-+              "cluster": false
++      val overlay = overlayRadars
++      val hasOverlay = overlay.isNotEmpty()
++      if (hasOverlay) {
++        Thread {
++          try {
++            val baseJson = cachedBaseGeoJson?.takeIf { cachedBaseGeoJsonUrl == url }
++                ?: fetchGeoJsonFromUrl(url)
++            if (baseJson != null) {
++              cachedBaseGeoJson = baseJson
++              cachedBaseGeoJsonUrl = url
++              val merged = mergeOverlayIntoGeoJson(baseJson, overlay)
++              throttleHandler.post {
++                try {
++                  applyMergedRadarsSource(style, merged)
++                  lastRadarsGeoJsonUrlUsed = url
++                  removeOverlaySourceIfExists(style)
++                  addBaseRadarLayersIfNeeded(style)
++                  ensureHighlightLayerExists(style)
++                  throttleHandler.post { updateHighlightFilterAndPulse() }
++                } catch (e: Exception) {
++                  Log.e("MapboxNavigationView", "Erro ao aplicar merged radars", e)
++                }
++              }
++            } else {
++              throttleHandler.post { fallbackToUrlOnly(style, url) }
 +            }
-+          """.trimIndent()
-+        val sourceVal = com.mapbox.bindgen.Value.fromJson(sourceJson)
-+        sourceVal.value?.let { v ->
-+          style.addStyleSource("radars-source", v)
-+          lastRadarsGeoJsonUrlUsed = url
-+          Log.d("MapboxNavigationView", "🌐 radars-source carregando de URL (todos os radares)")
-+        }
-+        addBaseRadarLayersIfNeeded(style)
-+      } else if (urlChanged) {
-+        val urlValue = com.mapbox.bindgen.Value(url)
-+        style.setStyleSourceProperty("radars-source", "data", urlValue)
-+        lastRadarsGeoJsonUrlUsed = url
-+        Log.d("MapboxNavigationView", "🌐 radars-source refetch (URL alterada)")
-+        addBaseRadarLayersIfNeeded(style)
++          } catch (e: Exception) {
++            Log.e("MapboxNavigationView", "Erro fetch+merge radars", e)
++            throttleHandler.post { fallbackToUrlOnly(style, url) }
++          }
++        }.start()
++      } else {
++        cachedBaseGeoJson = null
++        cachedBaseGeoJsonUrl = null
++        fallbackToUrlOnly(style, url)
++        removeOverlaySourceIfExists(style)
++        updateOverlaySourceFromProps(style)
++        ensureOverlayHighlightLayerExists(style)
 +      }
-+      updateOverlaySourceFromProps(style)
-+      updateBaseSymbolFilterExcludingOverlay(style)
-+      ensureHighlightLayerExists(style)
-+      ensureOverlayHighlightLayerExists(style)
 +      throttleHandler.post { updateHighlightFilterAndPulse() }
 +    } catch (e: Exception) {
 +      Log.e("MapboxNavigationView", "Erro em performUpdateRadarsFromUrl", e)
 +    }
++  }
++
++  private fun fallbackToUrlOnly(style: com.mapbox.maps.Style, url: String) {
++    val urlChanged = url != lastRadarsGeoJsonUrlUsed
++    if (!style.styleSourceExists("radars-source")) {
++      val escapedUrl = url.replace("\\", "\\\\").replace("\"", "\\\"")
++      val sourceJson =
++          """
++          {
++            "type": "geojson",
++            "data": "$escapedUrl",
++            "cluster": true,
++            "clusterRadius": 50,
++            "clusterMaxZoom": 12
++          }
++        """.trimIndent()
++      com.mapbox.bindgen.Value.fromJson(sourceJson).value?.let { v ->
++        style.addStyleSource("radars-source", v)
++        lastRadarsGeoJsonUrlUsed = url
++        Log.d("MapboxNavigationView", "🌐 radars-source carregando de URL")
++      }
++      addBaseRadarLayersIfNeeded(style)
++    } else if (urlChanged) {
++      com.mapbox.bindgen.Value(url).let { urlVal ->
++        style.setStyleSourceProperty("radars-source", "data", urlVal)
++      }
++      lastRadarsGeoJsonUrlUsed = url
++      Log.d("MapboxNavigationView", "🌐 radars-source refetch (URL alterada)")
++      addBaseRadarLayersIfNeeded(style)
++    }
++    ensureHighlightLayerExists(style)
++  }
++
++  private fun fetchGeoJsonFromUrl(url: String): String? {
++    return try {
++      java.net.URL(url).openConnection().apply {
++        connectTimeout = 8000
++        readTimeout = 15000
++      }.getInputStream().bufferedReader().use { it.readText() }
++    } catch (e: Exception) {
++      Log.e("MapboxNavigationView", "Erro ao buscar GeoJSON: ${e.message}")
++      null
++    }
++  }
++
++  private fun overlayToGeoJsonFeatures(overlay: List<RadarPoint>): List<Feature> =
++      overlay.mapNotNull { r ->
++        if (r.latitude.isNaN() || r.longitude.isNaN()) return@mapNotNull null
++        val typeStr = (r.type ?: "unknown").trim().lowercase()
++        val (icon, size) =
++            when {
++              typeStr.contains("semaforo") || typeStr.contains("camera") -> Pair("radarSemaforico", 0.05)
++              typeStr.contains("movel") || typeStr.contains("mobile") -> Pair("radarMovel", 0.05)
++              typeStr.contains("fixo") || typeStr.contains("placa") -> {
++                val speeds = listOf(20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160)
++                val closest = (r.speedLimit ?: 0.0).let { s -> speeds.minByOrNull { kotlin.math.abs(it - s) } ?: 0 }
++                Pair(if (closest > 0) "placa$closest" else "radarFixo", 0.18)
++              }
++              else -> Pair("radarMovel", 0.05)
++            }
++        Feature.fromGeometry(
++            Point.fromLngLat(r.longitude, r.latitude),
++            JsonObject().apply {
++              addProperty("id", r.id)
++              addProperty("iconImage", icon)
++              addProperty("iconSize", size)
++            }
++        )
++      }
++
++  private fun mergeOverlayIntoGeoJson(baseJson: String, overlay: List<RadarPoint>): String {
++    val fc = FeatureCollection.fromJson(baseJson)
++    val baseFeatures = fc.features()?.toMutableList() ?: mutableListOf()
++    val overlayIds = overlay.map { it.id }.toSet()
++    baseFeatures.removeAll { f ->
++      val prop = f.getProperty("id") ?: return@removeAll false
++      val id = if (prop.isJsonPrimitive) prop.asJsonPrimitive.asString else null
++      id != null && overlayIds.contains(id)
++    }
++    baseFeatures.addAll(overlayToGeoJsonFeatures(overlay))
++    return FeatureCollection.fromFeatures(baseFeatures).toJson()
++  }
++
++  private fun applyMergedRadarsSource(style: com.mapbox.maps.Style, mergedGeoJson: String) {
++    val sourceJson =
++        """
++        {
++          "type": "geojson",
++          "data": $mergedGeoJson,
++          "cluster": true,
++          "clusterRadius": 50,
++          "clusterMaxZoom": 12
++        }
++      """.trimIndent()
++    if (style.styleSourceExists("radars-source")) {
++      val dataVal = com.mapbox.bindgen.Value.fromJson(mergedGeoJson).value ?: return
++      style.setStyleSourceProperty("radars-source", "data", dataVal)
++      Log.d("MapboxNavigationView", "🌐 radars-source atualizado (base + overlay merged)")
++    } else {
++      com.mapbox.bindgen.Value.fromJson(sourceJson).value?.let { v ->
++        style.addStyleSource("radars-source", v)
++        Log.d("MapboxNavigationView", "🌐 radars-source criado (base + overlay merged)")
++      }
++    }
++  }
++
++  private fun removeOverlaySourceIfExists(style: com.mapbox.maps.Style) {
++    try {
++      if (style.styleSourceExists("radars-overlay-source")) {
++        listOf(
++            "radars-overlay-highlight-layer",
++            "radars-overlay-symbol"
++        ).forEach { id -> if (style.styleLayerExists(id)) style.removeStyleLayer(id) }
++        style.removeStyleSource("radars-overlay-source")
++      }
++    } catch (_: Exception) {}
 +  }
 +
 +  private fun addBaseRadarLayersIfNeeded(style: com.mapbox.maps.Style) {
@@ -2568,29 +2694,14 @@ index 41a3ba0..513c75e 100644
 +        else null
 +    // Ordem conforme docs Mapbox: unclustered PRIMEIRO, depois clusters
 +    val baseSymbolFilter = buildBaseSymbolFilterJson()
-+    // Circle: garante que radares unclustered sejam visíveis (funcionava na 1ª versão)
-+    val unclusteredCircleJson =
-+        """
-+        {
-+          "id": "radars-unclustered-circle", "type": "circle", "source": "radars-source",
-+          "filter": $baseSymbolFilter,
-+          "paint": {
-+            "circle-radius": 10,
-+            "circle-color": "#fbbf24",
-+            "circle-stroke-width": 2,
-+            "circle-stroke-color": "#ffffff"
-+          }
-+        }
-+      """.trimIndent()
-+    com.mapbox.bindgen.Value.fromJson(unclusteredCircleJson).value?.let { style.addStyleLayer(it, aboveRoute) }
 +    val symbolJson =
 +        """
 +        {
 +          "id": "radars-layer-symbol", "type": "symbol", "source": "radars-source",
 +          "filter": $baseSymbolFilter,
 +          "layout": {
-+            "icon-image": ["coalesce", ["get", "iconImage"], "radarMovel"],
-+            "icon-size": ["coalesce", ["get", "iconSize"], 0.15],
++            "icon-image": ["get", "iconImage"],
++            "icon-size": ["get", "iconSize"],
 +            "icon-allow-overlap": true,
 +            "icon-ignore-placement": true,
 +            "icon-anchor": "center",
@@ -2621,7 +2732,9 @@ index 41a3ba0..513c75e 100644
 +          "layout": {
 +            "text-field": ["to-string", ["get", "point_count"]],
 +            "text-font": ["Open Sans Regular", "Arial Unicode MS Regular"],
-+            "text-size": 12
++            "text-size": 14,
++            "text-allow-overlap": true,
++            "text-ignore-placement": true
 +          },
 +          "paint": { "text-color": "#ffffff" }
 +        }
@@ -3035,8 +3148,9 @@ index 41a3ba0..513c75e 100644
 +  }
 +
 +  private fun buildBaseSymbolFilterJson(): String {
-+    val excludeOverlay = buildExcludeOverlayFilterJson()
-+    return """["all", ["!", ["has", "point_count"]], $excludeOverlay]"""
++    // Não excluir por overlay na base URL:
++    // em alguns cenários o filtro por id estava ocultando todos os pontos unclustered.
++    return """["!", ["has", "point_count"]]"""
 +  }
 +
 +  private fun updateBaseSymbolFilterExcludingOverlay(style: com.mapbox.maps.Style) {
@@ -3045,10 +3159,8 @@ index 41a3ba0..513c75e 100644
 +      val filterValue = com.mapbox.bindgen.Value.fromJson(filterJson).value ?: return
 +      if (style.styleLayerExists("radars-layer-symbol"))
 +        style.setStyleLayerProperty("radars-layer-symbol", "filter", filterValue)
-+      if (style.styleLayerExists("radars-unclustered-circle"))
-+        style.setStyleLayerProperty("radars-unclustered-circle", "filter", filterValue)
 +    } catch (e: Exception) {
-+      Log.e("MapboxNavigationView", "Erro ao atualizar filter base symbol/circle", e)
++      Log.e("MapboxNavigationView", "Erro ao atualizar filter base symbol", e)
 +    }
 +  }
 +
