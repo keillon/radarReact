@@ -5,11 +5,13 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import Svg, { Defs, Mask, Rect, Circle } from "react-native-svg";
 
-const HOLE_RADIUS = 52; // Raio do foco circular — apenas em volta do ícone do radar
+const HOLE_RADIUS = 52;
 
-/** Overlay vignette: escurece tudo exceto um círculo em volta do radar */
+/**
+ * Overlay com foco REDONDO em volta do radar.
+ * Usa 4 barras com borderRadius nos cantos internos para formar um círculo — sem react-native-svg.
+ */
 export function VignetteOverlay({
   onPress,
   centerX,
@@ -24,13 +26,18 @@ export function VignetteOverlay({
   const { width, height } = Dimensions.get("window");
   const cx = centerX ?? width / 2;
   const cy = centerY ?? height / 2;
+  const r = radius;
+
+  const holeTop = Math.max(0, cy - r);
+  const holeBottom = Math.min(height, cy + r);
+  const holeLeft = Math.max(0, cx - r);
+  const holeRight = Math.min(width, cx + r);
+
+  const barStyle = { backgroundColor: "rgba(0,0,0,0.55)" as const };
 
   return (
     <View
-      style={[
-        StyleSheet.absoluteFillObject,
-        { zIndex: 999, elevation: 999 },
-      ]}
+      style={[StyleSheet.absoluteFillObject, { zIndex: 999, elevation: 999 }]}
       pointerEvents="box-none"
     >
       <TouchableOpacity
@@ -39,38 +46,73 @@ export function VignetteOverlay({
         onPress={onPress}
       />
       <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
-        <Svg
-          width={width}
-          height={height}
-          style={StyleSheet.absoluteFill}
-        >
-          <Defs>
-            <Mask id="hole">
-              <Rect
-                x={0}
-                y={0}
-                width={width}
-                height={height}
-                fill="white"
-              />
-              <Circle
-                cx={cx}
-                cy={cy}
-                r={radius}
-                fill="black"
-              />
-            </Mask>
-          </Defs>
-          <Rect
-            x={0}
-            y={0}
-            width={width}
-            height={height}
-            fill="rgba(0,0,0,0.55)"
-            mask="url(#hole)"
-          />
-        </Svg>
+        {/* Topo — bordas inferiores arredondadas (parte superior do círculo) */}
+        <View
+          style={[
+            styles.bar,
+            barStyle,
+            {
+              height: holeTop,
+              top: 0,
+              left: 0,
+              right: 0,
+              borderBottomLeftRadius: r,
+              borderBottomRightRadius: r,
+            },
+          ]}
+        />
+        {/* Fundo — bordas superiores arredondadas */}
+        <View
+          style={[
+            styles.bar,
+            barStyle,
+            {
+              height: height - holeBottom,
+              bottom: 0,
+              left: 0,
+              right: 0,
+              borderTopLeftRadius: r,
+              borderTopRightRadius: r,
+            },
+          ]}
+        />
+        {/* Esquerda — bordas direitas arredondadas */}
+        <View
+          style={[
+            styles.bar,
+            barStyle,
+            {
+              width: holeLeft,
+              left: 0,
+              top: holeTop,
+              height: holeBottom - holeTop,
+              borderTopRightRadius: r,
+              borderBottomRightRadius: r,
+            },
+          ]}
+        />
+        {/* Direita — bordas esquerdas arredondadas */}
+        <View
+          style={[
+            styles.bar,
+            barStyle,
+            {
+              width: width - holeRight,
+              right: 0,
+              top: holeTop,
+              height: holeBottom - holeTop,
+              borderTopLeftRadius: r,
+              borderBottomLeftRadius: r,
+            },
+          ]}
+        />
       </View>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  bar: {
+    position: "absolute",
+  },
+});
