@@ -10,6 +10,7 @@
     "apply-patch": "patch-package",
     "build:release": "npm run apply-patch && cd android && ./gradlew assembleRelease",
     "android": "react-native run-android",
+    "android:clean-rebuild": "cd android && gradlew.bat clean && cd .. && npx react-native run-android",
     "android:build": "cd android && gradlew.bat assembleDebug && cd ..",
     "android:install": "cd android && gradlew.bat installDebug && cd ..",
     "ios": "react-native run-ios",
@@ -31,6 +32,7 @@
     "react-native-safe-area-context": "^4.8.2",
     "react-native-screens": "^3.27.0",
     "react-native-sound": "^0.11.2",
+    "react-native-svg": "^14.1.0",
     "react-native-tts": "^4.1.1",
     "react-native-vector-icons": "^10.3.0",
     "socket.io-client": "^4.7.2"
