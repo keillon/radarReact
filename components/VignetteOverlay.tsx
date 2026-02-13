@@ -5,13 +5,28 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import Svg, { Defs, Mask, Rect, Circle } from "react-native-svg";
 
-/** Overlay vignette: escurece as bordas, centro livre (radar destacado) */
-export function VignetteOverlay({ onPress }: { onPress: () => void }) {
+const HOLE_RADIUS = 52; // Tamanho do foco circular — apenas em volta do ícone do radar
+
+/** Overlay vignette: escurece tudo exceto um círculo em volta do radar */
+export function VignetteOverlay({
+  onPress,
+  centerX,
+  centerY,
+  radius = HOLE_RADIUS,
+}: {
+  onPress: () => void;
+  /** Posição X do foco (pixels). Se null, usa centro da tela */
+  centerX?: number | null;
+  /** Posição Y do foco (pixels). Se null, usa centro da tela */
+  centerY?: number | null;
+  radius?: number;
+}) {
   const { width, height } = Dimensions.get("window");
-  const edge = Math.min(width, height) * 0.32;
-  const topBottomH = edge;
-  const leftRightW = edge;
+  const cx = centerX ?? width / 2;
+  const cy = centerY ?? height / 2;
+
   return (
     <View
       style={[
@@ -26,18 +41,39 @@ export function VignetteOverlay({ onPress }: { onPress: () => void }) {
         onPress={onPress}
       />
       <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
-        <View style={[styles.vignetteBar, { height: topBottomH, top: 0, left: 0, right: 0 }]} />
-        <View style={[styles.vignetteBar, { height: topBottomH, bottom: 0, left: 0, right: 0 }]} />
-        <View style={[styles.vignetteBar, { width: leftRightW, left: 0, top: topBottomH, bottom: topBottomH }]} />
-        <View style={[styles.vignetteBar, { width: leftRightW, right: 0, top: topBottomH, bottom: topBottomH }]} />
+        <Svg
+          width={width}
+          height={height}
+          style={StyleSheet.absoluteFill}
+        >
+          <Defs>
+            {/* Máscara: branco = overlay visível, preto = buraco (transparente) */}
+            <Mask id="hole">
+              <Rect
+                x={0}
+                y={0}
+                width={width}
+                height={height}
+                fill="white"
+              />
+              <Circle
+                cx={cx}
+                cy={cy}
+                r={radius}
+                fill="black"
+              />
+            </Mask>
+          </Defs>
+          <Rect
+            x={0}
+            y={0}
+            width={width}
+            height={height}
+            fill="rgba(0,0,0,0.55)"
+            mask="url(#hole)"
+          />
+        </Svg>
       </View>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  vignetteBar: {
-    position: "absolute",
-    backgroundColor: "rgba(0,0,0,0.55)",
-  },
-});

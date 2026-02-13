@@ -322,6 +322,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
   const [radarDetailAddress, setRadarDetailAddress] = useState<string | null>(
     null,
   );
+  const [vignetteCenter, setVignetteCenter] = useState<{ x: number; y: number } | null>(null);
   const mainMapRef = useRef<MapHandle | null>(null);
   const selectedRadarDetailRef = useRef<Radar | null>(null);
 
@@ -924,6 +925,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
 
   const handleRadarPress = useCallback((radar: Radar) => {
     setSelectedRadarDetail(radar);
+    setVignetteCenter(null);
     selectedRadarDetailRef.current = radar;
     mainMapRef.current?.focusOnCoord(radar.latitude, radar.longitude);
   }, []);
@@ -2110,6 +2112,16 @@ export default function Home({ onOpenEditor }: HomeProps) {
                 setReportLocationMode("map");
                 setShowReportModal(true);
               }}
+              onMapIdle={() => {
+                const r = selectedRadarDetailRef.current;
+                if (!r || !mainMapRef.current?.getPointInView) return;
+                mainMapRef.current
+                  .getPointInView(r.longitude, r.latitude)
+                  .then((pt) => {
+                    if (pt && pt.length >= 2)
+                      setVignetteCenter({ x: pt[0], y: pt[1] });
+                  });
+              }}
             />
           </Suspense>
 
@@ -2136,12 +2148,15 @@ export default function Home({ onOpenEditor }: HomeProps) {
       {/* Vignette (tudo escuro exceto centro onde está o radar) + Modal */}
       {selectedRadarDetail && (
         <>
-          {/* Vignette: moldura escura, centro livre para o radar destacado */}
+          {/* Vignette: foco circular em volta do ícone do radar */}
           <VignetteOverlay
             onPress={() => {
               setSelectedRadarDetail(null);
+              setVignetteCenter(null);
               selectedRadarDetailRef.current = null;
             }}
+            centerX={vignetteCenter?.x ?? null}
+            centerY={vignetteCenter?.y ?? null}
           />
         <View
           style={{
@@ -2210,6 +2225,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
                 style={{ padding: 12, backgroundColor: "#e5e7eb", borderRadius: 8 }}
                 onPress={() => {
                   setSelectedRadarDetail(null);
+                  setVignetteCenter(null);
                   selectedRadarDetailRef.current = null;
                 }}
                 activeOpacity={0.8}

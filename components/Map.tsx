@@ -80,8 +80,8 @@ interface MapProps {
   hideUserLocation?: boolean;
   /** Ponto selecionado no modo picker (ex.: toque no mapa) — mostra marcador vermelho */
   pickerSelectedPoint?: { latitude: number; longitude: number } | null;
-  /** Radar destacado (iluminado) — sem vignette, só glow no ponto */
-  highlightedRadar?: { latitude: number; longitude: number } | null;
+  /** Chamado quando o mapa termina de animar (câmera parada) */
+  onMapIdle?: () => void;
 }
 
 export type MapHandle = {
@@ -92,6 +92,11 @@ export type MapHandle = {
     longitude: number,
     zoomLevel?: number,
   ) => void;
+  /** Converte coordenada geo para pixels na tela (para posicionar overlay) */
+  getPointInView: (
+    longitude: number,
+    latitude: number,
+  ) => Promise<[number, number] | null>;
 };
 
 const Map = forwardRef<MapHandle, MapProps>(function Map(
@@ -108,7 +113,7 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
     onCameraChanged,
     hideUserLocation = false,
     pickerSelectedPoint = null,
-    highlightedRadar = null,
+    onMapIdle,
   },
   ref,
 ) {
@@ -119,6 +124,7 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
   const [isTracking, setIsTracking] = useState(false); // Add tracking state
   const [hasInitialized, setHasInitialized] = useState(false);
   const cameraRef = useRef<any>(null);
+  const mapViewRef = useRef<any>(null);
   const pulseAnimation = useRef(new Animated.Value(1)).current;
 
   const emitCameraCenter = (rawCenter: any) => {
@@ -391,6 +397,22 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
           animationDuration: 800,
         });
       },
+      getPointInView: async (
+        longitude: number,
+        latitude: number,
+      ): Promise<[number, number] | null> => {
+        const map = mapViewRef.current;
+        if (map == null || typeof (map as any).getPointInView !== "function")
+          return null;
+        try {
+          const pt = await (map as any).getPointInView([longitude, latitude]);
+          return Array.isArray(pt) && pt.length >= 2
+            ? [Number(pt[0]), Number(pt[1])]
+            : null;
+        } catch {
+          return null;
+        }
+      },
     }),
     [],
   );
@@ -413,6 +435,7 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
   return (
     <View style={styles.container} pointerEvents="box-none">
       <MapView
+        ref={mapViewRef}
         pointerEvents={interactive ? "auto" : "none"}
         style={styles.map}
         styleURL={Mapbox.StyleURL.Street}
@@ -466,17 +489,24 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
                     emitCameraCenter(centerCandidate);
                 } catch (_) {}
               },
+            }
+          : {})}
+        {...(onMapIdle != null || onCameraChanged != null
+          ? {
               onMapIdle: (event: unknown) => {
                 if (event == null || typeof event !== "object") return;
                 try {
-                  const e = event as {
-                    properties?: { center?: number[] };
-                    geometry?: { coordinates?: number[] };
-                  };
-                  const centerCandidate =
-                    e.properties?.center ?? e.geometry?.coordinates;
-                  if (centerCandidate != null)
-                    emitCameraCenter(centerCandidate);
+                  if (onCameraChanged != null) {
+                    const e = event as {
+                      properties?: { center?: number[] };
+                      geometry?: { coordinates?: number[] };
+                    };
+                    const centerCandidate =
+                      e.properties?.center ?? e.geometry?.coordinates;
+                    if (centerCandidate != null)
+                      emitCameraCenter(centerCandidate);
+                  }
+                  onMapIdle?.();
                 } catch (_) {}
               },
             }
@@ -722,48 +752,6 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
                   iconSize: ["coalesce", ["get", "iconSize"], 0.2],
                   iconAllowOverlap: true,
                   iconIgnorePlacement: true,
-                }}
-              />
-            </ShapeSource>
-          )}
-
-        {/* Destaque do radar selecionado (glow iluminado, sem vignette) */}
-        {highlightedRadar != null &&
-          typeof highlightedRadar.latitude === "number" &&
-          typeof highlightedRadar.longitude === "number" && (
-            <ShapeSource
-              id="highlightedRadar"
-              shape={{
-                type: "Feature",
-                properties: {},
-                geometry: {
-                  type: "Point",
-                  coordinates: [
-                    highlightedRadar.longitude,
-                    highlightedRadar.latitude,
-                  ],
-                },
-              }}
-            >
-              <CircleLayer
-                id="highlightedRadarGlow"
-                style={{
-                  circleRadius: 45,
-                  circleColor: "#fbbf24",
-                  circleOpacity: 0.4,
-                  circleStrokeWidth: 4,
-                  circleStrokeColor: "#fcd34d",
-                  circleStrokeOpacity: 0.9,
-                }}
-              />
-              <CircleLayer
-                id="highlightedRadarRing"
-                style={{
-                  circleRadius: 25,
-                  circleColor: "transparent",
-                  circleStrokeWidth: 4,
-                  circleStrokeColor: "#fbbf24",
-                  circleStrokeOpacity: 1,
                 }}
               />
             </ShapeSource>

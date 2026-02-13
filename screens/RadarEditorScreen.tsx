@@ -69,6 +69,7 @@ export default function RadarEditorScreen({
     "móvel" | "semaforo" | "placa"
   >("placa");
   const [radarDetailAddress, setRadarDetailAddress] = useState<string | null>(null);
+  const [vignetteCenter, setVignetteCenter] = useState<{ x: number; y: number } | null>(null);
   const editorMapRef = useRef<MapHandle | null>(null);
 
   const RADAR_TYPES: {
@@ -426,6 +427,16 @@ export default function RadarEditorScreen({
           onMapPress={handleMapPress}
           interactive={true}
           currentLocation={center}
+          onMapIdle={() => {
+            const r = selectedRadar;
+            if (!r || !editorMapRef.current?.getPointInView) return;
+            editorMapRef.current
+              .getPointInView(r.longitude, r.latitude)
+              .then((pt) => {
+                if (pt && pt.length >= 2)
+                  setVignetteCenter({ x: pt[0], y: pt[1] });
+              });
+          }}
         />
         {loading && (
           <View style={styles.loadingOverlay}>
@@ -439,7 +450,12 @@ export default function RadarEditorScreen({
       {selectedRadar && mode === "view" && (
         <>
           <VignetteOverlay
-            onPress={() => setSelectedRadar(null)}
+            onPress={() => {
+              setSelectedRadar(null);
+              setVignetteCenter(null);
+            }}
+            centerX={vignetteCenter?.x ?? null}
+            centerY={vignetteCenter?.y ?? null}
           />
         <View
           style={{
@@ -492,7 +508,10 @@ export default function RadarEditorScreen({
               </View>
               <TouchableOpacity
                 style={{ padding: 12, backgroundColor: "#e5e7eb", borderRadius: 8 }}
-                onPress={() => setSelectedRadar(null)}
+                onPress={() => {
+                  setSelectedRadar(null);
+                  setVignetteCenter(null);
+                }}
                 activeOpacity={0.8}
               >
                 <Text style={{ fontWeight: "600", color: "#374151" }}>Fechar</Text>
