@@ -45,6 +45,7 @@ function getGeolocation(): GeolocationApi {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getClosestPlacaName, radarImages, type MapHandle } from "../components/Map";
 import SearchContainer from "../components/SearchContainer";
+import { VignetteOverlay } from "../components/VignetteOverlay";
 import { useRadarProximity } from "../hooks/useRadarProximity";
 import {
   API_BASE_URL,
@@ -569,20 +570,10 @@ export default function Home({ onOpenEditor }: HomeProps) {
     };
   }, [showMapPicker, mapPickerCenter?.latitude, mapPickerCenter?.longitude]);
 
-  // Buscar endereço (reverse geocode) quando radar é selecionado
+  // Buscar endereço via reverse geocode (lat/lon) — sempre, para todos os radares
   useEffect(() => {
     if (!selectedRadarDetail) {
       setRadarDetailAddress(null);
-      return;
-    }
-    const addr =
-      selectedRadarDetail.rodovia ||
-      (selectedRadarDetail.municipio
-        ? `${selectedRadarDetail.municipio}${selectedRadarDetail.uf ? ` - ${selectedRadarDetail.uf}` : ""}`
-        : null) ||
-      null;
-    if (addr) {
-      setRadarDetailAddress(addr);
       return;
     }
     setRadarDetailAddress(null);
@@ -597,7 +588,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
       }
     });
     return () => { cancelled = true; };
-  }, [selectedRadarDetail?.id, selectedRadarDetail?.latitude, selectedRadarDetail?.longitude, selectedRadarDetail?.rodovia, selectedRadarDetail?.municipio]);
+  }, [selectedRadarDetail?.id, selectedRadarDetail?.latitude, selectedRadarDetail?.longitude]);
 
   useEffect(() => {
     initMapbox();
@@ -2113,14 +2104,6 @@ export default function Home({ onOpenEditor }: HomeProps) {
               isNavigating={false}
               currentLocation={currentLocation}
               nearbyRadarIds={nearbyRadarIds}
-              highlightedRadar={
-                selectedRadarDetail
-                  ? {
-                      latitude: selectedRadarDetail.latitude,
-                      longitude: selectedRadarDetail.longitude,
-                    }
-                  : null
-              }
               onRadarPress={handleRadarPress}
               onMapPress={(coords: any) => {
                 setReportCustomLocation(coords);
@@ -2150,8 +2133,16 @@ export default function Home({ onOpenEditor }: HomeProps) {
         </View>
       )}
 
-      {/* Modal radar no topo (radar fica destacado/iluminado no mapa, sem vignette) */}
+      {/* Vignette (tudo escuro exceto centro onde está o radar) + Modal */}
       {selectedRadarDetail && (
+        <>
+          {/* Vignette: moldura escura, centro livre para o radar destacado */}
+          <VignetteOverlay
+            onPress={() => {
+              setSelectedRadarDetail(null);
+              selectedRadarDetailRef.current = null;
+            }}
+          />
         <View
           style={{
             position: "absolute",
@@ -2160,6 +2151,9 @@ export default function Home({ onOpenEditor }: HomeProps) {
             right: 16,
             zIndex: 1000,
             elevation: 1000,
+            backgroundColor: '#fff',
+            borderRadius: 12,
+          
           }}
           pointerEvents="box-none"
         >
@@ -2172,10 +2166,11 @@ export default function Home({ onOpenEditor }: HomeProps) {
                 alignSelf: "center",
                 flexDirection: "column",
                 alignItems: "stretch",
+              
               },
             ]}
           >
-            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12,  }}>
               <View style={styles.radarIconContainer}>
                 <Image
                   source={
@@ -2234,9 +2229,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
                 <Text style={{ fontSize: 14, color: "#374151" }}>
                   {selectedRadarDetail.source === "user" || selectedRadarDetail.source === "reportado"
                     ? "Reportado pela comunidade"
-                    : selectedRadarDetail.source
-                      ? `Fonte: ${selectedRadarDetail.source}`
-                      : "Dados oficiais"}
+                    : "Dados locais"}
                 </Text>
               </View>
               {(selectedRadarDetail.createdAt ?? selectedRadarDetail.reportedAt) && (
@@ -2252,6 +2245,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
             </View>
           </View>
         </View>
+        </>
       )}
 
       {/* Alerta de radar - Modal animado no topo */}

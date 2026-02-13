@@ -17,6 +17,7 @@ import Map, {
   radarImages,
   type MapHandle,
 } from "../components/Map";
+import { VignetteOverlay } from "../components/VignetteOverlay";
 import { reverseGeocode } from "../services/mapbox";
 import {
   API_BASE_URL,
@@ -182,18 +183,10 @@ export default function RadarEditorScreen({
     };
   }, []);
 
+  // Sempre usar reverse geocode (lat/lon) para o endereço — evita "semaforo com radar" etc
   useEffect(() => {
     if (!selectedRadar) {
       setRadarDetailAddress(null);
-      return;
-    }
-    const addr =
-      selectedRadar.rodovia ||
-      (selectedRadar.municipio
-        ? `${selectedRadar.municipio}${selectedRadar.uf ? ` - ${selectedRadar.uf}` : ""}`
-        : null);
-    if (addr) {
-      setRadarDetailAddress(addr);
       return;
     }
     setRadarDetailAddress(null);
@@ -433,11 +426,6 @@ export default function RadarEditorScreen({
           onMapPress={handleMapPress}
           interactive={true}
           currentLocation={center}
-          highlightedRadar={
-            selectedRadar && mode === "view"
-              ? { latitude: selectedRadar.latitude, longitude: selectedRadar.longitude }
-              : null
-          }
         />
         {loading && (
           <View style={styles.loadingOverlay}>
@@ -447,8 +435,12 @@ export default function RadarEditorScreen({
         )}
       </View>
 
-      {/* Modal radar no topo (radar destacado no mapa, sem vignette) */}
+      {/* Vignette + Modal radar (radar destacado no centro) */}
       {selectedRadar && mode === "view" && (
+        <>
+          <VignetteOverlay
+            onPress={() => setSelectedRadar(null)}
+          />
         <View
           style={{
             position: "absolute",
@@ -518,9 +510,7 @@ export default function RadarEditorScreen({
                 <Text style={{ fontSize: 14, color: "#374151" }}>
                   {selectedRadar.source === "user" || selectedRadar.source === "reportado"
                     ? "Reportado pela comunidade"
-                    : selectedRadar.source
-                      ? `Fonte: ${selectedRadar.source}`
-                      : "Dados oficiais"}
+                    : "Dados locais"}
                 </Text>
               </View>
               {(selectedRadar.createdAt ?? selectedRadar.reportedAt) && (
@@ -536,6 +526,7 @@ export default function RadarEditorScreen({
             </View>
           </View>
         </View>
+        </>
       )}
 
       {/* Modal: Reportar radar (velocidade + tipo) */}
