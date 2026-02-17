@@ -14,6 +14,7 @@
     "android:build": "cd android && gradlew.bat assembleDebug && cd ..",
     "android:install": "cd android && gradlew.bat installDebug && cd ..",
     "ios": "react-native run-ios",
+    "ios:pod": "cd ios && pod install",
     "android:start": "npm start & timeout /t 5 >nul & npm run android",
     "android:bundle": "react-native bundle --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res",
     "lint": "eslint .",

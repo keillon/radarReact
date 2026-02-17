@@ -30,7 +30,7 @@ class AppDelegate: RCTAppDelegate {
   // MARK: AppDelegate Functions
   override func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
 
-    moduleName = "MapboxNavigationExample"
+    moduleName = "RadarZone"
     initialProps = [String: Any]()
 
     let app = super.application(application, didFinishLaunchingWithOptions: launchOptions);

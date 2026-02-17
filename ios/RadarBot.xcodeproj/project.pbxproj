@@ -461,7 +461,7 @@
 					"-lc++",
 					"$(inherited)",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = mapboxnavigation.example;
+				PRODUCT_BUNDLE_IDENTIFIER = com.radarzone;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MapboxNavigationExample.app/MapboxNavigationExample";
 			};
@@ -486,7 +486,7 @@
 					"-lc++",
 					"$(inherited)",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = mapboxnavigation.example;
+				PRODUCT_BUNDLE_IDENTIFIER = com.radarzone;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MapboxNavigationExample.app/MapboxNavigationExample";
 			};
@@ -529,7 +529,7 @@
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D COCOAPODS";
 				PRESERVE_DEAD_CODE_INITS_AND_TERMS = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = mapboxnavigation.example;
+				PRODUCT_BUNDLE_IDENTIFIER = com.radarzone;
 				PRODUCT_NAME = MapboxNavigationExample;
 				SWIFT_OBJC_BRIDGING_HEADER = "Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -574,7 +574,7 @@
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D COCOAPODS";
 				PRESERVE_DEAD_CODE_INITS_AND_TERMS = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = mapboxnavigation.example;
+				PRODUCT_BUNDLE_IDENTIFIER = com.radarzone;
 				PRODUCT_NAME = MapboxNavigationExample;
 				SWIFT_OBJC_BRIDGING_HEADER = "Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
