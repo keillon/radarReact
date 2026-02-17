@@ -86,11 +86,47 @@ export default function App() {
   }, [loadRadars]);
 
   // WebSocket Connection for Real-time Updates
+  // Dedupe: evita processar radar:update duplicado (React StrictMode ou múltiplas conexões)
+  const pendingWsUpdates = useRef<Map<string, { u: any; at: number }>>(new Map());
+  const wsFlushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     let ws: WebSocket | null = null;
     let reconnectTimeout: any = null;
     const API_URL = import.meta.env.VITE_API_URL || "http://72.60.247.18:3000";
     const WS_URL = API_URL.replace("http://", "ws://").replace("https://", "wss://") + "/ws";
+
+    const applyPendingUpdates = () => {
+      if (pendingWsUpdates.current.size === 0) return;
+      const toApply = new Map(pendingWsUpdates.current);
+      pendingWsUpdates.current.clear();
+      const updatesById = Object.fromEntries(
+        Array.from(toApply.entries()).map(([id, { u }]) => [id, u])
+      );
+      setRadars((prev) =>
+        prev.map((r) => {
+          const u = updatesById[r.id];
+          if (!u) return r;
+          return {
+            ...r,
+            ...u,
+            type: u.type && u.type !== "unknown" ? u.type : r.type,
+            speedLimit: u.speedLimit ?? r.speedLimit,
+          };
+        })
+      );
+      setSelected((prev) => {
+        if (!prev) return prev;
+        const u = updatesById[prev.id];
+        if (!u) return prev;
+        return {
+          ...prev,
+          ...u,
+          type: u.type && u.type !== "unknown" ? u.type : prev.type,
+          speedLimit: u.speedLimit ?? prev.speedLimit,
+        };
+      });
+    };
 
     const connect = () => {
       try {
@@ -134,29 +170,13 @@ export default function App() {
                 uf: raw.uf,
                 createdAt: raw.createdAt,
               };
-              console.log("📩 Admin: Radar atualizado via WS:", u.id);
-              setRadars((prev) =>
-                prev.map((r) =>
-                  r.id !== u.id
-                    ? r
-                    : {
-                        ...r,
-                        ...u,
-                        type: u.type && u.type !== "unknown" ? u.type : r.type,
-                        speedLimit: u.speedLimit ?? r.speedLimit,
-                      }
-                )
-              );
-              setSelected((prev) =>
-                prev?.id === u.id
-                  ? {
-                      ...prev,
-                      ...u,
-                      type: u.type && u.type !== "unknown" ? u.type : prev.type,
-                      speedLimit: u.speedLimit ?? prev.speedLimit,
-                    }
-                  : prev
-              );
+              // Dedupe: múltiplos updates para mesmo id em curto intervalo → aplicar só o último
+              pendingWsUpdates.current.set(u.id, { u, at: Date.now() });
+              if (wsFlushTimer.current) clearTimeout(wsFlushTimer.current);
+              wsFlushTimer.current = setTimeout(() => {
+                wsFlushTimer.current = null;
+                applyPendingUpdates();
+              }, 80);
             } else if (message.event === "radar:delete") {
               const { id } = message.data;
               if (id) {
@@ -196,6 +216,10 @@ export default function App() {
       }
       if (reconnectTimeout) {
         clearTimeout(reconnectTimeout);
+      }
+      if (wsFlushTimer.current) {
+        clearTimeout(wsFlushTimer.current);
+        wsFlushTimer.current = null;
       }
     };
   }, [loadRadars]);
@@ -251,10 +275,11 @@ export default function App() {
     setError(null);
     try {
       const typeForApi = radarType === "placa" ? "fixo" : radarType;
+      const speed = speedLimit ? parseInt(speedLimit, 10) : (radarType === "placa" ? 60 : undefined);
       const radar = await reportRadar({
         latitude: pendingAdd.lat,
         longitude: pendingAdd.lng,
-        speedLimit: speedLimit ? parseInt(speedLimit, 10) : (radarType === "placa" ? 60 : undefined),
+        speedLimit: speed,
         type: typeForApi,
       });
       setRadars((prev) => [...prev, radar]);
@@ -472,7 +497,7 @@ export default function App() {
                   onClick={() => {
                     setRadarType(t.value);
                     if (t.value === "placa" && !speedLimit) setSpeedLimit("60");
-                    else if (t.value !== "placa") setSpeedLimit("");
+                    else if (t.value !== "placa" && !speedLimit) setSpeedLimit("");
                   }}
                   style={{
                     flex: 1,
@@ -501,56 +526,56 @@ export default function App() {
               ))}
             </div>
 
-            {radarType === "placa" && (
-              <>
-                <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 500 }}>
-                  Limite de velocidade (km/h)
-                </p>
-                <div
-                  style={{
-                    display: "flex",
-                    flexWrap: "wrap",
-                    gap: 8,
-                    marginBottom: 16,
-                  }}
-                >
-                  {[30, 40, 50, 60, 70, 80, 90, 100, 110, 120].map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => setSpeedLimit(String(s))}
-                      style={{
-                        padding: "10px 16px",
-                        minWidth: 52,
-                        background: speedLimit === String(s) ? "#3b82f6" : "#f3f4f6",
-                        color: speedLimit === String(s) ? "#fff" : "#1f2937",
-                        border: `2px solid ${speedLimit === String(s) ? "#3b82f6" : "#e5e7eb"}`,
-                        borderRadius: 10,
-                        cursor: "pointer",
-                        fontSize: 16,
-                        fontWeight: 600,
-                      }}
-                    >
-                      {s}
-                    </button>
-                  ))}
-                </div>
-                <input
-                  type="number"
-                  placeholder="Outro (ex: 20)"
-                  value={speedLimit}
-                  onChange={(e) => setSpeedLimit(e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "10px 12px",
-                    border: "1px solid #d1d5db",
-                    borderRadius: 8,
-                    marginBottom: 8,
-                    boxSizing: "border-box",
-                  }}
-                />
-              </>
-            )}
+            {/* Limite de velocidade: todos os tipos (placa, móvel, semafórico) */}
+            <>
+              <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 500 }}>
+                Limite de velocidade (km/h)
+                {radarType !== "placa" && " (opcional)"}
+              </p>
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 8,
+                  marginBottom: 16,
+                }}
+              >
+                {[30, 40, 50, 60, 70, 80, 90, 100, 110, 120].map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setSpeedLimit(String(s))}
+                    style={{
+                      padding: "10px 16px",
+                      minWidth: 52,
+                      background: speedLimit === String(s) ? "#3b82f6" : "#f3f4f6",
+                      color: speedLimit === String(s) ? "#fff" : "#1f2937",
+                      border: `2px solid ${speedLimit === String(s) ? "#3b82f6" : "#e5e7eb"}`,
+                      borderRadius: 10,
+                      cursor: "pointer",
+                      fontSize: 16,
+                      fontWeight: 600,
+                    }}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+              <input
+                type="number"
+                placeholder={radarType === "placa" ? "Outro (ex: 20)" : "Outro (ex: 20) — opcional"}
+                value={speedLimit}
+                onChange={(e) => setSpeedLimit(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  border: "1px solid #d1d5db",
+                  borderRadius: 8,
+                  marginBottom: 8,
+                  boxSizing: "border-box",
+                }}
+              />
+            </>
 
             <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
               <button

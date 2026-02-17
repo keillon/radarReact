@@ -1316,7 +1316,35 @@ export default function Home({ onOpenEditor }: HomeProps) {
         for (const { event, payload } of batch) {
           switch (event) {
             case "radar:new":
-            case "radar:created":
+            case "radar:created": {
+              const normalized = normalizeRadarPayload(payload);
+              if (!normalized) break;
+              overlayDeletes.delete(normalized.id);
+              overlayUpserts.set(normalized.id, normalized);
+              if (!isNavigatingRef.current) {
+                baseDeletes.delete(normalized.id);
+                baseUpserts.set(normalized.id, normalized);
+              }
+              // Substituir temp por real: evita duplicar ícone quando reportamos e WS confirma
+              const isNewFromReport = event === "radar:new" || event === "radar:created";
+              if (isNewFromReport && normalized.latitude != null && normalized.longitude != null) {
+                setReportedRadarsMap((prev) => {
+                  const match = Array.from(prev.entries()).find(
+                    ([id, r]) =>
+                      id.startsWith("temp_") &&
+                      Math.abs((r.latitude ?? 0) - normalized.latitude!) < 0.0001 &&
+                      Math.abs((r.longitude ?? 0) - normalized.longitude!) < 0.0001
+                  );
+                  if (!match) return prev;
+                  const [tempId] = match;
+                  const next = new Map(prev);
+                  next.delete(tempId);
+                  next.set(normalized.id, normalized);
+                  return next;
+                });
+              }
+              break;
+            }
             case "radar:update":
             case "radar:updated": {
               const normalized = normalizeRadarPayload(payload);
