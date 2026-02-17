@@ -73,6 +73,9 @@ yarn-error.log
 !.yarn/sdks
 !.yarn/versions
 
+# Admin: ícones copiados por prepare (de assets/images)
+admin/public/icons/
+
 # Patch files (manter os patches do patch-package)
 # Mas ignorar arquivos temporários relacionados a patches
 patches/*.tmp

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "prepare": "node copy-icons.cjs"
   },
   "dependencies": {
     "mapbox-gl": "^3.7.0",

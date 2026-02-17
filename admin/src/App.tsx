@@ -40,16 +40,15 @@ export default function App() {
     lng: number;
   } | null>(null);
   const [radarType, setRadarType] = useState<
-    "reportado" | "fixo" | "móvel" | "semaforo"
-  >("reportado");
+    "placa" | "móvel" | "semaforo"
+  >("placa");
   const [error, setError] = useState<string | null>(null);
   const loadTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const RADAR_TYPES = [
-    { value: "reportado" as const, label: "Reportado" },
-    { value: "fixo" as const, label: "Radar Fixo" },
-    { value: "móvel" as const, label: "Radar Móvel" },
-    { value: "semaforo" as const, label: "Semáforo c/ Radar" },
+    { value: "placa" as const, label: "Placa de Velocidade", icon: "placa60" },
+    { value: "móvel" as const, label: "Radar Móvel", icon: "radarMovel" },
+    { value: "semaforo" as const, label: "Semáforo c/ Radar", icon: "radarSemaforico" },
   ];
 
   // Admin: carregar TODOS os radares (sem limitar por zoom/raio da viewport)
@@ -120,17 +119,44 @@ export default function App() {
                 });
               }
             } else if (message.event === "radar:update") {
-              const updatedRadar = message.data;
-              if (updatedRadar && updatedRadar.id) {
-                console.log("📩 Admin: Radar atualizado via WS:", updatedRadar.id);
-                setRadars((prev) =>
-                  prev.map((r) => r.id === updatedRadar.id ? { ...r, ...updatedRadar } : r)
-                );
-                // Atualizar seleção se for o radar atual
-                setSelected((prev) =>
-                  prev && prev.id === updatedRadar.id ? { ...prev, ...updatedRadar } : prev
-                );
-              }
+              const raw = message.data;
+              if (!raw?.id) return;
+              const u = {
+                id: raw.id,
+                latitude: raw.latitude ?? raw.lat,
+                longitude: raw.longitude ?? raw.lng,
+                speedLimit: raw.velocidadeLeve ?? raw.speedLimit,
+                type: raw.tipoRadar ?? raw.type,
+                situacao: raw.situacao,
+                source: raw.source,
+                rodovia: raw.rodovia,
+                municipio: raw.municipio,
+                uf: raw.uf,
+                createdAt: raw.createdAt,
+              };
+              console.log("📩 Admin: Radar atualizado via WS:", u.id);
+              setRadars((prev) =>
+                prev.map((r) =>
+                  r.id !== u.id
+                    ? r
+                    : {
+                        ...r,
+                        ...u,
+                        type: u.type && u.type !== "unknown" ? u.type : r.type,
+                        speedLimit: u.speedLimit ?? r.speedLimit,
+                      }
+                )
+              );
+              setSelected((prev) =>
+                prev?.id === u.id
+                  ? {
+                      ...prev,
+                      ...u,
+                      type: u.type && u.type !== "unknown" ? u.type : prev.type,
+                      speedLimit: u.speedLimit ?? prev.speedLimit,
+                    }
+                  : prev
+              );
             } else if (message.event === "radar:delete") {
               const { id } = message.data;
               if (id) {
@@ -185,8 +211,8 @@ export default function App() {
     (lat: number, lng: number) => {
       if (mode === "add") {
         setPendingAdd({ lat, lng });
-        setSpeedLimit("");
-        setRadarType("reportado");
+        setSpeedLimit(radarType === "placa" ? "60" : "");
+        setRadarType("placa");
         setSelected(null);
         return;
       }
@@ -195,10 +221,18 @@ export default function App() {
         updateRadar(selected.id, { latitude: lat, longitude: lng })
           .then((updated) => {
             if (updated) {
+              const merged = {
+                ...selected,
+                latitude: updated.latitude,
+                longitude: updated.longitude,
+                speedLimit: updated.speedLimit ?? selected.speedLimit,
+                type: (updated.type && updated.type !== "unknown") ? updated.type : selected.type,
+                situacao: updated.situacao ?? selected.situacao,
+              };
               setRadars((prev) =>
-                prev.map((r) => (r.id === selected.id ? { ...r, ...updated } : r))
+                prev.map((r) => (r.id === selected.id ? merged : r))
               );
-              setSelected({ ...selected, ...updated });
+              setSelected(merged);
               setMode("view");
             } else {
               setError("Servidor não suporta edição (PATCH /radars/:id)");
@@ -216,16 +250,17 @@ export default function App() {
     setSaving(true);
     setError(null);
     try {
+      const typeForApi = radarType === "placa" ? "fixo" : radarType;
       const radar = await reportRadar({
         latitude: pendingAdd.lat,
         longitude: pendingAdd.lng,
-        speedLimit: speedLimit ? parseInt(speedLimit, 10) : undefined,
-        type: radarType,
+        speedLimit: speedLimit ? parseInt(speedLimit, 10) : (radarType === "placa" ? 60 : undefined),
+        type: typeForApi,
       });
       setRadars((prev) => [...prev, radar]);
       setPendingAdd(null);
       setSpeedLimit("");
-      setRadarType("reportado");
+      setRadarType("placa");
       setMode("view");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao adicionar radar");
@@ -242,10 +277,15 @@ export default function App() {
     const updated = await updateRadar(selected.id, { speedLimit: limit });
     setSaving(false);
     if (updated) {
+      const merged = {
+        ...selected,
+        speedLimit: updated.speedLimit ?? limit ?? selected.speedLimit,
+        type: (updated.type && updated.type !== "unknown") ? updated.type : selected.type,
+      };
       setRadars((prev) =>
-        prev.map((r) => (r.id === selected.id ? { ...r, ...updated } : r))
+        prev.map((r) => (r.id === selected.id ? merged : r))
       );
-      setSelected({ ...selected, ...updated });
+      setSelected(merged);
     } else {
       setError("Servidor não suporta edição (PATCH /radars/:id)");
     }
@@ -277,12 +317,11 @@ export default function App() {
     const updated = await updateRadar(selected.id, { situacao: "Inativo" });
     setSaving(false);
     if (updated) {
+      const merged = { ...selected, situacao: "Inativo" as const, type: (updated.type && updated.type !== "unknown") ? updated.type : selected.type };
       setRadars((prev) =>
-        prev.map((r) =>
-          r.id === selected.id ? { ...r, ...updated, situacao: "Inativo" } : r
-        )
+        prev.map((r) => (r.id === selected.id ? merged : r))
       );
-      setSelected({ ...selected, ...updated, situacao: "Inativo" });
+      setSelected(merged);
       setMode("view");
     } else {
       setError("Servidor não suporta inativar (PATCH situacao)");
@@ -296,12 +335,11 @@ export default function App() {
     const updated = await updateRadar(selected.id, { situacao: "Ativo" });
     setSaving(false);
     if (updated) {
+      const merged = { ...selected, situacao: "Ativo" as const, type: (updated.type && updated.type !== "unknown") ? updated.type : selected.type };
       setRadars((prev) =>
-        prev.map((r) =>
-          r.id === selected.id ? { ...r, ...updated, situacao: "Ativo" } : r
-        )
+        prev.map((r) => (r.id === selected.id ? merged : r))
       );
-      setSelected({ ...selected, ...updated, situacao: "Ativo" });
+      setSelected(merged);
       setMode("view");
     } else {
       setError("Servidor não suporta ativar (PATCH situacao)");
@@ -390,7 +428,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Modal: Reportar radar (velocidade + tipo) */}
+      {/* Modal: Adicionar radar — com imagens e velocidades padrão (como no app) */}
       {pendingAdd && (
         <div
           style={{
@@ -410,76 +448,111 @@ export default function App() {
           <div
             style={{
               background: "#fff",
-              borderRadius: 12,
+              borderRadius: 16,
               padding: 24,
               width: "90%",
-              maxWidth: 400,
+              maxWidth: 420,
               boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 style={{ margin: "0 0 16px", fontSize: 18 }}>Reportar radar</h3>
+            <h3 style={{ margin: "0 0 8px", fontSize: 18, fontWeight: 600 }}>
+              Adicionar radar
+            </h3>
             <p style={{ margin: "0 0 16px", fontSize: 13, color: "#6b7280" }}>
-              {pendingAdd.lat.toFixed(5)}, {pendingAdd.lng.toFixed(5)}
+              📍 {pendingAdd.lat.toFixed(5)}, {pendingAdd.lng.toFixed(5)}
             </p>
-            <label
-              style={{
-                display: "block",
-                marginBottom: 4,
-                fontSize: 13,
-                fontWeight: 500,
-              }}
-            >
-              Velocidade (km/h) — opcional
-            </label>
-            <input
-              type="number"
-              placeholder="Ex: 60"
-              value={speedLimit}
-              onChange={(e) => setSpeedLimit(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "10px 12px",
-                border: "1px solid #d1d5db",
-                borderRadius: 8,
-                marginBottom: 12,
-                boxSizing: "border-box",
-              }}
-            />
-            <label
-              style={{
-                display: "block",
-                marginBottom: 4,
-                fontSize: 13,
-                fontWeight: 500,
-              }}
-            >
-              Tipo de radar
-            </label>
-            <select
-              value={radarType}
-              onChange={(e) =>
-                setRadarType(
-                  e.target.value as "reportado" | "fixo" | "móvel" | "semaforo"
-                )
-              }
-              style={{
-                width: "100%",
-                padding: "10px 12px",
-                border: "1px solid #d1d5db",
-                borderRadius: 8,
-                marginBottom: 20,
-                boxSizing: "border-box",
-                background: "#fff",
-              }}
-            >
+
+            <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 500 }}>Tipo de radar</p>
+            <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
               {RADAR_TYPES.map((t) => (
-                <option key={t.value} value={t.value}>
-                  {t.label}
-                </option>
+                <button
+                  key={t.value}
+                  type="button"
+                  onClick={() => {
+                    setRadarType(t.value);
+                    if (t.value === "placa" && !speedLimit) setSpeedLimit("60");
+                    else if (t.value !== "placa") setSpeedLimit("");
+                  }}
+                  style={{
+                    flex: 1,
+                    minWidth: 100,
+                    padding: 12,
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    gap: 6,
+                    border: `2px solid ${radarType === t.value ? "#3b82f6" : "#e5e7eb"}`,
+                    borderRadius: 12,
+                    background: radarType === t.value ? "#eff6ff" : "#f9fafb",
+                    cursor: "pointer",
+                  }}
+                >
+                  <img
+                    src={`/icons/${t.icon}.png`}
+                    alt=""
+                    style={{ width: 40, height: 40, objectFit: "contain" }}
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = "none";
+                    }}
+                  />
+                  <span style={{ fontSize: 12, fontWeight: 600 }}>{t.label}</span>
+                </button>
               ))}
-            </select>
-            <div style={{ display: "flex", gap: 8 }}>
+            </div>
+
+            {radarType === "placa" && (
+              <>
+                <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 500 }}>
+                  Limite de velocidade (km/h)
+                </p>
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: 8,
+                    marginBottom: 16,
+                  }}
+                >
+                  {[30, 40, 50, 60, 70, 80, 90, 100, 110, 120].map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setSpeedLimit(String(s))}
+                      style={{
+                        padding: "10px 16px",
+                        minWidth: 52,
+                        background: speedLimit === String(s) ? "#3b82f6" : "#f3f4f6",
+                        color: speedLimit === String(s) ? "#fff" : "#1f2937",
+                        border: `2px solid ${speedLimit === String(s) ? "#3b82f6" : "#e5e7eb"}`,
+                        borderRadius: 10,
+                        cursor: "pointer",
+                        fontSize: 16,
+                        fontWeight: 600,
+                      }}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="number"
+                  placeholder="Outro (ex: 20)"
+                  value={speedLimit}
+                  onChange={(e) => setSpeedLimit(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "10px 12px",
+                    border: "1px solid #d1d5db",
+                    borderRadius: 8,
+                    marginBottom: 8,
+                    boxSizing: "border-box",
+                  }}
+                />
+              </>
+            )}
+
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
               <button
                 type="button"
                 onClick={() => {
@@ -491,7 +564,7 @@ export default function App() {
                   padding: 12,
                   background: "#e5e7eb",
                   border: "none",
-                  borderRadius: 8,
+                  borderRadius: 10,
                   cursor: "pointer",
                   fontWeight: 600,
                 }}
@@ -508,7 +581,7 @@ export default function App() {
                   background: "#3b82f6",
                   color: "#fff",
                   border: "none",
-                  borderRadius: 8,
+                  borderRadius: 10,
                   cursor: saving ? "not-allowed" : "pointer",
                   fontWeight: 600,
                 }}

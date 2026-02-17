@@ -29,7 +29,7 @@ npm install
 npm run dev
 ```
 
-Abre em **http://localhost:5174**.
+O script `prepare` copia ícones de `../assets/images/` para `public/icons/` (radarMovel, radarSemaforico, placa20–160). Abre em **http://localhost:5174**.
 
 ## Build para produção
 

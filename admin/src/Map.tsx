@@ -25,9 +25,9 @@ function getClosestPlacaName(speed: number | undefined): string {
   return `placa${closest}`;
 }
 
-/** Mapeia tipo do CSV/API para ícone (usado em admin, app e navegação). */
+/** Mapeia tipo para ícone — alinhado com mapa normal: só semaforico, movel e placa. */
 function getRadarIconName(type: string | undefined): string {
-  if (!type) return "radar";
+  if (!type) return "placa60";
   const t = type
     .trim()
     .toLowerCase()
@@ -35,46 +35,41 @@ function getRadarIconName(type: string | undefined): string {
     .replace(/[\u0300-\u036f]/g, "");
   if (t.includes("semaforo") || t.includes("camera") || t.includes("fotografica")) return "radarSemaforico";
   if (t.includes("movel") || t.includes("mobile")) return "radarMovel";
-  if (t.includes("fixo") || t.includes("placa"))
-    return "radar";
-  return "radar";
+  if (t.includes("fixo") || t.includes("placa") || t.includes("reportado")) return "placa60";
+  return "placa60";
 }
 
-/** Ícone no mapa: fixo usa placa por velocidade; demais usam ícone por tipo. */
+/** Ícone no mapa: fixo/placa usa placa por velocidade; demais usam semaforico ou movel. */
 function getRadarIconForMap(r: { type?: string; speedLimit?: number }): string {
   const type = r?.type;
-  if (!type) return "radar";
   const t = type
-    .trim()
+    ?.trim()
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-  if (t.includes("fixo") || t.includes("placa"))
+    .replace(/[\u0300-\u036f]/g, "") ?? "";
+  if (t.includes("fixo") || t.includes("placa") || t.includes("reportado"))
     return getClosestPlacaName(r.speedLimit);
-  return getRadarIconName(type);
+  if (t.includes("semaforo") || t.includes("camera")) return "radarSemaforico";
+  if (t.includes("movel") || t.includes("mobile")) return "radarMovel";
+  return "placa60";
 }
 
-/** Tamanhos de ícone por tipo (ajuste aqui no admin). */
+/** Tamanhos de ícone — alinhado com mapa normal. */
 const RADAR_ICON_SIZES: Record<string, number> = {
-  radar: 0.05,
   radarMovel: 0.05,
   radarSemaforico: 0.055,
-  // radarFixo: 0.06, // Removed as requested
   placa: 0.2,
 };
 function getIconSizeForIcon(iconName: string): number {
-  if (iconName.startsWith("placa")) return RADAR_ICON_SIZES.placa ?? 0.06;
-  return RADAR_ICON_SIZES[iconName] ?? RADAR_ICON_SIZES.radar ?? 0.05;
+  if (iconName.startsWith("placa")) return RADAR_ICON_SIZES.placa ?? 0.2;
+  return RADAR_ICON_SIZES[iconName] ?? 0.05;
 }
 
 const ICON_NAMES = [
-  "radar",
-  // "radarFixo", // Removed
   "radarMovel",
   "radarSemaforico",
   ...PLACA_SPEEDS.map((s) => `placa${s}` as const),
 ] as const;
-const ICON_SIZE = 0.05;
 
 interface MapProps {
   radars?: Radar[];
@@ -231,8 +226,8 @@ function Map({
             source: SOURCE_ID,
             filter: ["!", ["has", "point_count"]],
             layout: {
-              "icon-image": ["coalesce", ["get", "icon"], "radar"],
-              "icon-size": ["coalesce", ["get", "iconSize"], ICON_SIZE],
+              "icon-image": ["coalesce", ["get", "icon"], "placa60"],
+              "icon-size": ["coalesce", ["get", "iconSize"], 0.2],
               "icon-allow-overlap": true,
               "icon-ignore-placement": true,
             },
