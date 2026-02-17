@@ -20,10 +20,13 @@ import React, {
 import {
   Animated,
   Image,
+  Platform,
   StyleSheet,
   TouchableOpacity,
   View,
 } from "react-native";
+import Ionicons from "react-native-vector-icons/Ionicons";
+import { MenuModal } from "./MenuModal";
 import { MAPBOX_TOKEN, NavigationStep, RouteFeature } from "../services/mapbox";
 import { Radar } from "../services/types";
 
@@ -82,6 +85,8 @@ interface MapProps {
   pickerSelectedPoint?: { latitude: number; longitude: number } | null;
   /** Chamado quando o mapa termina de animar (câmera parada) */
   onMapIdle?: () => void;
+  /** Mostrar botão hamburger e menu (ocultar no picker) */
+  showMenu?: boolean;
 }
 
 export type MapHandle = {
@@ -114,9 +119,11 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
     hideUserLocation = false,
     pickerSelectedPoint = null,
     onMapIdle,
+    showMenu = !hideUserLocation,
   },
   ref,
 ) {
+  const [menuVisible, setMenuVisible] = useState(false);
   const [userLocation, setUserLocation] = useState<{
     latitude: number;
     longitude: number;
@@ -434,6 +441,21 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
 
   return (
     <View style={styles.container} pointerEvents="box-none">
+      {showMenu && (
+        <>
+          <TouchableOpacity
+            style={styles.menuButton}
+            onPress={() => setMenuVisible(true)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="menu" size={26} color="#fff" />
+          </TouchableOpacity>
+          <MenuModal
+            visible={menuVisible}
+            onClose={() => setMenuVisible(false)}
+          />
+        </>
+      )}
       <MapView
         ref={mapViewRef}
         pointerEvents={interactive ? "auto" : "none"}
@@ -818,6 +840,22 @@ export default Map;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  menuButton: {
+    position: "absolute",
+    top: Platform.OS === "ios" ? 54 : 48,
+    left: 16,
+    zIndex: 1000,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#1f2937",
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
   },
   map: {
     flex: 1,
