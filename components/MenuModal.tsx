@@ -436,26 +436,22 @@ function MenuModal({ visible, onClose }: MenuModalProps) {
       onRequestClose={handleRequestClose}
     >
       {screen === "menu" ? (
-        <>
-          <Pressable style={styles.overlay} onPress={onClose}>
-            <Animated.View
-              style={[styles.backdrop, { opacity: backdropOpacity }]}
-              pointerEvents="none"
-            />
-          </Pressable>
+        <Pressable style={styles.overlay} onPress={onClose}>
           <Animated.View
-            style={[
-              styles.drawer,
-              { transform: [{ translateX: slideAnim }] },
-            ]}
+            style={[styles.backdrop, { opacity: backdropOpacity }]}
+            pointerEvents="none"
+          />
+          <Animated.View
+            style={[styles.drawer, { transform: [{ translateX: slideAnim }] }]}
             onStartShouldSetResponder={() => true}
           >
             {renderMenuContent()}
           </Animated.View>
-        </>
+        </Pressable>
       ) : (
-        <SafeAreaView style={styles.fullScreenContainer} edges={["top", "left", "right"]}>
-          <View style={styles.fullScreenHeader}>
+        <View style={styles.fullScreenWrapper}>
+          <SafeAreaView style={styles.fullScreenContainer} edges={["top", "left", "right"]}>
+            <View style={styles.fullScreenHeader}>
             <TouchableOpacity
               onPress={closeFullScreen}
               style={styles.fullScreenBackBtn}
@@ -467,9 +463,10 @@ function MenuModal({ visible, onClose }: MenuModalProps) {
               {screen === "profile" ? "Perfil" : "Configurações da conta"}
             </Text>
           </View>
-          {screen === "profile" && renderProfileContent()}
-          {screen === "accountSettings" && renderAccountSettingsContent()}
-        </SafeAreaView>
+            {screen === "profile" && renderProfileContent()}
+            {screen === "accountSettings" && renderAccountSettingsContent()}
+          </SafeAreaView>
+        </View>
       )}
     </Modal>
   );
@@ -503,6 +500,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 12,
     elevation: 16,
+  },
+  fullScreenWrapper: {
+    flex: 1,
+    backgroundColor: "#1e293b",
   },
   fullScreenContainer: {
     flex: 1,
