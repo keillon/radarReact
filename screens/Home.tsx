@@ -1747,6 +1747,42 @@ export default function Home({ onOpenEditor }: HomeProps) {
     radarAtivo,
   ]);
 
+  // Fechar modal de alerta/feedback assim que o radar em destaque for excluído (WebSocket)
+  const liveDeletedRadarIdsSetForEffect = useMemo(
+    () => new Set(liveDeletedRadarIds),
+    [liveDeletedRadarIds],
+  );
+  useEffect(() => {
+    if (!isNavigating || liveDeletedRadarIdsSetForEffect.size === 0) return;
+    const deletedId =
+      nearestRadar?.radar?.id ??
+      radarAtivo?.id ??
+      (showRadarFeedbackCard ? radarFeedbackTarget?.id ?? null : null);
+    if (!deletedId || !liveDeletedRadarIdsSetForEffect.has(deletedId)) return;
+
+    if (postPassTimerRef.current) {
+      clearTimeout(postPassTimerRef.current);
+      postPassTimerRef.current = null;
+    }
+    radarZeroTimeRef2.current = null;
+    setRadarPassedLoading(false);
+    if (showRadarFeedbackCard && radarFeedbackTarget?.id === deletedId) {
+      closeRadarFeedbackCard();
+    }
+    rearmRadarRuntimeState([deletedId]);
+    hideRadarModal();
+  }, [
+    isNavigating,
+    liveDeletedRadarIdsSetForEffect,
+    nearestRadar?.radar?.id,
+    radarAtivo?.id,
+    showRadarFeedbackCard,
+    radarFeedbackTarget?.id,
+    hideRadarModal,
+    closeRadarFeedbackCard,
+    rearmRadarRuntimeState,
+  ]);
+
   // Callback para quando a rota for recalculada (ex: saiu da rota)
   const handleRouteChanged = useCallback((event: any) => {
     try {
