@@ -423,6 +423,11 @@ export const confirmRadar = async (
 
     if (!response.ok) {
       const text = await response.text();
+      let data: { alreadyConfirmed?: boolean; alreadyDenied?: boolean } = {};
+      try {
+        data = JSON.parse(text);
+      } catch {}
+      if (data.alreadyConfirmed || data.alreadyDenied) return null;
       throw new Error(text || `Erro ao confirmar radar (${response.status})`);
     }
 
@@ -450,6 +455,11 @@ export const denyRadar = async (
 
     if (!response.ok) {
       const text = await response.text();
+      let data: { alreadyConfirmed?: boolean; alreadyDenied?: boolean } = {};
+      try {
+        data = JSON.parse(text);
+      } catch {}
+      if (data.alreadyConfirmed || data.alreadyDenied) return null;
       throw new Error(text || `Erro ao negar radar (${response.status})`);
     }
 

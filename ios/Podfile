@@ -5,6 +5,9 @@ require Pod::Executable.execute_command('node', ['-p',
     {paths: [process.argv[1]]},
   )', __dir__]).strip
 
+# Codegen: UnsupportedModulePropertyParserError com @rnmapbox/maps é contornado pelo patch
+# em patches/@rnmapbox+maps+10.2.10.patch (remove onLocationUpdate do Spec). Rode npm install antes de pod install.
+
 platform :ios, min_ios_version_supported
 plugin 'cocoapods-patch'
 prepare_react_native_project!
@@ -20,6 +23,7 @@ target 'MapboxNavigationExample' do
 
   use_react_native!(
     :path => config[:reactNativePath],
+    :new_arch_enabled => false,
     # An absolute path to your application root.
     :app_path => "#{Pod::Config.instance.installation_root}/.."
   )

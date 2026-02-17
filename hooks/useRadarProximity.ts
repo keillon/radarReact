@@ -218,8 +218,8 @@ export function useRadarProximity({
         passedRadarIdsRef.current.add(selectedRadar.id);
       }
       const shouldPlayAlert =
-        nextDistance <= 30 &&
-        nextDistance >= 0 &&
+        nextDistance <= 40 &&
+        nextDistance >= 5 &&
         !playedAlertRadarIdsRef.current.has(selectedRadar.id);
       if (shouldPlayAlert) {
         playedAlertRadarIdsRef.current.add(selectedRadar.id);

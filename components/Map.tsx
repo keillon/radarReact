@@ -133,6 +133,11 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
   const cameraRef = useRef<any>(null);
   const mapViewRef = useRef<any>(null);
 
+  const CAMERA_THROTTLE_MS = 150;
+  const lastEmitCameraRef = useRef<number>(0);
+  const pendingCameraRef = useRef<{ latitude: number; longitude: number } | null>(null);
+  const throttleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const emitCameraCenter = (rawCenter: any) => {
     if (!onCameraChanged || rawCenter == null) return;
 
@@ -156,8 +161,41 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
     }
 
     if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) return;
-    onCameraChanged({ latitude: lat, longitude: lng });
+    const payload = { latitude: lat, longitude: lng };
+
+    const now = Date.now();
+    if (now - lastEmitCameraRef.current >= CAMERA_THROTTLE_MS) {
+      lastEmitCameraRef.current = now;
+      pendingCameraRef.current = null;
+      if (throttleTimerRef.current) {
+        clearTimeout(throttleTimerRef.current);
+        throttleTimerRef.current = null;
+      }
+      onCameraChanged(payload);
+    } else {
+      pendingCameraRef.current = payload;
+      if (throttleTimerRef.current == null) {
+        throttleTimerRef.current = setTimeout(() => {
+          throttleTimerRef.current = null;
+          const pending = pendingCameraRef.current;
+          pendingCameraRef.current = null;
+          if (pending) {
+            lastEmitCameraRef.current = Date.now();
+            onCameraChanged(pending);
+          }
+        }, CAMERA_THROTTLE_MS - (now - lastEmitCameraRef.current));
+      }
+    }
   };
+
+  useEffect(() => {
+    return () => {
+      if (throttleTimerRef.current) {
+        clearTimeout(throttleTimerRef.current);
+        throttleTimerRef.current = null;
+      }
+    };
+  }, []);
 
   // Atualizar userLocation quando currentLocation mudar
   useEffect(() => {
@@ -191,6 +229,9 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
         }, 100);
         return () => clearTimeout(timeoutId);
       }
+      // Modo picker (interativo + onCameraChanged): NÃO atualizar câmera aqui quando currentLocation mudar.
+      // O centro inicial é feito uma vez no efeito de hasInitialized. Assim o mapa não "puxa" para a
+      // localização atual (GPS) enquanto o usuário está escolhendo o ponto no mapa.
     }
   }, [currentLocation, interactive, onCameraChanged]);
 
@@ -352,11 +393,11 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
         latitude: number;
         longitude: number;
       } | null> => {
-        const cam = cameraRef.current;
-        if (cam == null || typeof (cam as any).getCenter !== "function") {
+        const mapView = mapViewRef.current;
+        if (mapView == null || typeof mapView.getCenter !== "function") {
           return Promise.resolve(null);
         }
-        return Promise.resolve((cam as any).getCenter())
+        return Promise.resolve(mapView.getCenter())
           .then((raw: unknown) => {
             if (raw == null) return null;
             let lat: number | null = null;
@@ -482,21 +523,28 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
         {...(onCameraChanged != null
           ? {
               onCameraChanged: (event: unknown) => {
-                if (event == null || typeof event !== "object") return;
+                if (event == null) return;
                 try {
-                  const props =
-                    (event as { properties?: Record<string, unknown> })
-                      .properties ?? {};
-                  const isUserInteraction = props.isUserInteraction === true;
-                  if (isTracking && isUserInteraction) setIsTracking(false);
-                  const centerCandidate =
-                    (props.center as number[] | undefined) ??
-                    (event as { geometry?: { coordinates?: number[] } })
-                      .geometry?.coordinates ??
-                    (event as { centerCoordinate?: number[] })
-                      .centerCoordinate ??
-                    (event as { center?: number[] }).center;
-                  if (centerCandidate != null)
+                  let centerCandidate: number[] | undefined;
+                  if (typeof event === "object") {
+                    const e = event as Record<string, unknown>;
+                    const props = (e.properties as Record<string, unknown> | undefined) ?? {};
+                    centerCandidate =
+                      (props.center as number[] | undefined) ??
+                      (e.geometry as { coordinates?: number[] } | undefined)?.coordinates ??
+                      (e.centerCoordinate as number[] | undefined) ??
+                      (e.center as number[] | undefined);
+                    const isUserInteraction = props.isUserInteraction === true;
+                    if (isTracking && isUserInteraction) setIsTracking(false);
+                  }
+                  if (typeof event === "string") {
+                    try {
+                      const parsed = JSON.parse(event) as Record<string, unknown>;
+                      const props = (parsed.properties as Record<string, unknown>) ?? {};
+                      centerCandidate ??= (props.center as number[] | undefined);
+                    } catch (_) {}
+                  }
+                  if (centerCandidate != null && Array.isArray(centerCandidate) && centerCandidate.length >= 2)
                     emitCameraCenter(centerCandidate);
                 } catch (_) {}
               },

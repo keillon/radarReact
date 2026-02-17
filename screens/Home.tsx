@@ -67,6 +67,8 @@ import {
 } from "../services/mapbox";
 import { areMapboxRadarArraysEqual } from "../utils/radarDiff";
 import { colors } from "../utils/theme";
+
+const VOTED_RADAR_IDS_KEY = "radarZone_votedRadarIds";
 import {
   calculateDistance,
   getCumulativeDistances,
@@ -241,16 +243,14 @@ export default function Home() {
   const [mapPickerCenter, setMapPickerCenter] = useState<LatLng | null>(null);
   const [pickerPreviewCoords, setPickerPreviewCoords] = useState<LatLng | null>(
     null,
-  ); // Preview lat/lon durante marcação
-  const pickerPreviewIntervalRef = useRef<ReturnType<
-    typeof setInterval
-  > | null>(null);
+  ); // Preview lat/lon durante marcação (atualizado via onCameraChanged throttled)
   const [radarPassedLoading, setRadarPassedLoading] = useState(false); // Loading 5s no modal após passar do radar
   const [radarPassedPhase, setRadarPassedPhase] = useState<'loading' | 'passed' | null>(null); // 'loading' 5s, depois 'passed' no próprio modal
   const [deviceUserId, setDeviceUserId] = useState<string | null>(null);
   const [liveRadarOverlayMap, setLiveRadarOverlayMap] = useState<
     Map<string, Radar>
   >(new Map());
+  const overlayRadarIdsRef = useRef<Set<string>>(new Set()); // IDs no overlay (para radar:update não duplicar base→overlay)
   const [liveDeletedRadarIdsSetState, setLiveDeletedRadarIdsSetState] =
     useState<Set<string>>(new Set());
   const [showRadarFeedbackCard, setShowRadarFeedbackCard] = useState(false);
@@ -344,6 +344,9 @@ export default function Home() {
     () => Array.from(liveRadarOverlayMap.values()),
     [liveRadarOverlayMap],
   );
+  useEffect(() => {
+    overlayRadarIdsRef.current = new Set(liveRadarOverlay.map((r) => r.id));
+  }, [liveRadarOverlay]);
   const setLiveRadarOverlay = useCallback((nextValue: RadarArrayUpdater) => {
     setLiveRadarOverlayMap((prevMap) => {
       const prevArray = Array.from(prevMap.values());
@@ -420,9 +423,10 @@ export default function Home() {
   const radarFeedbackDismissTimerRef = useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
-  const radarFeedbackActionIds = useRef<Set<string>>(new Set()); // 1 confirmação/negação por usuário no app (sessão)
+  const radarFeedbackActionIds = useRef<Set<string>>(new Set()); // 1 confirmação/negação por usuário (sessão + persistido)
   const mapPickerCenterRef = useRef<LatLng | null>(null); // Fallback centro ao abrir picker
   const mapPickerMapRef = useRef<MapHandle | null>(null); // Ref do Map no picker para getCenter()
+  const pickerGetCenterIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const reportCustomLocationRef = useRef<LatLng | null>(null); // Backup da localização escolhida no mapa
   const hasInitialRadarLoadRef = useRef(false);
   const routePointsRef = useRef<LatLng[]>([]);
@@ -508,26 +512,33 @@ export default function Home() {
     [],
   );
 
-  // Preview de lat/lon no picker: polling a cada 400ms para mostrar onde o pin está
+  // Preview de lat/lon no picker: valor inicial; atualizações via onCameraChanged (throttled) + fallback getCenter a cada 600ms
   useEffect(() => {
     if (!showMapPicker) {
-      if (pickerPreviewIntervalRef.current) {
-        clearInterval(pickerPreviewIntervalRef.current);
-        pickerPreviewIntervalRef.current = null;
+      if (pickerGetCenterIntervalRef.current) {
+        clearInterval(pickerGetCenterIntervalRef.current);
+        pickerGetCenterIntervalRef.current = null;
       }
       setPickerPreviewCoords(null);
       return;
     }
     setPickerPreviewCoords(mapPickerCenter ?? null);
-    pickerPreviewIntervalRef.current = setInterval(() => {
-      mapPickerMapRef.current?.getCenter?.().then((center) => {
-        if (center != null) setPickerPreviewCoords(center);
-      });
+    const delay = setTimeout(() => {
+      const tick = () => {
+        mapPickerMapRef.current?.getCenter?.()?.then((center) => {
+          if (center?.latitude != null && center?.longitude != null) {
+            setPickerPreviewCoords({ latitude: center.latitude, longitude: center.longitude });
+          }
+        });
+      };
+      tick();
+      pickerGetCenterIntervalRef.current = setInterval(tick, 600);
     }, 400);
     return () => {
-      if (pickerPreviewIntervalRef.current) {
-        clearInterval(pickerPreviewIntervalRef.current);
-        pickerPreviewIntervalRef.current = null;
+      clearTimeout(delay);
+      if (pickerGetCenterIntervalRef.current) {
+        clearInterval(pickerGetCenterIntervalRef.current);
+        pickerGetCenterIntervalRef.current = null;
       }
     };
   }, [showMapPicker, mapPickerCenter?.latitude, mapPickerCenter?.longitude]);
@@ -612,6 +623,24 @@ export default function Home() {
         wsDeferredSyncTimeoutRef.current = null;
       }
       isMountedRef.current = false;
+    };
+  }, []);
+
+  // Carregar IDs de radares já confirmados/negados (único por usuário, não mostrar modal de novo)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(VOTED_RADAR_IDS_KEY);
+        if (cancelled || !raw) return;
+        const ids = JSON.parse(raw);
+        if (Array.isArray(ids)) {
+          ids.forEach((id: string) => radarFeedbackActionIds.current.add(id));
+        }
+      } catch {}
+    })();
+    return () => {
+      cancelled = true;
     };
   }, []);
 
@@ -1320,11 +1349,11 @@ export default function Home() {
             case "radar:updated": {
               const normalized = normalizeRadarPayload(payload);
               if (!normalized) break;
-              overlayDeletes.delete(normalized.id);
-              overlayUpserts.set(normalized.id, normalized);
-              if (!isNavigatingRef.current) {
-                baseDeletes.delete(normalized.id);
-                baseUpserts.set(normalized.id, normalized);
+              baseDeletes.delete(normalized.id);
+              baseUpserts.set(normalized.id, normalized);
+              if (overlayRadarIdsRef.current.has(normalized.id)) {
+                overlayDeletes.delete(normalized.id);
+                overlayUpserts.set(normalized.id, normalized);
               }
               break;
             }
@@ -1352,6 +1381,9 @@ export default function Home() {
         }
 
         if (overlayDeletes.size > 0 || baseDeletes.size > 0) {
+          refreshGeoJsonRef.current();
+        }
+        if (baseUpserts.size > 0 && isNavigatingRef.current) {
           refreshGeoJsonRef.current();
         }
         if (overlayUpserts.size > 0 || overlayDeletes.size > 0) {
@@ -1549,17 +1581,44 @@ export default function Home() {
 
       setRadarFeedbackSubmitting(true);
       const radarId = radarFeedbackTarget.id;
-      const updated =
-        action === "confirm"
-          ? await confirmRadar(radarId, deviceUserId)
-          : await denyRadar(radarId, deviceUserId);
+      try {
+        const updated =
+          action === "confirm"
+            ? await confirmRadar(radarId, deviceUserId)
+            : await denyRadar(radarId, deviceUserId);
 
-      radarFeedbackActionIds.current.add(radarId);
-      if (updated) {
-        applyRadarUpdateLocally(updated);
+        radarFeedbackActionIds.current.add(radarId);
+        try {
+          const raw = await AsyncStorage.getItem(VOTED_RADAR_IDS_KEY);
+          const ids: string[] = raw ? JSON.parse(raw) : [];
+          if (!ids.includes(radarId)) {
+            ids.push(radarId);
+            await AsyncStorage.setItem(VOTED_RADAR_IDS_KEY, JSON.stringify(ids));
+          }
+        } catch {}
+        if (updated) {
+          applyRadarUpdateLocally(updated);
+        }
+        closeRadarFeedbackCard();
+      } catch (err: any) {
+        const msg = String(err?.message ?? "");
+        const alreadyVoted =
+          /já negou|já confirmou|alreadyDenied|alreadyConfirmed/i.test(msg);
+        if (alreadyVoted) {
+          radarFeedbackActionIds.current.add(radarId);
+          try {
+            const raw = await AsyncStorage.getItem(VOTED_RADAR_IDS_KEY);
+            const ids: string[] = raw ? JSON.parse(raw) : [];
+            if (!ids.includes(radarId)) {
+              ids.push(radarId);
+              await AsyncStorage.setItem(VOTED_RADAR_IDS_KEY, JSON.stringify(ids));
+            }
+          } catch {}
+        }
+        closeRadarFeedbackCard();
+      } finally {
+        setRadarFeedbackSubmitting(false);
       }
-
-      closeRadarFeedbackCard();
     },
     [
       applyRadarUpdateLocally,
@@ -1644,11 +1703,11 @@ export default function Home() {
       setNearbyRadarIds(proximityNearbyRadarIds);
     }
 
-    // Alerta sonoro aos 30m: dispara quando distância <= 30m e > 0 (uma vez por aproximação)
+    // Alerta sonoro entre 40m e 5m: dispara uma vez quando na faixa (evita bug de não tocar em valor exato)
     const shouldPlay30mAlert =
       activeDistance != null &&
-      activeDistance <= 30 &&
-      activeDistance > 0 &&
+      activeDistance <= 40 &&
+      activeDistance >= 5 &&
       !radar30mSoundPlayedIds.current.has(activeRadar.id);
     if (deveTocarAlerta || shouldPlay30mAlert) {
       if (shouldPlay30mAlert) radar30mSoundPlayedIds.current.add(activeRadar.id);
@@ -2813,6 +2872,7 @@ export default function Home() {
                   interactive={true}
                   currentLocation={mapPickerCenter}
                   hideUserLocation={true}
+                  onCameraChanged={(coords: { latitude: number; longitude: number }) => setPickerPreviewCoords(coords)}
                 />
               </Suspense>
 

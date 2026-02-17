@@ -58,6 +58,25 @@ const mapApi = (r: ApiRadarResponse): Radar => ({
   createdAt: r.createdAt ?? undefined,
 });
 
+/** Normaliza payload do WebSocket (radar:new) para o formato Radar do admin (evita duplicata e fallback placa60). */
+export function normalizeRadarPayload(data: unknown): Radar | null {
+  if (!data || typeof (data as any).id !== "string") return null;
+  const d = data as Record<string, unknown>;
+  return {
+    id: String(d.id),
+    latitude: Number(d.latitude ?? d.lat ?? 0),
+    longitude: Number(d.longitude ?? d.lng ?? 0),
+    speedLimit: d.velocidadeLeve != null ? Number(d.velocidadeLeve) : undefined,
+    type: (d.tipoRadar as string) ?? (d.type as string) ?? "unknown",
+    situacao: (d.situacao as string) ?? undefined,
+    source: (d.source as string) ?? undefined,
+    rodovia: (d.rodovia as string) ?? undefined,
+    municipio: (d.municipio as string) ?? undefined,
+    uf: (d.uf as string) ?? undefined,
+    createdAt: (d.createdAt as string) ?? undefined,
+  };
+}
+
 export async function getRadarsNearLocation(
   lat: number,
   lon: number,

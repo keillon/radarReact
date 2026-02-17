@@ -4,6 +4,7 @@ import {
   Radar,
   deleteRadar,
   getRadarsNearLocation,
+  normalizeRadarPayload,
   reportRadar,
   updateRadar,
 } from "./api";
@@ -146,12 +147,13 @@ export default function App() {
             const message = JSON.parse(event.data);
 
             if (message.event === "radar:new") {
-              const newRadar = message.data;
-              if (newRadar && newRadar.id) {
-                console.log("📩 Admin: Novo radar recebido via WS:", newRadar.id);
+              const normalized = normalizeRadarPayload(message.data);
+              if (normalized) {
+                console.log("📩 Admin: Novo radar recebido via WS:", normalized.id);
                 setRadars((prev) => {
-                  if (prev.find((r) => r.id === newRadar.id)) return prev;
-                  return [...prev, newRadar];
+                  const existing = prev.find((r) => r.id === normalized.id);
+                  if (existing) return prev.map((r) => (r.id === normalized.id ? normalized : r));
+                  return [...prev, normalized];
                 });
               }
             } else if (message.event === "radar:update") {
@@ -282,7 +284,11 @@ export default function App() {
         speedLimit: speed,
         type: typeForApi,
       });
-      setRadars((prev) => [...prev, radar]);
+      setRadars((prev) => {
+        const existing = prev.find((r) => r.id === radar.id);
+        if (existing) return prev.map((r) => (r.id === radar.id ? radar : r));
+        return [...prev, radar];
+      });
       setPendingAdd(null);
       setSpeedLimit("");
       setRadarType("placa");

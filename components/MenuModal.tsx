@@ -388,7 +388,7 @@ function MenuModal({ visible, onClose }: MenuModalProps) {
       <Text style={styles.sectionTitle}>Som</Text>
       <MenuItem
         icon="volume-high"
-        label="Som ativado"
+        label="Voz alerta de rotas"
         right={
           <Switch
             value={soundEnabled}
@@ -398,32 +398,10 @@ function MenuModal({ visible, onClose }: MenuModalProps) {
           />
         }
       />
-      <MenuItem
-        icon="volume-medium"
-        label="Volume"
-        right={
-          <View style={styles.volumeRow}>
-            <TouchableOpacity
-              onPress={() => setVolume(Math.max(0, volume - 0.1))}
-              style={styles.volumeBtn}
-            >
-              <Ionicons name="remove" size={20} color={colors.textTertiary} />
-            </TouchableOpacity>
-            <Text style={styles.volumeText}>
-              {Math.round(volume * 100)}%
-            </Text>
-            <TouchableOpacity
-              onPress={() => setVolume(Math.min(1, volume + 0.1))}
-              style={styles.volumeBtn}
-            >
-              <Ionicons name="add" size={20} color={colors.textTertiary} />
-            </TouchableOpacity>
-          </View>
-        }
-      />
+     
       <MenuItem
         icon="mic"
-        label="Voz do mapa (TTS)"
+        label="Voz alerta de radares (TTS)"
         right={
           <Switch
             value={mapVoiceEnabled}
