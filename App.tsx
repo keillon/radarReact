@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, LogBox, StyleSheet, Text, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { AuthProvider, useAuth } from "./context/AuthContext";
+import { SettingsProvider } from "./context/SettingsContext";
 
 LogBox.ignoreLogs([
   "new NativeEventEmitter",
@@ -27,13 +29,50 @@ function ErrorScreen({ message }: { message: string }) {
   );
 }
 
-export default function App() {
-  const [showEditor, setShowEditor] = useState(false);
+function AuthScreens() {
+  const { loading } = useAuth();
+  const [screen, setScreen] = useState<"login" | "register">("login");
+  const [LoginComp, setLoginComp] = useState<React.ComponentType<any> | null>(null);
+  const [RegisterComp, setRegisterComp] = useState<React.ComponentType<any> | null>(null);
+
+  useEffect(() => {
+    try {
+      setLoginComp(() => require("./screens/LoginScreen").default);
+      setRegisterComp(() => require("./screens/RegisterScreen").default);
+    } catch {}
+  }, []);
+
+  if (!LoginComp || !RegisterComp) return <Fallback />;
+  if (loading) return <Fallback />;
+
+  const Login = LoginComp;
+  const Register = RegisterComp;
+
+  return screen === "login" ? (
+    <Login
+      onGoToRegister={() => setScreen("register")}
+    />
+  ) : (
+    <Register
+      onGoToLogin={() => setScreen("login")}
+    />
+  );
+}
+
+function MainContent() {
+  const { user, loading } = useAuth();
+  const [authChecked, setAuthChecked] = useState(false);
   const [HomeComponent, setHomeComponent] = useState<React.ComponentType<any> | null>(null);
-  const [EditorComponent, setEditorComponent] = useState<React.ComponentType<any> | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Carregar telas só após o mount para evitar "Requiring unknown module 'undefined'" no startup
+  useEffect(() => {
+    if (!loading && !user) {
+      setAuthChecked(true);
+    } else if (user) {
+      setAuthChecked(true);
+    }
+  }, [loading, user]);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -44,13 +83,6 @@ export default function App() {
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         if (!cancelled) setLoadError(msg);
-      }
-      try {
-        const editorMod = require("./screens/RadarEditorScreen");
-        const editorDefault = editorMod?.default;
-        if (!cancelled && editorDefault) setEditorComponent(() => editorDefault);
-      } catch (_) {
-        // Editor opcional; não sobrescreve erro da Home
       }
     })();
     return () => { cancelled = true; };
@@ -64,6 +96,22 @@ export default function App() {
     );
   }
 
+  if (!authChecked || loading) {
+    return (
+      <SafeAreaProvider>
+        <Fallback />
+      </SafeAreaProvider>
+    );
+  }
+
+  if (!user) {
+    return (
+      <SafeAreaProvider>
+        <AuthScreens />
+      </SafeAreaProvider>
+    );
+  }
+
   if (!HomeComponent) {
     return (
       <SafeAreaProvider>
@@ -72,15 +120,21 @@ export default function App() {
     );
   }
 
-  const Editor = EditorComponent;
+  const Home = HomeComponent;
   return (
     <SafeAreaProvider>
-      {showEditor && Editor ? (
-        <Editor onClose={() => setShowEditor(false)} />
-      ) : (
-        <HomeComponent onOpenEditor={() => setShowEditor(true)} />
-      )}
+      <Home />
     </SafeAreaProvider>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <SettingsProvider>
+        <MainContent />
+      </SettingsProvider>
+    </AuthProvider>
   );
 }
 

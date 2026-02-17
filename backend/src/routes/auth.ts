@@ -132,6 +132,86 @@ export async function authRoutes(fastify: FastifyInstance) {
     }
   });
 
+  // Atualizar perfil (nome, email) — requer autenticação
+  fastify.patch("/auth/profile", async (request, reply) => {
+    try {
+      const authHeader = request.headers.authorization;
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return reply.status(401).send({ error: "Token não fornecido" });
+      }
+      const token = authHeader.substring(7);
+      const decoded = jwt.verify(token, JWT_SECRET) as { userId: string; email: string };
+      const body = request.body as { name?: string; email?: string };
+
+      const updateData: { name?: string; email?: string } = {};
+      if (body.name !== undefined) updateData.name = body.name.trim() || null;
+      if (body.email !== undefined) {
+        const newEmail = body.email.trim().toLowerCase();
+        if (!newEmail) return reply.status(400).send({ error: "Email inválido" });
+        const existing = await prisma.user.findUnique({ where: { email: newEmail } });
+        if (existing && existing.id !== decoded.userId) {
+          return reply.status(400).send({ error: "Email já em uso" });
+        }
+        updateData.email = newEmail;
+      }
+      if (Object.keys(updateData).length === 0) {
+        return reply.status(400).send({ error: "Nenhum dado para atualizar" });
+      }
+
+      const user = await prisma.user.update({
+        where: { id: decoded.userId },
+        data: updateData,
+        select: { id: true, email: true, name: true, createdAt: true },
+      });
+      return reply.send({ user });
+    } catch (error: any) {
+      if (error.name === "JsonWebTokenError") {
+        return reply.status(401).send({ error: "Token inválido" });
+      }
+      fastify.log.error(error);
+      return reply.status(500).send({ error: "Erro ao atualizar perfil" });
+    }
+  });
+
+  // Alterar senha — requer autenticação
+  fastify.patch("/auth/password", async (request, reply) => {
+    try {
+      const authHeader = request.headers.authorization;
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return reply.status(401).send({ error: "Token não fornecido" });
+      }
+      const token = authHeader.substring(7);
+      const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
+      const body = request.body as { currentPassword: string; newPassword: string };
+
+      if (!body.currentPassword || !body.newPassword) {
+        return reply.status(400).send({ error: "Senha atual e nova senha são obrigatórias" });
+      }
+      if (body.newPassword.length < 6) {
+        return reply.status(400).send({ error: "Nova senha deve ter pelo menos 6 caracteres" });
+      }
+
+      const user = await prisma.user.findUnique({ where: { id: decoded.userId } });
+      if (!user) return reply.status(401).send({ error: "Usuário não encontrado" });
+
+      const valid = await bcrypt.compare(body.currentPassword, user.password);
+      if (!valid) return reply.status(401).send({ error: "Senha atual incorreta" });
+
+      const hashed = await bcrypt.hash(body.newPassword, 10);
+      await prisma.user.update({
+        where: { id: decoded.userId },
+        data: { password: hashed },
+      });
+      return reply.send({ success: true });
+    } catch (error: any) {
+      if (error.name === "JsonWebTokenError") {
+        return reply.status(401).send({ error: "Token inválido" });
+      }
+      fastify.log.error(error);
+      return reply.status(500).send({ error: "Erro ao alterar senha" });
+    }
+  });
+
   // Verificar token (middleware para rotas protegidas)
   fastify.decorate("authenticate", async (request: any, reply: any) => {
     try {

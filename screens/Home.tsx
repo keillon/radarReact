@@ -175,9 +175,7 @@ const buildRouteSignature = (coordinates: number[][]): string => {
   return `${len}|${first[0]},${first[1]}|${mid[0]},${mid[1]}|${last[0]},${last[1]}`;
 };
 
-interface HomeProps {
-  onOpenEditor?: () => void;
-}
+interface HomeProps {}
 
 const normalizeRadarType = (value?: string): string => {
   if (!value) return "unknown";
@@ -224,7 +222,7 @@ const normalizeRadarPayload = (raw: any): Radar | null => {
   };
 };
 
-export default function Home({ onOpenEditor }: HomeProps) {
+export default function Home(_props?: HomeProps) {
   type RadarArrayUpdater = Radar[] | ((prev: Radar[]) => Radar[]);
   type RadarIdArrayUpdater = string[] | ((prev: string[]) => string[]);
 
@@ -2091,15 +2089,6 @@ export default function Home({ onOpenEditor }: HomeProps) {
 
   return (
     <View style={styles.container}>
-      {onOpenEditor && !isNavigating && !isPreparingNavigation && (
-        <TouchableOpacity
-          style={styles.editorButton}
-          onPress={onOpenEditor}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.editorButtonText}>Editor de radares</Text>
-        </TouchableOpacity>
-      )}
       {!isNavigating && !isPreparingNavigation && (
         <SearchContainer
           origin={origin}
@@ -3436,25 +3425,5 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "bold",
     color: "#fff",
-  },
-  editorButton: {
-    position: "absolute",
-    top: Platform.OS === "ios" ? 54 : 48,
-    right: 16,
-    zIndex: 100,
-    backgroundColor: "#1f2937",
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    elevation: 4,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-  },
-  editorButtonText: {
-    fontSize: 13,
-    color: "#fff",
-    fontWeight: "600",
   },
 });
