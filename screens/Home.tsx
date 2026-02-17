@@ -2279,30 +2279,28 @@ export default function Home({ onOpenEditor }: HomeProps) {
         </>
       )}
 
-      {/* Alerta de radar - Modal para ficar acima do mapa nativo no Android */}
+      {/* Alerta de radar - View com elevation alta (evita Modal que bloqueia toques no Android) */}
       {isNavigating && nearestRadar && (
-        <Modal visible={true} transparent animationType="none" statusBarTranslucent>
-          <View style={{ flex: 1, pointerEvents: "none" }}>
-            <Animated.View
-              style={[
-                styles.radarAlertContainer,
+        <Animated.View
+          style={[
+            styles.radarAlertContainer,
+            {
+              opacity: modalOpacity,
+              transform: [
                 {
-                  opacity: modalOpacity,
-                  transform: [
-                    {
-                      translateY: modalOpacity.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [-100, 0],
-                      }),
-                    },
-                    {
-                      scale: modalScale,
-                    },
-                  ],
+                  translateY: modalOpacity.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-100, 0],
+                  }),
                 },
-              ]}
-              pointerEvents="none"
-            >
+                {
+                  scale: modalScale,
+                },
+              ],
+            },
+          ]}
+          pointerEvents="none"
+        >
           <Animated.View
             style={[
               styles.radarAlertContent,
@@ -2397,8 +2395,6 @@ export default function Home({ onOpenEditor }: HomeProps) {
             )}
           </Animated.View>
         </Animated.View>
-          </View>
-        </Modal>
       )}
 
       {isNavigating && showRadarFeedbackCard && radarFeedbackTarget && (

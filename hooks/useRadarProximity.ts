@@ -253,18 +253,19 @@ export function useRadarProximity({
     };
   }, [currentLocation, cumulativeDistances, radarIndexById, radars, routePoints, runProximityCheck]);
 
-  const INTERVAL_MS = 120;
+  // Intervalo só quando há radar ativo (aproximando) — evita re-renders pesados o tempo todo
   useEffect(() => {
     if (
       !currentLocation ||
       routePoints.length < 2 ||
-      radars.length === 0
+      radars.length === 0 ||
+      !radarAtivo
     ) {
       return;
     }
-    const id = setInterval(() => runProximityCheck(true), INTERVAL_MS);
+    const id = setInterval(() => runProximityCheck(true), 400);
     return () => clearInterval(id);
-  }, [currentLocation, routePoints.length, radars.length, runProximityCheck]);
+  }, [currentLocation, routePoints.length, radars.length, radarAtivo, runProximityCheck]);
 
   return useMemo(
     () => ({
