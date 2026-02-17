@@ -20,6 +20,8 @@ export interface Radar {
   municipio?: string | null;
   uf?: string | null;
   createdAt?: number; // timestamp ms
+  /** ID do usuário que reportou (quando source === "user" ou "reportado") */
+  reportedBy?: string | null;
 }
 
 export interface RoutePoint {

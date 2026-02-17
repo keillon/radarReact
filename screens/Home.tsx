@@ -246,6 +246,7 @@ export default function Home() {
     typeof setInterval
   > | null>(null);
   const [radarPassedLoading, setRadarPassedLoading] = useState(false); // Loading 5s no modal após passar do radar
+  const [radarPassedPhase, setRadarPassedPhase] = useState<'loading' | 'passed' | null>(null); // 'loading' 5s, depois 'passed' no próprio modal
   const [deviceUserId, setDeviceUserId] = useState<string | null>(null);
   const [liveRadarOverlayMap, setLiveRadarOverlayMap] = useState<
     Map<string, Radar>
@@ -415,6 +416,7 @@ export default function Home() {
   const isMountedRef = useRef(true);
   const postPassTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null); // Timer 5s para modal pós-passagem
   const radarCriticalSoundPlayedIds = useRef<Set<string>>(new Set()); // Som crítico aos 10m (independente do som de 30m)
+  const radar30mSoundPlayedIds = useRef<Set<string>>(new Set()); // Som de alerta aos 30m (uma vez por aproximação)
   const radarFeedbackDismissTimerRef = useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
@@ -774,6 +776,7 @@ export default function Home() {
       // Limpar estado de radares para nova navegação (cada viagem começa "limpa")
       alertedRadarIds.current.clear();
       radarCriticalSoundPlayedIds.current.clear();
+      radar30mSoundPlayedIds.current.clear();
       resetProximityState();
       radarZeroTimeRef2.current = null;
       if (postPassTimerRef.current) {
@@ -781,6 +784,7 @@ export default function Home() {
         postPassTimerRef.current = null;
       }
       setRadarPassedLoading(false);
+      setRadarPassedPhase(null);
 
       // Iniciar navegação IMEDIATAMENTE (não esperar radares)
       setIsNavigating(true);
@@ -1029,14 +1033,15 @@ export default function Home() {
     })
       .then((realRadar) => {
         console.log("✅ Radar confirmado pelo servidor");
-        // Substituir temp pelo real
+        // Substituir temp pelo real (marcar quem reportou para não pedir confirmação ao próprio usuário)
+        const radarWithReporter = { ...realRadar, reportedBy: deviceUserId || realRadar.reportedBy };
         startTransition(() => {
           if (!isMountedRef.current) return;
           removeReportedRadar(tempRadar.id);
-          addReportedRadar(realRadar);
+          addReportedRadar(radarWithReporter);
           if (isNavigating) {
             removeLiveRadarOverlay(tempRadar.id);
-            upsertLiveRadarOverlay(realRadar);
+            upsertLiveRadarOverlay(radarWithReporter);
           }
         });
       })
@@ -1189,6 +1194,7 @@ export default function Home() {
         if (!id) return;
         alertedRadarIds.current.delete(id);
         radarCriticalSoundPlayedIds.current.delete(id);
+        radar30mSoundPlayedIds.current.delete(id);
         radarFeedbackActionIds.current.delete(id);
         if (lastNearbyRadarIdRef.current === id)
           lastNearbyRadarIdRef.current = null;
@@ -1499,6 +1505,8 @@ export default function Home() {
     (radar: Radar) => {
       if (!radar?.id) return;
       if (radarFeedbackActionIds.current.has(radar.id)) return;
+      // Não pedir confirmação de quem reportou — somente de outros usuários
+      if (deviceUserId && radar.reportedBy && radar.reportedBy === deviceUserId) return;
 
       if (radarFeedbackDismissTimerRef.current) {
         clearTimeout(radarFeedbackDismissTimerRef.current);
@@ -1511,7 +1519,7 @@ export default function Home() {
         closeRadarFeedbackCard();
       }, 12000);
     },
-    [closeRadarFeedbackCard],
+    [closeRadarFeedbackCard, deviceUserId],
   );
 
   const applyRadarUpdateLocally = useCallback((updated: Radar) => {
@@ -1597,6 +1605,7 @@ export default function Home() {
   const hideRadarModal = useCallback(() => {
     if (postPassTimerRef.current) return;
     setRadarPassedLoading(false);
+    setRadarPassedPhase(null);
     Animated.parallel([
       Animated.timing(modalOpacity, {
         toValue: 0,
@@ -1635,11 +1644,19 @@ export default function Home() {
       setNearbyRadarIds(proximityNearbyRadarIds);
     }
 
-    if (deveTocarAlerta) {
+    // Alerta sonoro aos 30m: dispara quando distância <= 30m e > 0 (uma vez por aproximação)
+    const shouldPlay30mAlert =
+      activeDistance != null &&
+      activeDistance <= 30 &&
+      activeDistance > 0 &&
+      !radar30mSoundPlayedIds.current.has(activeRadar.id);
+    if (deveTocarAlerta || shouldPlay30mAlert) {
+      if (shouldPlay30mAlert) radar30mSoundPlayedIds.current.add(activeRadar.id);
       playRadarAlert();
     }
 
     if (acabouDePassar) {
+      radar30mSoundPlayedIds.current.delete(activeRadar.id); // Permitir tocar de novo na próxima aproximação
       if (!radarCriticalSoundPlayedIds.current.has(activeRadar.id)) {
         radarCriticalSoundPlayedIds.current.add(activeRadar.id);
         playRadarAlert();
@@ -1647,6 +1664,7 @@ export default function Home() {
 
       if (radarZeroTimeRef2.current === null) {
         radarZeroTimeRef2.current = Date.now();
+        setRadarPassedPhase('loading');
         setRadarPassedLoading(true);
         if (postPassTimerRef.current) clearTimeout(postPassTimerRef.current);
         const passedRadar = activeRadar; // Capturar em closure para o callback
@@ -1654,14 +1672,17 @@ export default function Home() {
           postPassTimerRef.current = null;
           radarZeroTimeRef2.current = null;
           setRadarPassedLoading(false);
+          setRadarPassedPhase(null);
           hideRadarModal();
           openRadarFeedbackCard(passedRadar);
-        }, 5500); // 5.5s para garantir os 5s visíveis + transição
+        }, 5500); // 5s loading + 0.5s "Passou" no modal, depois fecha
+        setTimeout(() => setRadarPassedPhase('passed'), 5000); // Após 5s: mostra "Passou" no próprio modal (sem loop)
       }
       setNearestRadar({ radar: activeRadar, distance: 0 });
     } else if (deveAbrirModal) {
       radarZeroTimeRef2.current = null;
       setRadarPassedLoading(false);
+      setRadarPassedPhase(null);
       setNearestRadar({ radar: activeRadar, distance: activeDistance });
     } else if (!postPassTimerRef.current) {
       radarZeroTimeRef2.current = null;
@@ -1754,6 +1775,7 @@ export default function Home() {
     }
     radarZeroTimeRef2.current = null;
     setRadarPassedLoading(false);
+    setRadarPassedPhase(null);
     if (showRadarFeedbackCard && radarFeedbackTarget?.id === deletedId) {
       closeRadarFeedbackCard();
     }
@@ -1872,6 +1894,7 @@ export default function Home() {
     }
     alertedRadarIds.current.clear();
     radarCriticalSoundPlayedIds.current.clear();
+    radar30mSoundPlayedIds.current.clear();
     resetProximityState();
     if (postPassTimerRef.current) {
       clearTimeout(postPassTimerRef.current);
@@ -1882,6 +1905,7 @@ export default function Home() {
       radarFeedbackDismissTimerRef.current = null;
     }
     setRadarPassedLoading(false);
+    setRadarPassedPhase(null);
     setShowRadarFeedbackCard(false);
     setRadarFeedbackTarget(null);
     setRadarFeedbackSubmitting(false);
@@ -1904,6 +1928,7 @@ export default function Home() {
     }
     alertedRadarIds.current.clear();
     radarCriticalSoundPlayedIds.current.clear();
+    radar30mSoundPlayedIds.current.clear();
     resetProximityState();
     if (postPassTimerRef.current) {
       clearTimeout(postPassTimerRef.current);
@@ -1914,6 +1939,7 @@ export default function Home() {
       radarFeedbackDismissTimerRef.current = null;
     }
     setRadarPassedLoading(false);
+    setRadarPassedPhase(null);
     setShowRadarFeedbackCard(false);
     setRadarFeedbackTarget(null);
     setRadarFeedbackSubmitting(false);
@@ -2149,7 +2175,7 @@ export default function Home() {
 
           {/* Botão de reportar em modo mapa livre */}
           <TouchableOpacity
-            style={[styles.reportRadarButton, { bottom: 100 }]}
+            style={[styles.reportRadarButton, { bottom: 150 }]}
             onPress={() => setShowReportModal(true)}
             disabled={isReportingRadar}
             activeOpacity={0.7}
@@ -2334,85 +2360,86 @@ export default function Home() {
               },
             ]}
           >
-            {radarPassedLoading ? (
-              <>
-                <View style={styles.radarAlertTextContainer}>
-                  <ActivityIndicator
-                    size="large"
-                    color={colors.primaryLight}
-                    style={{ marginVertical: 8 }}
-                  />
-                  <Text style={styles.radarAlertTitle}>Passou do radar</Text>
-                  <Text style={styles.radarAlertDistance}>Aguarde...</Text>
-                </View>
-              </>
-            ) : (
-              <>
-                <View style={styles.radarIconContainer}>
-                  {(() => {
-                    const type = normalizeRadarType(nearestRadar.radar.type);
-                    let iconSource = radarImages.radarMovel;
+            <>
+              <View style={styles.radarIconContainer}>
+                {(() => {
+                  const type = normalizeRadarType(nearestRadar.radar.type);
+                  let iconSource = radarImages.radarMovel;
 
-                    if (
-                      type.includes("semaforo") ||
-                      type.includes("camera") ||
-                      type.includes("fotografica")
-                    ) {
-                      iconSource = radarImages.radarSemaforico;
-                    } else if (
-                      type.includes("movel") ||
-                      type.includes("mobile")
-                    ) {
-                      iconSource = radarImages.radarMovel;
-                    } else if (
-                      type.includes("fixo") ||
-                      type.includes("placa") ||
-                      type.includes("velocidade")
-                    ) {
-                      iconSource =
-                        radarImages[
-                          getClosestPlacaName(nearestRadar.radar.speedLimit)
-                        ] || radarImages.placa60;
-                    }
+                  if (
+                    type.includes("semaforo") ||
+                    type.includes("camera") ||
+                    type.includes("fotografica")
+                  ) {
+                    iconSource = radarImages.radarSemaforico;
+                  } else if (
+                    type.includes("movel") ||
+                    type.includes("mobile")
+                  ) {
+                    iconSource = radarImages.radarMovel;
+                  } else if (
+                    type.includes("fixo") ||
+                    type.includes("placa") ||
+                    type.includes("velocidade")
+                  ) {
+                    iconSource =
+                      radarImages[
+                        getClosestPlacaName(nearestRadar.radar.speedLimit)
+                      ] || radarImages.placa60;
+                  }
 
-                    return (
-                      <Image
-                        source={iconSource}
-                        style={styles.radarAlertIconLarge}
+                  return (
+                    <Image
+                      source={iconSource}
+                      style={styles.radarAlertIconLarge}
+                    />
+                  );
+                })()}
+              </View>
+              <View style={styles.radarAlertTextContainer}>
+                {radarPassedLoading ? (
+                  <>
+                    <Text style={styles.radarAlertTitle}>Passou do radar</Text>
+                    {radarPassedPhase === 'loading' && (
+                      <ActivityIndicator
+                        size="large"
+                        color={colors.primaryLight}
+                        style={{ marginVertical: 8 }}
                       />
-                    );
-                  })()}
-                </View>
-                <View style={styles.radarAlertTextContainer}>
-                  <Text style={styles.radarAlertTitle}>
-                    {(() => {
-                      const type = normalizeRadarType(nearestRadar.radar.type);
-                      let typeName = "Radar";
-                      if (type.includes("semaforo"))
-                        typeName = "Radar Semafórico";
-                      else if (type.includes("movel")) typeName = "Radar Móvel";
-                      else if (type.includes("fixo") || type.includes("placa"))
-                        typeName = "Placa de Velocidade";
-
-                      return nearestRadar.distance <= 30
-                        ? `${typeName} Próximo!`
-                        : `${typeName} a frente`;
-                    })()}
-                  </Text>
-                  <Text style={styles.radarAlertDistance}>
-                    {nearestRadar.distance < 10
-                      ? "0m"
-                      : `${nearestRadar.distance}m`}
-                    {nearestRadar.radar.speedLimit && (
-                      <Text style={styles.radarAlertSpeed}>
-                        {" • "}
-                        {nearestRadar.radar.speedLimit} km/h
-                      </Text>
                     )}
-                  </Text>
-                </View>
-              </>
-            )}
+                  </>
+                ) : (
+                  <>
+                    <Text style={styles.radarAlertTitle}>
+                      {(() => {
+                        const type = normalizeRadarType(nearestRadar.radar.type);
+                        let typeName = "Radar";
+                        if (type.includes("semaforo"))
+                          typeName = "Radar Semafórico";
+                        else if (type.includes("movel")) typeName = "Radar Móvel";
+                        else if (type.includes("fixo") || type.includes("placa"))
+                          typeName = "Placa de Velocidade";
+
+                        return nearestRadar.distance <= 30
+                          ? `${typeName} Próximo!`
+                          : `${typeName} a frente`;
+                      })()}
+                    </Text>
+                    <Text style={styles.radarAlertDistance}>
+                      {nearestRadar.distance < 10
+                        ? "0m"
+                        : `${nearestRadar.distance}m`}
+                      {nearestRadar.radar.speedLimit && (
+                        <Text style={styles.radarAlertSpeed}>
+                          {" • "}
+                          {nearestRadar.radar.speedLimit} km/h
+                        </Text>
+                      )}
+                    </Text>
+                  </>
+                )}
+              </View>
+            </>
           </Animated.View>
         </Animated.View>
       )}
@@ -3192,7 +3219,7 @@ const styles = StyleSheet.create({
   },
   reportRadarButton: {
     position: "absolute",
-    bottom: Platform.OS === "ios" ? 100 : 250,
+    bottom: Platform.OS === "ios" ? 100 : 280,
     right: 20,
     backgroundColor: colors.backgroundLight,
     width: 60,

@@ -49,6 +49,7 @@ const mapApiRadarToRadar = (apiRadar: ApiRadarResponse): Radar => {
     uf: apiRadar.uf ?? undefined,
     createdAt: createdAtMs,
     reportedAt: createdAtMs,
+    reportedBy: apiRadar.reportedBy ?? undefined,
   };
 };
 
