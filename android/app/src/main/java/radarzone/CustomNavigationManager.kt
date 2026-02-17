@@ -1,4 +1,4 @@
-package radarbot
+package radarzone
 
 import android.util.Log
 import com.facebook.react.bridge.Arguments
@@ -9,7 +9,7 @@ import com.facebook.react.bridge.ReadableArray
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.mapbox.geojson.Point
-import radarbot.navigation.CustomNavigationEngine
+import radarzone.navigation.CustomNavigationEngine
 
 class CustomNavigationManager(reactContext: ReactApplicationContext) :
         ReactContextBaseJavaModule(reactContext) {
@@ -39,15 +39,8 @@ class CustomNavigationManager(reactContext: ReactApplicationContext) :
         waypointPoints.add(Point.fromLngLat(waypoint.getDouble(0), waypoint.getDouble(1)))
       }
 
-      // Inicializar engine se necessário
       if (navigationEngine == null) {
-        // Por enquanto, vamos usar uma implementação que não depende de MapView
-        // pois a integração completa requer mais setup
         val accessToken = getMapboxAccessToken()
-        // navigationEngine = CustomNavigationEngine(mapView!!, accessToken)
-        
-        // Emitir evento de sucesso mesmo sem engine ativa
-        // Na próxima versão, integraremos com o MapView corretamente
         Log.w(TAG, "Engine de navegação customizada inicializada (sem MapView)")
       }
 
@@ -73,18 +66,15 @@ class CustomNavigationManager(reactContext: ReactApplicationContext) :
 
   @ReactMethod
   fun setMute(mute: Boolean) {
-    // Implementar controle de áudio
     Log.d(TAG, "Mudo: $mute")
   }
 
   @ReactMethod
   fun getCurrentLocation(promise: com.facebook.react.bridge.Promise) {
     try {
-      // Por enquanto retornar localização simulada
-      // Na implementação completa, isso virá do GPS
       val locationMap = Arguments.createMap()
       locationMap.putDouble("latitude", -23.5505)
-      locationMap.putDouble("longitude", -46.6333) // São Paulo
+      locationMap.putDouble("longitude", -46.6333)
       locationMap.putDouble("accuracy", 10.0)
       locationMap.putDouble("bearing", 0.0)
       promise.resolve(locationMap)
@@ -96,8 +86,6 @@ class CustomNavigationManager(reactContext: ReactApplicationContext) :
   @ReactMethod
   fun getRouteProgress(promise: com.facebook.react.bridge.Promise) {
     try {
-      // Por enquanto retornar valores padrão
-      // Na implementação completa, isso virá do engine
       val progressMap = Arguments.createMap()
       progressMap.putInt("currentPoint", 0)
       progressMap.putInt("totalPoints", 0)
@@ -121,13 +109,10 @@ class CustomNavigationManager(reactContext: ReactApplicationContext) :
   }
 
   private fun findMapView(): com.mapbox.maps.MapView? {
-    // Implementar busca pelo MapView na hierarquia de views
-    // Esta é uma implementação simplificada
     return null
   }
 
   private fun getMapboxAccessToken(): String {
-    // Obter token do Mapbox das configurações
     return reactContext.getString(
             reactContext.resources.getIdentifier(
                     "mapbox_access_token",

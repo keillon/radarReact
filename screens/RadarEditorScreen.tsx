@@ -27,6 +27,7 @@ import {
   reportRadar,
   updateRadar
 } from "../services/api";
+import { colors } from "../utils/theme";
 
 const DEFAULT_CENTER = { latitude: -23.5505, longitude: -46.6333 };
 const LOAD_RADIUS_M = 30000;
@@ -448,7 +449,7 @@ export default function RadarEditorScreen({
         />
         {loading && (
           <View style={styles.loadingOverlay}>
-            <ActivityIndicator size="large" color="#3b82f6" />
+            <ActivityIndicator size="large" color={colors.primary} />
             <Text style={styles.loadingText}>Carregando radares...</Text>
           </View>
         )}
@@ -490,7 +491,7 @@ export default function RadarEditorScreen({
             style={{
               flexDirection: "column",
               padding: 16,
-              backgroundColor: "#fff",
+              backgroundColor: colors.backgroundLight,
               borderRadius: 12,
               shadowColor: "#000",
               shadowOffset: { width: 0, height: 4 },
@@ -525,26 +526,26 @@ export default function RadarEditorScreen({
                 </Text>
               </View>
               <TouchableOpacity
-                style={{ padding: 12, backgroundColor: "#e5e7eb", borderRadius: 8 }}
+                style={{ padding: 12, backgroundColor: colors.borderLight, borderRadius: 8 }}
                 onPress={() => {
                   setSelectedRadar(null);
                   setVignetteCenter(null);
                 }}
                 activeOpacity={0.8}
               >
-                <Text style={{ fontWeight: "600", color: "#374151" }}>Fechar</Text>
+                <Text style={{ fontWeight: "600", color: colors.textDarkSecondary }}>Fechar</Text>
               </TouchableOpacity>
             </View>
             <View style={{ borderTopWidth: 1, borderTopColor: "#e5e7eb", paddingTop: 12, gap: 6 }}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                <Ionicons name="location" size={16} color="#6b7280" />
-                <Text style={{ fontSize: 14, color: "#374151", flex: 1 }} numberOfLines={2}>
+                <Ionicons name="location" size={16} color={colors.textSecondary} />
+                <Text style={{ fontSize: 14, color: colors.textDarkSecondary, flex: 1 }} numberOfLines={2}>
                   {radarDetailAddress ?? "Carregando endereço..."}
                 </Text>
               </View>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                <Ionicons name="people" size={16} color="#6b7280" />
-                <Text style={{ fontSize: 14, color: "#374151" }}>
+                <Ionicons name="people" size={16} color={colors.textSecondary} />
+                <Text style={{ fontSize: 14, color: colors.textDarkSecondary }}>
                   {selectedRadar.source === "user" || selectedRadar.source === "reportado"
                     ? "Reportado pela comunidade"
                     : "Dados locais"}
@@ -552,8 +553,8 @@ export default function RadarEditorScreen({
               </View>
               {(selectedRadar.createdAt ?? selectedRadar.reportedAt) && (
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                  <Ionicons name="time" size={16} color="#6b7280" />
-                  <Text style={{ fontSize: 14, color: "#374151" }}>
+                  <Ionicons name="time" size={16} color={colors.textSecondary} />
+                  <Text style={{ fontSize: 14, color: colors.textDarkSecondary }}>
                     {formatTimeAgo(
                       selectedRadar.createdAt ?? selectedRadar.reportedAt ?? 0
                     )}
@@ -674,7 +675,7 @@ export default function RadarEditorScreen({
               <Text
                 style={[
                   styles.panelSubtitle,
-                  { fontWeight: "600", color: "#6b7280" },
+                  { fontWeight: "600", color: colors.textSecondary },
                 ]}
               >
                 Inativo
@@ -728,7 +729,7 @@ export default function RadarEditorScreen({
             {(selectedRadar.situacao === "Inativo" ||
               selectedRadar.situacao === "inativo") && (
                 <TouchableOpacity
-                  style={[styles.button, { backgroundColor: "#10b981" }]}
+                  style={[styles.button, { backgroundColor: colors.success }]}
                   onPress={handleActivate}
                   disabled={saving}
                 >
@@ -773,21 +774,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     paddingTop: 48,
-    backgroundColor: "#fff",
+    backgroundColor: colors.backgroundLight,
     borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
+    borderBottomColor: colors.borderLight,
   },
   closeButton: {
     padding: 8,
   },
   closeButtonText: {
     fontSize: 16,
-    color: "#3b82f6",
+    color: colors.primary,
   },
   title: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#1f2937",
+    color: colors.textDark,
     flex: 1,
   },
   headerActions: {
@@ -799,28 +800,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
-    backgroundColor: "#e5e7eb",
+    backgroundColor: colors.borderLight,
   },
   headerButtonActive: {
-    backgroundColor: "#3b82f6",
+    backgroundColor: colors.primary,
   },
   headerButtonText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#374151",
+    color: colors.textDarkSecondary,
   },
   headerButtonTextActive: {
-    color: "#fff",
+    color: colors.text,
   },
   addBanner: {
-    backgroundColor: "#3b82f6",
+    backgroundColor: colors.primary,
     paddingVertical: 12,
     paddingHorizontal: 16,
   },
   addBannerText: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#fff",
+    color: colors.text,
     textAlign: "center",
   },
   mapWrapper: {
@@ -836,20 +837,20 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 8,
     fontSize: 14,
-    color: "#6b7280",
+    color: colors.textSecondary,
   },
   hintBar: {
-    backgroundColor: "#fef3c7",
+    backgroundColor: "rgba(255,193,7,0.2)",
     paddingVertical: 10,
     paddingHorizontal: 16,
   },
   hintText: {
     fontSize: 14,
-    color: "#92400e",
+    color: colors.primaryDark,
     textAlign: "center",
   },
   panel: {
-    backgroundColor: "#fff",
+    backgroundColor: colors.backgroundLight,
     padding: 16,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
@@ -862,12 +863,12 @@ const styles = StyleSheet.create({
   panelTitle: {
     fontSize: 18,
     fontWeight: "600",
-    color: "#1f2937",
+    color: colors.textDark,
     marginBottom: 4,
   },
   panelSubtitle: {
     fontSize: 13,
-    color: "#6b7280",
+    color: colors.textSecondary,
     marginBottom: 12,
   },
   modalOverlay: {
@@ -878,7 +879,7 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   modalContent: {
-    backgroundColor: "#fff",
+    backgroundColor: colors.backgroundLight,
     borderRadius: 16,
     padding: 20,
     width: "100%",
@@ -887,7 +888,7 @@ const styles = StyleSheet.create({
   modalLabel: {
     fontSize: 13,
     fontWeight: "500",
-    color: "#374151",
+    color: colors.textDarkSecondary,
     marginBottom: 6,
   },
   typeGrid: {
@@ -911,8 +912,8 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
   },
   typeCardActive: {
-    backgroundColor: "#eff6ff",
-    borderColor: "#3b82f6",
+    backgroundColor: "rgba(255,193,7,0.1)",
+    borderColor: colors.primary,
   },
   typeCardIcon: {
     width: 36,
@@ -923,14 +924,14 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     fontWeight: "600",
-    color: "#374151",
+    color: colors.textDarkSecondary,
   },
   typeCardTextActive: {
-    color: "#1d4ed8",
+    color: colors.primaryDark,
   },
   input: {
     borderWidth: 1,
-    borderColor: "#d1d5db",
+    borderColor: colors.borderLight,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -949,30 +950,30 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   buttonPrimary: {
-    backgroundColor: "#3b82f6",
+    backgroundColor: colors.primary,
   },
   buttonPrimaryText: {
-    color: "#fff",
+    color: colors.text,
     fontWeight: "600",
   },
   buttonSecondary: {
-    backgroundColor: "#e5e7eb",
+    backgroundColor: colors.borderLight,
   },
   buttonSecondaryText: {
-    color: "#374151",
+    color: colors.textDarkSecondary,
   },
   buttonDanger: {
-    backgroundColor: "#ef4444",
+    backgroundColor: colors.error,
   },
   buttonDangerText: {
-    color: "#fff",
+    color: colors.text,
     fontWeight: "600",
   },
   fab: {
     position: "absolute",
     bottom: 24,
     right: 24,
-    backgroundColor: "#3b82f6",
+    backgroundColor: colors.primary,
     paddingVertical: 14,
     paddingHorizontal: 20,
     borderRadius: 12,
@@ -983,7 +984,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
   },
   fabText: {
-    color: "#fff",
+    color: colors.text,
     fontSize: 16,
     fontWeight: "600",
   },

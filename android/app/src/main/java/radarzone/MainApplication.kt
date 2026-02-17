@@ -1,4 +1,4 @@
-package radarbot
+package radarzone
 
 import android.app.Application
 import com.facebook.react.PackageList
@@ -17,7 +17,6 @@ class MainApplication : Application(), ReactApplication {
           object : DefaultReactNativeHost(this) {
             override fun getPackages(): List<ReactPackage> {
               val packages = PackageList(this).packages.toMutableList()
-              // Verificar se MapboxNavigationViewPackage já foi adicionado pelo autolinking
               val hasMapboxNav =
                       packages.any { it.javaClass.simpleName == "MapboxNavigationViewPackage" }
               android.util.Log.d(
@@ -32,9 +31,9 @@ class MainApplication : Application(), ReactApplication {
                 packages.add(MapboxNavigationViewPackage())
               }
 
-              // Adicionar nosso package de navegação customizada
               packages.add(CustomNavigationPackage())
-              android.util.Log.d("MainApplication", "CustomNavigationPackage adicionado")
+              packages.add(VolumePackage())
+              android.util.Log.d("MainApplication", "CustomNavigationPackage e VolumePackage adicionados")
               return packages
             }
 

@@ -16,6 +16,7 @@ import {
 } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { LatLng, MAPBOX_TOKEN } from "../services/mapbox";
+import { colors } from "../utils/theme";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 const COLLAPSED_HEIGHT = 100;
@@ -219,13 +220,13 @@ export default function SearchContainer({
               <Ionicons
                 name="search"
                 size={20}
-                color="#6b7280"
+                color={colors.textSecondary}
                 style={styles.inputIcon}
               />
               <TextInput
                 style={styles.input}
                 placeholder="Vai para onde?"
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor={colors.textTertiary}
                 value={destinationText}
                 onChangeText={onDestinationChange}
                 onFocus={expandSheet}
@@ -235,7 +236,7 @@ export default function SearchContainer({
               />
               {(loading || geocoding) && (
                 <View style={styles.loadingIndicator}>
-                  <ActivityIndicator size="small" color="#3b82f6" />
+                  <ActivityIndicator size="small" color={colors.primary} />
                 </View>
               )}
             </View>
@@ -249,9 +250,9 @@ export default function SearchContainer({
               disabled={loading || geocoding || !destinationText.trim()}
             >
               {(loading || geocoding) ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <ActivityIndicator size="small" color={colors.text} />
               ) : (
-                <Ionicons name="navigate" size={22} color="#fff" />
+                <Ionicons name="navigate" size={22} color={colors.text} />
               )}
             </TouchableOpacity>
           </View>
@@ -269,7 +270,7 @@ export default function SearchContainer({
                     <Ionicons
                       name="location-outline"
                       size={18}
-                      color="#6b7280"
+                      color={colors.textSecondary}
                     />
                     <Text style={styles.suggestionText} numberOfLines={1}>
                       {item.placeName}
@@ -313,7 +314,7 @@ const styles = StyleSheet.create({
   dragBar: {
     width: 40,
     height: 4,
-    backgroundColor: "#d1d5db",
+    backgroundColor: colors.borderLight,
     borderRadius: 2,
   },
   content: {
@@ -330,7 +331,7 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f3f4f6",
+    backgroundColor: colors.backgroundLightSecondary,
     borderRadius: 14,
     paddingHorizontal: 14,
     minHeight: 48,
@@ -341,7 +342,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: 16,
-    color: "#111827",
+    color: colors.textDark,
     paddingVertical: 12,
   },
   loadingIndicator: {
@@ -351,12 +352,12 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: "#3b82f6",
+    backgroundColor: colors.primary,
     justifyContent: "center",
     alignItems: "center",
   },
   searchButtonDisabled: {
-    backgroundColor: "#9ca3af",
+    backgroundColor: colors.textTertiary,
     opacity: 0.6,
   },
   suggestionsContainer: {
@@ -374,11 +375,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     gap: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#f3f4f6",
+    borderBottomColor: colors.backgroundLightSecondary,
   },
   suggestionText: {
     flex: 1,
     fontSize: 15,
-    color: "#374151",
+    color: colors.textDarkSecondary,
   },
 });

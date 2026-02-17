@@ -1,4 +1,4 @@
-package radarbot.navigation
+package radarzone.navigation
 
 import android.location.Location
 import android.util.Log
@@ -37,7 +37,6 @@ class CustomNavigationEngine(private val mapView: MapView, private val accessTok
       isNavigating = true
       routeIndex = 0
 
-      // Calcular rota usando Directions API
       calculateRoute(origin, destination, waypoints) { route ->
         if (route != null) {
           currentRoute = route
@@ -136,8 +135,7 @@ class CustomNavigationEngine(private val mapView: MapView, private val accessTok
         val distance =
                 calculateDistance(location.latitude, location.longitude, nextPoint[1], nextPoint[0])
 
-        // Se estiver perto do próximo ponto, avança
-        if (distance < 20) { // 20 metros
+        if (distance < 20) {
           routeIndex++
           Log.d("CustomNav", "Avançando para ponto $routeIndex/${route.size}")
         }

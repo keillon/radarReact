@@ -8,7 +8,7 @@ import {
   View,
 } from "react-native";
 
-const ICON_SIZE = 50;
+const ICON_SIZE = 33;
 
 /**
  * Overlay escuro em toda a tela.
@@ -54,7 +54,7 @@ export function VignetteOverlay({
           ]}
           pointerEvents="none"
         >
-         
+         <Image source={radarIconSource} style={styles.radarIcon} />
         </View>
       )}
     </View>
@@ -64,13 +64,13 @@ export function VignetteOverlay({
 const styles = StyleSheet.create({
   darkLayer: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.8)",
+    backgroundColor: "rgba(0,0,0,0.5)",
   },
   radarLayer: {
     position: "absolute",
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.15)",
+    backgroundColor: "transparent",
     borderRadius: 40,
     // Brilho sutil no Android
     elevation: 12,
@@ -78,9 +78,10 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.5,
     shadowRadius: 16,
+
   },
-  // radarIcon: {
-  //   width: 52,
-  //   height: 52,
-  // },
+  radarIcon: {
+    width: 80,
+    height: 80,
+  },
 });

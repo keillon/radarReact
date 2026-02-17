@@ -1,8 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_BASE_URL } from "./api";
 
-const AUTH_TOKEN_KEY = "radarbot_auth_token";
-const AUTH_USER_KEY = "radarbot_auth_user";
+const AUTH_TOKEN_KEY = "radarzone_auth_token";
+const AUTH_USER_KEY = "radarzone_auth_user";
 
 export interface AuthUser {
   id: string;

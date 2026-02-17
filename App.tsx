@@ -3,6 +3,7 @@ import { ActivityIndicator, LogBox, StyleSheet, Text, View } from "react-native"
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { SettingsProvider } from "./context/SettingsContext";
+import { colors } from "./utils/theme";
 
 LogBox.ignoreLogs([
   "new NativeEventEmitter",
@@ -15,7 +16,7 @@ LogBox.ignoreLogs([
 function Fallback() {
   return (
     <View style={styles.fallback}>
-      <ActivityIndicator size="large" color="#3b82f6" />
+      <ActivityIndicator size="large" color={colors.primary} />
     </View>
   );
 }

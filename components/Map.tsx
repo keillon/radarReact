@@ -28,6 +28,7 @@ import Ionicons from "react-native-vector-icons/Ionicons";
 import { MenuModal } from "./MenuModal";
 import { MAPBOX_TOKEN, NavigationStep, RouteFeature } from "../services/mapbox";
 import { Radar } from "../services/types";
+import { colors } from "../utils/theme";
 
 Mapbox.setAccessToken(MAPBOX_TOKEN);
 
@@ -573,7 +574,7 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
               <LineLayer
                 id="routeLine"
                 style={{
-                  lineColor: isNavigating ? "#3b82f6" : "#60a5fa",
+                  lineColor: isNavigating ? colors.primary : colors.primaryLight,
                   lineWidth: isNavigating ? 6 : 4,
                   lineCap: "round",
                   lineJoin: "round",
@@ -583,11 +584,11 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
                         ["linear"],
                         ["line-progress"],
                         0,
-                        "#3b82f6",
+                        colors.primary,
                         0.5,
-                        "#60a5fa",
+                        colors.primaryLight,
                         1,
-                        "#93c5fd",
+                        "#FFE082",
                       ]
                     : undefined,
                 }}
@@ -617,10 +618,10 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
               <CircleLayer
                 id="destinationMarker"
                 style={{
-                  circleColor: "#10b981",
+                  circleColor: colors.success,
                   circleRadius: 10,
                   circleStrokeWidth: 3,
-                  circleStrokeColor: "#fff",
+                  circleStrokeColor: colors.text,
                 }}
               />
               <SymbolLayer
@@ -655,10 +656,10 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
               <CircleLayer
                 id="maneuverMarker"
                 style={{
-                  circleColor: "#f59e0b",
+                  circleColor: colors.warning,
                   circleRadius: 12,
                   circleStrokeWidth: 3,
-                  circleStrokeColor: "#fff",
+                  circleStrokeColor: colors.text,
                 }}
               />
               <SymbolLayer
@@ -721,11 +722,11 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
                   circleColor: [
                     "step",
                     ["get", "point_count"],
-                    "#fbbf24",
+                    colors.primary,
                     10,
-                    "#8b5800",
+                    colors.primaryDark,
                     50,
-                    "#000",
+                    colors.background,
                   ],
                   circleRadius: [
                     "step",
@@ -737,7 +738,7 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
                     40,
                   ],
                   circleStrokeWidth: 2,
-                  circleStrokeColor: "#fbbf24",
+                  circleStrokeColor: colors.primary,
                 }}
               />
 
@@ -789,9 +790,9 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
                 id="pickerSelectedPointCircle"
                 style={{
                   circleRadius: 22,
-                  circleColor: "#ef4444",
+                  circleColor: colors.error,
                   circleStrokeWidth: 4,
-                  circleStrokeColor: "#fff",
+                  circleStrokeColor: colors.text,
                 }}
               />
               <CircleLayer
@@ -800,7 +801,7 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
                   circleRadius: 28,
                   circleColor: "transparent",
                   circleStrokeWidth: 3,
-                  circleStrokeColor: "#ef4444",
+                  circleStrokeColor: colors.error,
                 }}
               />
             </ShapeSource>
@@ -837,7 +838,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "#1f2937",
+    backgroundColor: colors.backgroundCard,
     justifyContent: "center",
     alignItems: "center",
     elevation: 4,

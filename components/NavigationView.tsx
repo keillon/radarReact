@@ -1,6 +1,7 @@
 import React from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { NavigationStep } from "../services/mapbox";
+import { colors } from "../utils/theme";
 
 interface NavigationViewProps {
   currentStep: NavigationStep | null;
@@ -116,13 +117,13 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    backgroundColor: "#1f2937",
+    backgroundColor: colors.backgroundCard,
     paddingTop: 50,
     paddingBottom: 20,
     paddingHorizontal: 16,
     zIndex: 1000,
     borderBottomWidth: 2,
-    borderBottomColor: "#3b82f6",
+    borderBottomColor: colors.primary,
     pointerEvents: "box-none",
   },
   header: {
@@ -133,7 +134,7 @@ const styles = StyleSheet.create({
     pointerEvents: "auto",
   },
   stopButton: {
-    backgroundColor: "#dc2626",
+    backgroundColor: colors.errorDark,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
@@ -144,20 +145,20 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   routeInfo: {
-    backgroundColor: "#374151",
+    backgroundColor: colors.backgroundCardSecondary,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
   },
   routeInfoText: {
-    color: "#9ca3af",
+    color: colors.textTertiary,
     fontSize: 12,
     fontWeight: "500",
   },
   instructionContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#111827",
+    backgroundColor: colors.background,
     padding: 16,
     borderRadius: 12,
     pointerEvents: "auto",
@@ -166,7 +167,7 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: "#3b82f6",
+    backgroundColor: colors.primary,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 16,
@@ -189,12 +190,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   distanceText: {
-    color: "#60a5fa",
+    color: colors.primaryLight,
     fontSize: 16,
     fontWeight: "600",
   },
   durationText: {
-    color: "#9ca3af",
+    color: colors.textTertiary,
     fontSize: 14,
   },
 });

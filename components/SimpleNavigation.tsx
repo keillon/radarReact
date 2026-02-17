@@ -94,7 +94,7 @@ const SimpleNavigation: React.FC<SimpleNavigationProps> = ({
             <MapboxGL.LineLayer
               id="routeLayer"
               style={{
-                lineColor: '#4285F4',
+                lineColor: '#FFC107',
                 lineWidth: 6,
                 lineCap: 'round',
                 lineJoin: 'round'
@@ -183,10 +183,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   startButton: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#22c55e',
   },
   stopButton: {
-    backgroundColor: '#F44336',
+    backgroundColor: '#ef4444',
   },
   buttonText: {
     color: 'white',
@@ -201,10 +201,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   originMarker: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#22c55e',
   },
   destinationMarker: {
-    backgroundColor: '#F44336',
+    backgroundColor: '#ef4444',
   },
   markerText: {
     color: 'white',

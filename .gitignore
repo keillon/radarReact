@@ -260,6 +260,10 @@ fastlane/test_output
 *.log
 *.map
 
+# Windows reserved names
+nul
+nul.*
+
 # Misc
 .idea/
 .vscode/

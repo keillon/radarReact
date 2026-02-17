@@ -4,7 +4,7 @@ export type GeoPoint = {
 };
 
 /** Raio máximo (m) da rota para considerar radar. Margem maior para ruas curvas/desvios. */
-export const MAX_ROUTE_DISTANCE_METERS = 50;
+export const MAX_ROUTE_DISTANCE_METERS = 6;
 export const RADAR_DIRECT_FILTER_METERS = 800;
 
 export const calculateDistance = (
@@ -111,6 +111,7 @@ export const calculateDistanceAlongRouteWithCumulative = (
   radarLocation: GeoPoint,
   routePoints: GeoPoint[],
   cumulative: number[]
+
 ): { distance: number; hasPassed: boolean; atRadarWindow: boolean } => {
   if (routePoints.length < 2 || cumulative.length !== routePoints.length) {
     return { distance: Infinity, hasPassed: false, atRadarWindow: false };

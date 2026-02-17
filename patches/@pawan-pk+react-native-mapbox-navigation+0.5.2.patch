@@ -75,10 +75,10 @@ index 7d28df3..f6c5272 100644
    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
    implementation 'androidx.cardview:cardview:1.0.0'
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
-index 41a3ba0..b6d2e52 100644
+index 41a3ba0..52dd7b5 100644
 --- a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
 +++ b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
-@@ -3,25 +3,38 @@ package com.mapboxnavigation
+@@ -3,25 +3,39 @@ package com.mapboxnavigation
  import android.annotation.SuppressLint
  import android.content.res.Configuration
  import android.content.res.Resources
@@ -113,12 +113,13 @@ index 41a3ba0..b6d2e52 100644
  import com.mapbox.maps.plugin.animation.camera
 +import com.mapbox.maps.plugin.compass.compass
 +import com.mapbox.maps.plugin.gestures.addOnMapClickListener
++import com.mapbox.maps.plugin.animation.MapAnimationOptions
  import com.mapbox.maps.plugin.locationcomponent.location
 +import com.mapbox.navigation.base.ExperimentalPreviewMapboxNavigationAPI
  import com.mapbox.navigation.base.TimeFormat
  import com.mapbox.navigation.base.extensions.applyDefaultNavigationOptions
  import com.mapbox.navigation.base.extensions.applyLanguageAndVoiceUnitOptions
-@@ -50,24 +63,24 @@ import com.mapbox.navigation.tripdata.progress.model.EstimatedTimeToArrivalForma
+@@ -50,24 +64,24 @@ import com.mapbox.navigation.tripdata.progress.model.EstimatedTimeToArrivalForma
  import com.mapbox.navigation.tripdata.progress.model.PercentDistanceTraveledFormatter
  import com.mapbox.navigation.tripdata.progress.model.TimeRemainingFormatter
  import com.mapbox.navigation.tripdata.progress.model.TripProgressUpdateFormatter
@@ -145,7 +146,7 @@ index 41a3ba0..b6d2e52 100644
  import com.mapbox.navigation.ui.maps.route.line.api.MapboxRouteLineApi
  import com.mapbox.navigation.ui.maps.route.line.api.MapboxRouteLineView
  import com.mapbox.navigation.ui.maps.route.line.model.MapboxRouteLineApiOptions
-@@ -80,10 +93,24 @@ import com.mapbox.navigation.voice.model.SpeechError
+@@ -80,10 +94,24 @@ import com.mapbox.navigation.voice.model.SpeechError
  import com.mapbox.navigation.voice.model.SpeechValue
  import com.mapbox.navigation.voice.model.SpeechVolume
  import com.mapboxnavigation.databinding.NavigationViewBinding
@@ -171,7 +172,7 @@ index 41a3ba0..b6d2e52 100644
    private companion object {
      private const val BUTTON_ANIMATION_DURATION = 1500L
    }
-@@ -93,28 +120,26 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -93,28 +121,26 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
    private var destinationTitle: String = "Destination"
    private var waypoints: List<Point> = listOf()
    private var waypointLegs: List<WaypointLegs> = listOf()
@@ -211,7 +212,7 @@ index 41a3ba0..b6d2e52 100644
  
    /**
     * Mapbox Navigation entry point. There should only be one instance of this object for the app.
-@@ -123,43 +148,74 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -123,43 +149,74 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
    private var mapboxNavigation: MapboxNavigation? = null
  
    /*
@@ -312,7 +313,7 @@ index 41a3ba0..b6d2e52 100644
    /**
     * Generates updates for the [MapboxManeuverView] to display the upcoming maneuver instructions
     * and remaining distance to the maneuver point.
-@@ -167,12 +223,23 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -167,12 +224,26 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
    private lateinit var maneuverApi: MapboxManeuverApi
  
    /**
@@ -331,6 +332,9 @@ index 41a3ba0..b6d2e52 100644
 +
 +  /** Opções de formatação de distância (usadas também pelo Speed Limit API). */
 +  private var distanceFormatterOptions: DistanceFormatterOptions? = null
++
++  /** Volume da voz (0f a 1f). Respeitado quando não está mute. */
++  private var voiceVolume: Float = 1f
  
    /**
 -   * Stores and updates the state of whether the voice instructions should be played as they come or muted.
@@ -339,7 +343,13 @@ index 41a3ba0..b6d2e52 100644
     */
    private var isVoiceInstructionsMuted = false
      set(value) {
-@@ -187,134 +254,130 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -182,139 +253,135 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+         voiceInstructionsPlayer?.volume(SpeechVolume(0f))
+       } else {
+         binding.soundButton.unmuteAndExtend(BUTTON_ANIMATION_DURATION)
+-        voiceInstructionsPlayer?.volume(SpeechVolume(1f))
++        voiceInstructionsPlayer?.volume(SpeechVolume(voiceVolume))
+       }
      }
  
    /**
@@ -549,7 +559,7 @@ index 41a3ba0..b6d2e52 100644
     */
    private val routeArrowView: MapboxRouteArrowView by lazy {
      MapboxRouteArrowView(routeArrowOptions)
-@@ -323,54 +386,133 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -323,54 +390,133 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
    /**
     * Gets notified with location updates.
     *
@@ -725,7 +735,7 @@ index 41a3ba0..b6d2e52 100644
      // update the camera position to account for the progressed fragment of the route
      if (routeProgress.fractionTraveled.toDouble() != 0.0) {
        viewportDataSource.onRouteProgressChanged(routeProgress)
-@@ -378,57 +520,112 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -378,57 +524,112 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
      viewportDataSource.evaluate()
  
      // draw the upcoming maneuver arrow on the map
@@ -883,7 +893,7 @@ index 41a3ba0..b6d2e52 100644
    }
  
    /**
-@@ -436,39 +633,82 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -436,39 +637,82 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
     *
     * A change can mean:
     * - routes get changed with [MapboxNavigation.setNavigationRoutes]
@@ -992,7 +1002,7 @@ index 41a3ba0..b6d2e52 100644
      }
    }
  
-@@ -477,156 +717,325 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -477,156 +721,330 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
    }
  
    private fun onCreate() {
@@ -1233,7 +1243,7 @@ index 41a3ba0..b6d2e52 100644
 +              if (radarExpected.isValue) {
 +                val radarFeatures = radarExpected.value
 +                if (radarFeatures != null && radarFeatures.isNotEmpty()) {
-+                  val qf = radarFeatures[0]
++                  val qf = radarFeatures[0].queriedFeature
 +                  val geoFeature = qf.feature
 +                  val geom = geoFeature?.geometry()
 +                  if (geom is com.mapbox.geojson.Point) {
@@ -1247,24 +1257,20 @@ index 41a3ba0..b6d2e52 100644
 +                      binding.mapView.camera.easeTo(
 +                              com.mapbox.maps.CameraOptions.Builder()
 +                                      .center(com.mapbox.geojson.Point.fromLngLat(lng, lat))
-+                                      .zoom(16.0)
++                                      .zoom(17.5)
 +                                      .build(),
-+                              com.mapbox.maps.MapAnimationOptions.mapAnimationOptions {
-+                                  duration(800)
-+                              }
++                              MapAnimationOptions.Builder().duration(800L).build()
 +                      )
 +                    } else {
-+                      // Radar individual
++                      // Radar individual — zoom 18 para ficar focado (câmera já elevada com radar em alerta)
 +                      val radarId = (props?.get("id") as? com.google.gson.JsonPrimitive)?.asString
 +                      if (radarId != null && radarId.isNotBlank()) {
 +                        binding.mapView.camera.easeTo(
 +                                com.mapbox.maps.CameraOptions.Builder()
 +                                        .center(com.mapbox.geojson.Point.fromLngLat(lng, lat))
-+                                        .zoom(16.0)
++                                        .zoom(18.0)
 +                                        .build(),
-+                                com.mapbox.maps.MapAnimationOptions.mapAnimationOptions {
-+                                    duration(800)
-+                                }
++                                MapAnimationOptions.Builder().duration(800L).build()
 +                        )
 +                        val event = com.facebook.react.bridge.Arguments.createMap()
 +                        event.putString("id", radarId)
@@ -1367,6 +1373,15 @@ index 41a3ba0..b6d2e52 100644
 +      binding.soundButton.setOnClickListener {
 +        // mute/unmute voice instructions
 +        isVoiceInstructionsMuted = !isVoiceInstructionsMuted
++        // Sincronizar com React (soundEnabled = !muted)
++        try {
++          val ev = Arguments.createMap()
++          ev.putBoolean("muted", isVoiceInstructionsMuted)
++          ev.putBoolean("soundEnabled", !isVoiceInstructionsMuted)
++          safeEmitEvent("onMuteChange", ev)
++        } catch (e: Exception) {
++          Log.w("MapboxNavigationView", "Erro ao emitir onMuteChange: ${e.message}")
++        }
 +      }
  
 -    // Check initial muted or not
@@ -1376,13 +1391,13 @@ index 41a3ba0..b6d2e52 100644
 -    } else {
 -      binding.soundButton.unmute()
 -      voiceInstructionsPlayer?.volume(SpeechVolume(1f))
-+      // Check initial muted or not
++      // Check initial muted or not (respeita preferências do app)
 +      if (this.isVoiceInstructionsMuted) {
 +        binding.soundButton.mute()
 +        voiceInstructionsPlayer?.volume(SpeechVolume(0f))
 +      } else {
 +        binding.soundButton.unmute()
-+        voiceInstructionsPlayer?.volume(SpeechVolume(1f))
++        voiceInstructionsPlayer?.volume(SpeechVolume(voiceVolume))
 +      }
 +    } catch (e: Exception) {
 +      navigationInitialized = false
@@ -1438,7 +1453,7 @@ index 41a3ba0..b6d2e52 100644
        puckBearingEnabled = true
        enabled = true
      }
-@@ -634,31 +1043,34 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -634,31 +1052,34 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
      startRoute()
    }
  
@@ -1493,7 +1508,7 @@ index 41a3ba0..b6d2e52 100644
      }
    }
  
-@@ -669,8 +1081,8 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -669,8 +1090,8 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
  
    private val measureAndLayout = Runnable {
      measure(
@@ -1504,7 +1519,7 @@ index 41a3ba0..b6d2e52 100644
      )
      layout(left, top, right, bottom)
    }
-@@ -687,53 +1099,94 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -687,53 +1108,94 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
      names.add(destinationTitle)
  
      mapboxNavigation?.requestRoutes(
@@ -1638,7 +1653,7 @@ index 41a3ba0..b6d2e52 100644
      // register event listeners
      mapboxNavigation?.registerRoutesObserver(routesObserver)
      mapboxNavigation?.registerArrivalObserver(arrivalObserver)
-@@ -741,39 +1194,48 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -741,39 +1203,48 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
      mapboxNavigation?.registerLocationObserver(locationObserver)
      mapboxNavigation?.registerVoiceInstructionsObserver(voiceInstructionsObserver)
  
@@ -1703,7 +1718,7 @@ index 41a3ba0..b6d2e52 100644
    }
  
    fun onDropViewInstance() {
-@@ -782,10 +1244,12 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -782,10 +1253,12 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
  
    fun setStartOrigin(origin: Point?) {
      this.origin = origin
@@ -1716,7 +1731,7 @@ index 41a3ba0..b6d2e52 100644
    }
  
    fun setDestinationTitle(title: String) {
-@@ -802,7 +1266,7 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -802,7 +1275,7 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
  
    fun setDirectionUnit(unit: String) {
      this.distanceUnit = unit
@@ -1725,7 +1740,17 @@ index 41a3ba0..b6d2e52 100644
    }
  
    fun setLocal(language: String) {
-@@ -820,4 +1284,1724 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -817,7 +1290,1739 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+     this.isVoiceInstructionsMuted = mute
+   }
+ 
++  fun setVolume(volume: Float) {
++    voiceVolume = volume.coerceIn(0f, 1f)
++    if (!isVoiceInstructionsMuted) {
++      voiceInstructionsPlayer?.volume(SpeechVolume(voiceVolume))
++    }
++  }
++
    fun setShowCancelButton(show: Boolean) {
      binding.stop.visibility = if (show) View.VISIBLE else View.INVISIBLE
    }
@@ -1801,7 +1826,11 @@ index 41a3ba0..b6d2e52 100644
 +      lastNearbyRadarIdsHash = newHash
 +      this.nearbyRadarIds = radarIds
 +      Log.d("MapboxNavigationView", "📡 ${radarIds.size} radares próximos definidos")
-+      throttleHandler.post { updateHighlightFilterAndPulse() }
++      updateHighlightFilterAndPulse()
++      if (radarIds.isNotEmpty()) {
++        throttleHandler.postDelayed({ updateHighlightFilterAndPulse() }, 300)
++        throttleHandler.postDelayed({ updateHighlightFilterAndPulse() }, 800)
++      }
 +    } catch (e: Exception) {
 +      Log.e("MapboxNavigationView", "Erro ao definir radares próximos", e)
 +    }
@@ -3133,6 +3162,7 @@ index 41a3ba0..b6d2e52 100644
 +  private fun updateHighlightFilterAndPulse() {
 +    val style = getCurrentStyle() ?: return
 +    try {
++      ensureHighlightLayerExists(style)
 +      val baseFilterJson = buildHighlightFilterForBaseJson()
 +      val overlayFilterJson = buildHighlightFilterJson()
 +      val baseFilterValue = com.mapbox.bindgen.Value.fromJson(baseFilterJson).value ?: return
@@ -3451,7 +3481,7 @@ index 41a3ba0..b6d2e52 100644
 +  }
  }
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationViewManager.kt b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationViewManager.kt
-index 03fad26..a2e4370 100644
+index 03fad26..2a50098 100644
 --- a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationViewManager.kt
 +++ b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationViewManager.kt
 @@ -11,6 +11,10 @@ import com.mapbox.geojson.Point
@@ -3465,7 +3495,7 @@ index 03fad26..a2e4370 100644
    override fun getName(): String {
      return NAME
    }
-@@ -25,13 +29,18 @@ class MapboxNavigationViewManager(private var reactContext: ReactApplicationCont
+@@ -25,13 +29,19 @@ class MapboxNavigationViewManager(private var reactContext: ReactApplicationCont
    }
  
    override fun getExportedCustomDirectEventTypeConstants(): MutableMap<String, Map<String, String>> {
@@ -3487,14 +3517,20 @@ index 03fad26..a2e4370 100644
 +      .put("onMapClick", MapBuilder.of("registrationName", "onMapClick"))
 +      .put("onRadarTap", MapBuilder.of("registrationName", "onRadarTap"))
 +      .put("onRouteChanged", MapBuilder.of("registrationName", "onRouteChanged"))
++      .put("onMuteChange", MapBuilder.of("registrationName", "onMuteChange"))
 +      .build()
    }
  
    @ReactProp(name = "startOrigin")
-@@ -109,6 +118,96 @@ class MapboxNavigationViewManager(private var reactContext: ReactApplicationCont
+@@ -109,6 +119,101 @@ class MapboxNavigationViewManager(private var reactContext: ReactApplicationCont
      view?.setMute(value)
    }
  
++  @ReactProp(name = "volume")
++  fun setVolume(view: MapboxNavigationView?, value: Double) {
++    view?.setVolume(value.toFloat())
++  }
++
 +  /** URL do GeoJSON (ex: https://api/radars/geojson) — nativo carrega todos os radares sem bridge */
 +  @ReactProp(name = "radarsGeoJsonUrl")
 +  fun setRadarsGeoJsonUrl(view: MapboxNavigationView?, value: String?) {
@@ -3747,7 +3783,7 @@ index 4c3d3c3..b0dd903 100644
 +    </style>
  </resources>
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/src/MapboxNavigation.tsx b/node_modules/@pawan-pk/react-native-mapbox-navigation/src/MapboxNavigation.tsx
-index e3d3f19..0dcdbbc 100644
+index e3d3f19..fcba4f4 100644
 --- a/node_modules/@pawan-pk/react-native-mapbox-navigation/src/MapboxNavigation.tsx
 +++ b/node_modules/@pawan-pk/react-native-mapbox-navigation/src/MapboxNavigation.tsx
 @@ -9,8 +9,8 @@ import {
@@ -3782,7 +3818,7 @@ index e3d3f19..0dcdbbc 100644
        ) {
          const errorMessage = 'Notification permission is not granted.';
          console.warn(errorMessage);
-@@ -105,6 +105,10 @@ class MapboxNavigation extends React.Component<
+@@ -105,6 +105,11 @@ class MapboxNavigation extends React.Component<
        onLocationChange,
        onRouteProgressChange,
        onCancelNavigation,
@@ -3790,10 +3826,11 @@ index e3d3f19..0dcdbbc 100644
 +      onRadarTap,
 +      onRouteAlternativeSelected,
 +      onRouteChanged,
++      onMuteChange,
        onError,
        ...rest
      } = this.props;
-@@ -126,6 +130,12 @@ class MapboxNavigation extends React.Component<
+@@ -126,6 +131,13 @@ class MapboxNavigation extends React.Component<
            onCancelNavigation={(event) =>
              onCancelNavigation?.(event.nativeEvent)
            }
@@ -3803,14 +3840,27 @@ index e3d3f19..0dcdbbc 100644
 +            onRouteAlternativeSelected?.(event.nativeEvent)
 +          }
 +          onRouteChanged={(event) => onRouteChanged?.(event.nativeEvent)}
++          onMuteChange={(event) => onMuteChange?.(event.nativeEvent)}
            {...rest}
          />
        </View>
+diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/src/MapboxNavigationViewNativeComponent.ts b/node_modules/@pawan-pk/react-native-mapbox-navigation/src/MapboxNavigationViewNativeComponent.ts
+index 14196df..5617171 100644
+--- a/node_modules/@pawan-pk/react-native-mapbox-navigation/src/MapboxNavigationViewNativeComponent.ts
++++ b/node_modules/@pawan-pk/react-native-mapbox-navigation/src/MapboxNavigationViewNativeComponent.ts
+@@ -7,6 +7,7 @@ import codegenNativeComponent from 'react-native/Libraries/Utilities/codegenNati
+ type NativeCoordinate = number[];
+ interface NativeProps extends ViewProps {
+   mute?: boolean;
++  volume?: number;
+   separateLegs?: boolean;
+   distanceUnit?: string;
+   startOrigin: NativeCoordinate;
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/src/types.ts b/node_modules/@pawan-pk/react-native-mapbox-navigation/src/types.ts
-index fb4a88f..1078997 100644
+index fb4a88f..c9ceb7c 100644
 --- a/node_modules/@pawan-pk/react-native-mapbox-navigation/src/types.ts
 +++ b/node_modules/@pawan-pk/react-native-mapbox-navigation/src/types.ts
-@@ -57,6 +57,10 @@ export type NativeEventsProps = {
+@@ -57,6 +57,11 @@ export type NativeEventsProps = {
    onError?: (event: NativeEvent<MapboxEvent>) => void;
    onCancelNavigation?: (event: NativeEvent<MapboxEvent>) => void;
    onArrive?: (event: NativeEvent<WaypointEvent>) => void;
@@ -3818,10 +3868,11 @@ index fb4a88f..1078997 100644
 +  onRadarTap?: (event: NativeEvent<{ id: string; latitude: number; longitude: number; speedLimit?: number; type?: string }>) => void;
 +  onRouteAlternativeSelected?: (event: NativeEvent<{ routeIndex: number; source: string }>) => void;
 +  onRouteChanged?: (event: NativeEvent<{ geometry: string }>) => void;
++  onMuteChange?: (event: NativeEvent<{ muted: boolean; soundEnabled: boolean }>) => void;
  };
  
  export interface MapboxNavigationProps {
-@@ -94,4 +98,8 @@ export interface MapboxNavigationProps {
+@@ -94,4 +99,9 @@ export interface MapboxNavigationProps {
    onError?: (error: MapboxEvent) => void;
    onCancelNavigation?: (event: MapboxEvent) => void;
    onArrive?: (point: WaypointEvent) => void;
@@ -3829,4 +3880,5 @@ index fb4a88f..1078997 100644
 +  onRadarTap?: (event: { id: string; latitude: number; longitude: number; speedLimit?: number; type?: string }) => void;
 +  onRouteAlternativeSelected?: (event: { routeIndex: number; source: string }) => void;
 +  onRouteChanged?: (event: { geometry: string }) => void;
++  onMuteChange?: (event: { muted: boolean; soundEnabled: boolean }) => void;
  }

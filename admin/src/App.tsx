@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import Map from "./Map";
+import MapView from "./Map";
 import {
   Radar,
   deleteRadar,
@@ -696,7 +696,7 @@ export default function App() {
                 Defina VITE_MAPBOX_TOKEN no .env para ver o mapa.
               </div>
             )}
-          <Map
+          <MapView
             radars={radars}
             selectedId={selected?.id ?? null}
             onSelectRadar={handleSelectRadar}

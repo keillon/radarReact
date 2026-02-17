@@ -47,6 +47,7 @@ import { getClosestPlacaName, radarImages, type MapHandle } from "../components/
 import SearchContainer from "../components/SearchContainer";
 import { useSettings } from "../context/SettingsContext";
 import { VignetteOverlay } from "../components/VignetteOverlay";
+import { useRadarAudio } from "../hooks/useRadarAudio";
 import { useRadarProximity } from "../hooks/useRadarProximity";
 import {
   API_BASE_URL,
@@ -65,6 +66,7 @@ import {
   RouteResponse,
 } from "../services/mapbox";
 import { areMapboxRadarArraysEqual } from "../utils/radarDiff";
+import { colors } from "../utils/theme";
 import {
   calculateDistance,
   getCumulativeDistances,
@@ -83,50 +85,7 @@ function getTts(): any {
   return TtsCache;
 }
 
-// Alerta sonoro: tocar alertRadar.mp3 3 vezes (ao chegar em 30m)
-function playAlertRadar3Times(): void {
-  try {
-    const Sound = require("react-native-sound").default;
-    Sound.setCategory("Playback", true);
-    const s = new Sound(
-      require("../assets/audios/alertRadar.mp3"),
-      (error: any) => {
-        if (error) {
-          console.warn("Falha ao carregar alertRadar.mp3:", error);
-          const Tts = getTts();
-          if (Tts && typeof Tts.speak === "function") {
-            try {
-              Tts.speak("Atenção radar muito próximo");
-            } catch {}
-          }
-          return;
-        }
-        const playOnce = (count: number) => {
-          if (count <= 0) {
-            s.release();
-            return;
-          }
-          s.setCurrentTime(0);
-          s.play((success: boolean) => {
-            if (count > 1 && success) {
-              setTimeout(() => playOnce(count - 1), 300);
-            } else {
-              if (!success) {
-                console.warn("Falha ao reproduzir alertRadar.mp3");
-              }
-              s.release();
-            }
-          });
-        };
-        playOnce(3);
-      },
-    );
-  } catch (e) {
-    // react-native-sound pode não estar linkado
-  }
-}
-
-const DEVICE_USER_ID_KEY = "radarbot_device_user_id";
+const DEVICE_USER_ID_KEY = "radarzone_device_user_id";
 
 // Array vazio estável para evitar "Maximum update depth" quando !isNavigating.
 const EMPTY_MAPBOX_RADARS: Array<{
@@ -175,8 +134,6 @@ const buildRouteSignature = (coordinates: number[][]): string => {
   return `${len}|${first[0]},${first[1]}|${mid[0]},${mid[1]}|${last[0]},${last[1]}`;
 };
 
-interface HomeProps {}
-
 const normalizeRadarType = (value?: string): string => {
   if (!value) return "unknown";
   return String(value)
@@ -222,11 +179,12 @@ const normalizeRadarPayload = (raw: any): Radar | null => {
   };
 };
 
-export default function Home(_props?: HomeProps) {
+export default function Home() {
+  const { soundEnabled, volume, updateSettings } = useSettings();
   type RadarArrayUpdater = Radar[] | ((prev: Radar[]) => Radar[]);
   type RadarIdArrayUpdater = string[] | ((prev: string[]) => string[]);
 
-  const { soundEnabled, mapVoiceEnabled } = useSettings();
+  const { playRadarAlert, speakRadarAlert } = useRadarAudio();
   const [origin, setOrigin] = useState<LatLng | null>(null);
   const [destination, setDestination] = useState<LatLng | null>(null);
   const [destinationText, setDestinationText] = useState<string>("");
@@ -1677,14 +1635,14 @@ export default function Home(_props?: HomeProps) {
       setNearbyRadarIds(proximityNearbyRadarIds);
     }
 
-    if (soundEnabled && deveTocarAlerta) {
-      playAlertRadar3Times();
+    if (deveTocarAlerta) {
+      playRadarAlert();
     }
 
     if (acabouDePassar) {
       if (!radarCriticalSoundPlayedIds.current.has(activeRadar.id)) {
         radarCriticalSoundPlayedIds.current.add(activeRadar.id);
-        if (soundEnabled) playAlertRadar3Times();
+        playRadarAlert();
       }
 
       if (radarZeroTimeRef2.current === null) {
@@ -1744,16 +1702,7 @@ export default function Home(_props?: HomeProps) {
         message += `. Limite ${activeRadar.speedLimit} quilômetros por hora`;
       }
 
-      if (mapVoiceEnabled) {
-        const Tts = getTts();
-        if (Tts && typeof Tts.speak === "function") {
-          try {
-            Tts.speak(message);
-          } catch {
-            // ignore
-          }
-        }
-      }
+      speakRadarAlert(message);
     }
 
     Animated.parallel([
@@ -1777,13 +1726,13 @@ export default function Home(_props?: HomeProps) {
     distanciaAtual,
     hideRadarModal,
     isNavigating,
-    mapVoiceEnabled,
     modalOpacity,
     modalScale,
     openRadarFeedbackCard,
+    playRadarAlert,
     proximityNearbyRadarIds,
     radarAtivo,
-    soundEnabled,
+    speakRadarAlert,
   ]);
 
   // Fechar modal de alerta/feedback assim que o radar em destaque for excluído (WebSocket)
@@ -2029,6 +1978,8 @@ export default function Home(_props?: HomeProps) {
         }}
         distanceUnit="metric"
         language="pt-BR"
+        mute={!soundEnabled}
+        volume={Math.max(0, Math.min(1, volume))}
         // @ts-ignore — base via GeoJSON URL (GET /radars/geojson), otimizado
         radarsGeoJsonUrl={
           isNavigating && API_BASE_URL
@@ -2050,6 +2001,10 @@ export default function Home(_props?: HomeProps) {
         onError={handleError}
         onRouteAlternativeSelected={handleRouteAlternativeSelected}
         onRouteChanged={handleRouteChanged}
+        onMuteChange={(e: { muted: boolean; soundEnabled: boolean }) => {
+          const enabled = e?.soundEnabled ?? !e?.muted;
+          updateSettings({ soundEnabled: enabled });
+        }}
         onRadarTap={(
           e: { nativeEvent?: { id: string; latitude: number; longitude: number; speedLimit?: number; type?: string } }
         ) => {
@@ -2072,6 +2027,9 @@ export default function Home(_props?: HomeProps) {
     origin,
     destination,
     destinationText,
+    soundEnabled,
+    volume,
+    updateSettings,
     mapboxBaseForNative,
     mapboxOverlayForNative,
     nearbyRadarIdsArray,
@@ -2120,7 +2078,7 @@ export default function Home(_props?: HomeProps) {
               },
             ]}
           >
-            <ActivityIndicator size="large" color="#3b82f6" />
+            <ActivityIndicator size="large" color={colors.primary} />
             <Text style={styles.loadingText}>Preparando navegação...</Text>
             <Text style={styles.loadingSubtext}>Aguarde um momento</Text>
           </Animated.View>
@@ -2146,7 +2104,7 @@ export default function Home(_props?: HomeProps) {
                 activeOpacity={0.7}
               >
                 {isReportingRadar ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                  <ActivityIndicator size="small" color={colors.text} />
                 ) : (
                   <Image
                     source={require("../assets/images/reportIcon.png")}
@@ -2158,7 +2116,7 @@ export default function Home(_props?: HomeProps) {
             </>
           ) : (
             <View style={styles.loadingOverlay}>
-              <ActivityIndicator size="large" color="#3b82f6" />
+              <ActivityIndicator size="large" color={colors.primary} />
               <Text style={styles.loadingText}>Carregando navegação...</Text>
             </View>
           )}
@@ -2173,7 +2131,7 @@ export default function Home(_props?: HomeProps) {
                   { justifyContent: "center", alignItems: "center" },
                 ]}
               >
-                <ActivityIndicator size="large" color="#3b82f6" />
+                <ActivityIndicator size="large" color={colors.primary} />
               </View>
             }
           >
@@ -2197,7 +2155,7 @@ export default function Home(_props?: HomeProps) {
             activeOpacity={0.7}
           >
             {isReportingRadar ? (
-              <ActivityIndicator size="small" color="#fff" />
+              <ActivityIndicator size="small" color={colors.text} />
             ) : (
               <Image
                 source={require("../assets/images/reportIcon.png")}
@@ -2243,7 +2201,7 @@ export default function Home(_props?: HomeProps) {
             right: 16,
             zIndex: 1000,
             elevation: 1000,
-            backgroundColor: '#fff',
+            backgroundColor: colors.backgroundLight,
             borderRadius: 12,
           
           }}
@@ -2299,7 +2257,7 @@ export default function Home(_props?: HomeProps) {
                 </Text>
               </View>
               <TouchableOpacity
-                style={{ padding: 12, backgroundColor: "#e5e7eb", borderRadius: 8 }}
+                style={{ padding: 12, backgroundColor: colors.borderLight, borderRadius: 8 }}
                 onPress={() => {
                   setSelectedRadarDetail(null);
                   setVignetteCenter(null);
@@ -2307,19 +2265,19 @@ export default function Home(_props?: HomeProps) {
                 }}
                 activeOpacity={0.8}
               >
-                <Text style={{ fontWeight: "600", color: "#374151" }}>Fechar</Text>
+                <Text style={{ fontWeight: "600", color: colors.textDarkSecondary }}>Fechar</Text>
               </TouchableOpacity>
             </View>
-            <View style={{ borderTopWidth: 1, borderTopColor: "#e5e7eb", paddingTop: 12, gap: 6 , }}>
+            <View style={{ borderTopWidth: 1, borderTopColor: colors.borderLight, paddingTop: 12, gap: 6 , }}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                <Ionicons name="location" size={16} color="#6b7280" />
-                <Text style={{ fontSize: 14, color: "#374151", flex: 1 }} numberOfLines={2}>
+                <Ionicons name="location" size={16} color={colors.textSecondary} />
+                <Text style={{ fontSize: 14, color: colors.textDarkSecondary, flex: 1 }} numberOfLines={2}>
                   {radarDetailAddress ?? "Carregando endereço..."}
                 </Text>
               </View>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                <Ionicons name="people" size={16} color="#6b7280" />
-                <Text style={{ fontSize: 14, color: "#374151" }}>
+                <Ionicons name="people" size={16} color={colors.textSecondary} />
+                <Text style={{ fontSize: 14, color: colors.textDarkSecondary }}>
                   {selectedRadarDetail.source === "user" || selectedRadarDetail.source === "reportado"
                     ? "Reportado pela comunidade"
                     : "Dados locais"}
@@ -2327,8 +2285,8 @@ export default function Home(_props?: HomeProps) {
               </View>
               {(selectedRadarDetail.createdAt ?? selectedRadarDetail.reportedAt) && (
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                  <Ionicons name="time" size={16} color="#6b7280" />
-                  <Text style={{ fontSize: 14, color: "#374151" }}>
+                  <Ionicons name="time" size={16} color={colors.textSecondary} />
+                  <Text style={{ fontSize: 14, color: colors.textDarkSecondary }}>
                     {formatTimeAgo(
                       selectedRadarDetail.createdAt ?? selectedRadarDetail.reportedAt ?? 0
                     )}
@@ -2381,7 +2339,7 @@ export default function Home(_props?: HomeProps) {
                 <View style={styles.radarAlertTextContainer}>
                   <ActivityIndicator
                     size="large"
-                    color="#0ea5e9"
+                    color={colors.primaryLight}
                     style={{ marginVertical: 8 }}
                   />
                   <Text style={styles.radarAlertTitle}>Passou do radar</Text>
@@ -2547,7 +2505,7 @@ export default function Home(_props?: HomeProps) {
                   style={{
                     flex: 1,
                     height: 4,
-                    backgroundColor: reportStep >= step ? "#3b82f6" : "#e5e7eb",
+                    backgroundColor: reportStep >= step ? colors.primary : colors.borderLight,
                     borderRadius: 2,
                   }}
                 />
@@ -2623,11 +2581,11 @@ export default function Home(_props?: HomeProps) {
                       width: "30%",
                       padding: 16,
                       backgroundColor:
-                        reportSelectedSpeed === speed ? "#3b82f6" : "#f3f4f6",
+                        reportSelectedSpeed === speed ? colors.primary : colors.backgroundLightSecondary,
                       borderRadius: 12,
                       borderWidth: 2,
                       borderColor:
-                        reportSelectedSpeed === speed ? "#3b82f6" : "#e5e7eb",
+                        reportSelectedSpeed === speed ? colors.primary : colors.borderLight,
                       alignItems: "center",
                       justifyContent: "center",
                     }}
@@ -2639,7 +2597,7 @@ export default function Home(_props?: HomeProps) {
                         fontSize: 24,
                         fontWeight: "700",
                         color:
-                          reportSelectedSpeed === speed ? "#fff" : "#1f2937",
+                          reportSelectedSpeed === speed ? colors.text : colors.textDark,
                       }}
                     >
                       {speed}
@@ -2657,11 +2615,11 @@ export default function Home(_props?: HomeProps) {
                   style={{
                     padding: 16,
                     backgroundColor:
-                      reportLocationMode === "current" ? "#3b82f6" : "#f3f4f6",
+                      reportLocationMode === "current" ? colors.primary : colors.backgroundLightSecondary,
                     borderRadius: 12,
                     borderWidth: 2,
                     borderColor:
-                      reportLocationMode === "current" ? "#3b82f6" : "#e5e7eb",
+                      reportLocationMode === "current" ? colors.primary : colors.borderLight,
                   }}
                   onPress={() => {
                     setReportLocationMode("current");
@@ -2683,7 +2641,7 @@ export default function Home(_props?: HomeProps) {
                       name="location"
                       size={20}
                       color={
-                        reportLocationMode === "current" ? "#fff" : "#3b82f6"
+                        reportLocationMode === "current" ? colors.text : colors.primary
                       }
                     />
                     <Text
@@ -2691,7 +2649,7 @@ export default function Home(_props?: HomeProps) {
                         fontSize: 16,
                         fontWeight: "600",
                         color:
-                          reportLocationMode === "current" ? "#fff" : "#1f2937",
+                          reportLocationMode === "current" ? colors.text : colors.textDark,
                       }}
                     >
                       Usar Localização Atual
@@ -2704,11 +2662,11 @@ export default function Home(_props?: HomeProps) {
                   style={{
                     padding: 16,
                     backgroundColor:
-                      reportLocationMode === "map" ? "#3b82f6" : "#f3f4f6",
+                      reportLocationMode === "map" ? colors.primary : colors.backgroundLightSecondary,
                     borderRadius: 12,
                     borderWidth: 2,
                     borderColor:
-                      reportLocationMode === "map" ? "#3b82f6" : "#e5e7eb",
+                      reportLocationMode === "map" ? colors.primary : colors.borderLight,
                   }}
                   onPress={() => {
                     setReportLocationMode("map");
@@ -2735,14 +2693,14 @@ export default function Home(_props?: HomeProps) {
                     <Ionicons
                       name="map"
                       size={20}
-                      color={reportLocationMode === "map" ? "#fff" : "#3b82f6"}
+                      color={reportLocationMode === "map" ? colors.text : colors.primary}
                     />
                     <Text
                       style={{
                         fontSize: 16,
                         fontWeight: "600",
                         color:
-                          reportLocationMode === "map" ? "#fff" : "#1f2937",
+                          reportLocationMode === "map" ? colors.text : colors.textDark,
                       }}
                     >
                       Marcar no Mapa
@@ -2818,7 +2776,7 @@ export default function Home(_props?: HomeProps) {
                       alignItems: "center",
                     }}
                   >
-                    <ActivityIndicator size="large" color="#3b82f6" />
+                    <ActivityIndicator size="large" color={colors.primary} />
                   </View>
                 }
               >
@@ -2845,7 +2803,7 @@ export default function Home(_props?: HomeProps) {
                 }}
               >
                 <View style={{ marginTop: -48 }}>
-                  <Ionicons name="location" size={48} color="#ef4444" />
+                  <Ionicons name="location" size={48} color={colors.error} />
                 </View>
               </View>
 
@@ -2862,11 +2820,11 @@ export default function Home(_props?: HomeProps) {
                     padding: 10,
                     borderRadius: 10,
                     borderWidth: 1,
-                    borderColor: "#e5e7eb",
+                    borderColor: colors.borderLight,
                   }}
                 >
                   <Text
-                    style={{ fontSize: 11, color: "#6b7280", marginBottom: 4 }}
+                    style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 4 }}
                   >
                     Posição do pin (será reportada)
                   </Text>
@@ -2874,7 +2832,7 @@ export default function Home(_props?: HomeProps) {
                     style={{
                       fontSize: 13,
                       fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
-                      color: "#111827",
+                      color: colors.textDark,
                     }}
                     numberOfLines={1}
                   >
@@ -2891,7 +2849,7 @@ export default function Home(_props?: HomeProps) {
                   bottom: 0,
                   left: 0,
                   right: 0,
-                  backgroundColor: "#fff",
+                  backgroundColor: colors.backgroundLight,
                   padding: 20,
                   borderTopLeftRadius: 20,
                   borderTopRightRadius: 20,
@@ -2905,7 +2863,7 @@ export default function Home(_props?: HomeProps) {
                 <Text
                   style={{
                     fontSize: 14,
-                    color: "#6b7280",
+                    color: colors.textSecondary,
                     marginBottom: 12,
                     textAlign: "center",
                   }}
@@ -2918,7 +2876,7 @@ export default function Home(_props?: HomeProps) {
                     style={{
                       flex: 1,
                       padding: 16,
-                      backgroundColor: "#f3f4f6",
+                      backgroundColor: colors.backgroundLightSecondary,
                       borderRadius: 12,
                       alignItems: "center",
                     }}
@@ -2931,7 +2889,7 @@ export default function Home(_props?: HomeProps) {
                       style={{
                         fontSize: 16,
                         fontWeight: "600",
-                        color: "#374151",
+                        color: colors.textDarkSecondary,
                       }}
                     >
                       Cancelar
@@ -2941,7 +2899,7 @@ export default function Home(_props?: HomeProps) {
                     style={{
                       flex: 1,
                       padding: 16,
-                      backgroundColor: "#3b82f6",
+                      backgroundColor: colors.primary,
                       borderRadius: 12,
                       alignItems: "center",
                     }}
@@ -2969,7 +2927,7 @@ export default function Home(_props?: HomeProps) {
                     }}
                   >
                     <Text
-                      style={{ fontSize: 16, fontWeight: "600", color: "#fff" }}
+                      style={{ fontSize: 16, fontWeight: "600", color: colors.text }}
                     >
                       Confirmar Localização
                     </Text>
@@ -3001,7 +2959,7 @@ export default function Home(_props?: HomeProps) {
               <Ionicons
                 name="location-outline"
                 size={64}
-                color="#ef4444"
+                color={colors.error}
                 style={{ marginBottom: 12 }}
               />
               <Text
@@ -3063,7 +3021,7 @@ export default function Home(_props?: HomeProps) {
               <Ionicons
                 name="checkmark-circle-outline"
                 size={64}
-                color="#10b981"
+                color={colors.success}
                 style={{ marginBottom: 12 }}
               />
               <Text
@@ -3158,31 +3116,31 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   stopButton: {
-    backgroundColor: "#dc2626",
+    backgroundColor: colors.errorDark,
     padding: 12,
     borderRadius: 8,
     alignItems: "center",
     marginTop: 8,
   },
   stopButtonText: {
-    color: "#fff",
+    color: colors.text,
     fontSize: 14,
     fontWeight: "600",
   },
   navigationBanner: {
-    backgroundColor: "#1f2937",
+    backgroundColor: colors.backgroundCard,
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#374151",
+    borderBottomColor: colors.borderSecondary,
   },
   navigationInstruction: {
-    color: "#fff",
+    color: colors.text,
     fontSize: 16,
     fontWeight: "600",
     marginBottom: 4,
   },
   navigationDistance: {
-    color: "#9ca3af",
+    color: colors.textTertiary,
     fontSize: 14,
   },
   mapContainer: {
@@ -3202,7 +3160,7 @@ const styles = StyleSheet.create({
     elevation: 9999,
   },
   loadingContainer: {
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.backgroundLight,
     borderRadius: 20,
     padding: 40,
     alignItems: "center",
@@ -3217,13 +3175,13 @@ const styles = StyleSheet.create({
     marginTop: 20,
     fontSize: 18,
     fontWeight: "600",
-    color: "#1f2937",
+    color: colors.textDark,
     textAlign: "center",
   },
   loadingSubtext: {
     marginTop: 8,
     fontSize: 14,
-    color: "#6b7280",
+    color: colors.textSecondary,
     textAlign: "center",
   },
   radarsOverlay: {
@@ -3236,7 +3194,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom: Platform.OS === "ios" ? 100 : 250,
     right: 20,
-    backgroundColor: "#fff",
+    backgroundColor: colors.backgroundLight,
     width: 60,
     height: 60,
     borderRadius: 30,
@@ -3273,12 +3231,12 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   radarFeedbackTitle: {
-    color: "#fff",
+    color: colors.text,
     fontSize: 16,
     fontWeight: "700",
   },
   radarFeedbackSubtitle: {
-    color: "#d1d5db",
+    color: colors.borderLight,
     fontSize: 12,
     marginTop: 4,
     marginBottom: 10,
@@ -3296,13 +3254,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   radarFeedbackConfirm: {
-    backgroundColor: "#16a34a",
+    backgroundColor: colors.successDark,
   },
   radarFeedbackDeny: {
-    backgroundColor: "#dc2626",
+    backgroundColor: colors.errorDark,
   },
   radarFeedbackButtonText: {
-    color: "#fff",
+    color: colors.text,
     fontSize: 13,
     fontWeight: "700",
   },
@@ -3315,7 +3273,7 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   reportModalContent: {
-    backgroundColor: "#fff",
+    backgroundColor: colors.backgroundLight,
     borderRadius: 16,
     padding: 20,
     width: "100%",
@@ -3324,23 +3282,23 @@ const styles = StyleSheet.create({
   reportModalTitle: {
     fontSize: 18,
     fontWeight: "600",
-    color: "#1f2937",
+    color: colors.textDark,
     marginBottom: 4,
   },
   reportModalSubtitle: {
     fontSize: 13,
-    color: "#6b7280",
+    color: colors.textSecondary,
     marginBottom: 16,
   },
   reportModalLabel: {
     fontSize: 13,
     fontWeight: "500",
-    color: "#374151",
+    color: colors.textDarkSecondary,
     marginBottom: 6,
   },
   reportModalInput: {
     borderWidth: 1,
-    borderColor: "#d1d5db",
+    borderColor: colors.borderLight,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -3364,13 +3322,13 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 14,
     borderRadius: 12,
-    backgroundColor: "#f3f4f6",
+    backgroundColor: colors.backgroundLightSecondary,
     borderWidth: 2,
     borderColor: "transparent",
   },
   reportModalTypeCardActive: {
-    backgroundColor: "#eff6ff",
-    borderColor: "#3b82f6",
+    backgroundColor: "rgba(255,193,7,0.1)",
+    borderColor: colors.primary,
   },
   reportModalTypeIcon: {
     width: 36,
@@ -3381,16 +3339,16 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     fontWeight: "600",
-    color: "#374151",
+    color: colors.textDarkSecondary,
   },
   reportModalTypeCardText2: {
     flex: 1,
     fontSize: 14,
     fontWeight: "600",
-    color: "#374151",
+    color: colors.textDarkSecondary,
   },
   reportModalTypeCardTextActive: {
-    color: "#1d4ed8",
+    color: colors.primaryDark,
   },
   reportModalButtons: {
     flexDirection: "row",
@@ -3400,22 +3358,22 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 12,
     borderRadius: 8,
-    backgroundColor: "#e5e7eb",
+    backgroundColor: colors.borderLight,
     alignItems: "center",
   },
   reportModalCancelText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#374151",
+    color: colors.textDarkSecondary,
   },
   reportModalSubmit: {
     flex: 1,
     paddingVertical: 14,
     borderRadius: 12,
-    backgroundColor: "#3b82f6",
+    backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#3b82f6",
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 6,
@@ -3424,6 +3382,6 @@ const styles = StyleSheet.create({
   reportModalSubmitText: {
     fontSize: 18,
     fontWeight: "bold",
-    color: "#fff",
+    color: colors.text,
   },
 });
