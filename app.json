@@ -1,6 +1,12 @@
 {
   "name": "RadarZone",
   "displayName": "RadarZone",
+  "ios": {
+    "bundleIdentifier": "com.radarzone"
+  },
+  "android": {
+    "package": "com.radarzone"
+  },
   "extra": {
     "eas": {
       "projectId": "cdfbac68-7315-4f6a-867c-aee906f5f380"
