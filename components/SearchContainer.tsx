@@ -1,7 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
+  Dimensions,
   FlatList,
+  Keyboard,
+  KeyboardAvoidingView,
+  PanResponder,
   Platform,
   StyleSheet,
   Text,
@@ -9,7 +14,13 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import Ionicons from "react-native-vector-icons/Ionicons";
 import { LatLng, MAPBOX_TOKEN } from "../services/mapbox";
+
+const { height: SCREEN_HEIGHT } = Dimensions.get("window");
+const COLLAPSED_HEIGHT = 100;
+const EXPANDED_HEIGHT = Math.min(SCREEN_HEIGHT * 0.52, 380);
+const DRAG_THRESHOLD = 12;
 
 interface SearchContainerProps {
   origin: LatLng | null;
@@ -35,34 +46,114 @@ export default function SearchContainer({
   onSearchRoute,
   loading,
   geocoding,
-  radarsCount,
 }: SearchContainerProps) {
   const [suggestions, setSuggestions] = useState<GeocodeResult[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Buscar sugestões de endereço quando o texto muda
-  useEffect(() => {
-    if (debounceTimer.current) {
-      clearTimeout(debounceTimer.current);
-    }
+  const sheetHeight = useRef(new Animated.Value(COLLAPSED_HEIGHT)).current;
+  const heightRef = useRef(COLLAPSED_HEIGHT);
 
+  useEffect(() => {
+    const id = sheetHeight.addListener(({ value }) => {
+      heightRef.current = value;
+    });
+    return () => sheetHeight.removeListener(id);
+  }, [sheetHeight]);
+
+  useEffect(() => {
+    const sub1 = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      (e) => {
+        const kbHeight = e?.endCoordinates?.height ?? 280;
+        const targetHeight = Math.min(SCREEN_HEIGHT - kbHeight - 20, EXPANDED_HEIGHT);
+        Animated.timing(sheetHeight, {
+          toValue: Math.max(targetHeight, COLLAPSED_HEIGHT),
+          duration: 250,
+          useNativeDriver: false,
+        }).start();
+      }
+    );
+    const sub2 = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      () => snapToNearest()
+    );
+    return () => {
+      sub1.remove();
+      sub2.remove();
+    };
+  }, [sheetHeight]);
+
+  const snapToNearest = () => {
+    const val = heightRef.current;
+    const mid = (COLLAPSED_HEIGHT + EXPANDED_HEIGHT) / 2;
+    if (val > mid) {
+      Animated.spring(sheetHeight, {
+        toValue: EXPANDED_HEIGHT,
+        useNativeDriver: false,
+        tension: 65,
+        friction: 11,
+      }).start();
+    } else {
+      Animated.spring(sheetHeight, {
+        toValue: COLLAPSED_HEIGHT,
+        useNativeDriver: false,
+        tension: 65,
+        friction: 11,
+      }).start();
+    }
+  };
+
+  const gestureStartHeight = useRef(COLLAPSED_HEIGHT);
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > DRAG_THRESHOLD,
+      onPanResponderGrant: () => {
+        gestureStartHeight.current = heightRef.current;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        const newH = gestureStartHeight.current - gestureState.dy;
+        const clamped = Math.max(COLLAPSED_HEIGHT, Math.min(EXPANDED_HEIGHT, newH));
+        sheetHeight.setValue(clamped);
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (Math.abs(gestureState.vy) > 0.25) {
+          if (gestureState.vy < 0) {
+            Animated.spring(sheetHeight, {
+              toValue: EXPANDED_HEIGHT,
+              useNativeDriver: false,
+              tension: 65,
+              friction: 11,
+            }).start();
+          } else {
+            Animated.spring(sheetHeight, {
+              toValue: COLLAPSED_HEIGHT,
+              useNativeDriver: false,
+              tension: 65,
+              friction: 11,
+            }).start();
+          }
+        } else {
+          snapToNearest();
+        }
+      },
+    })
+  ).current;
+
+  useEffect(() => {
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
     if (!destinationText.trim() || destinationText.length < 3) {
       setSuggestions([]);
       setShowSuggestions(false);
       return;
     }
-
     debounceTimer.current = setTimeout(async () => {
       try {
         const encodedQuery = encodeURIComponent(destinationText.trim());
         const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodedQuery}.json?access_token=${MAPBOX_TOKEN}&limit=5&country=BR&language=pt`;
-
         const response = await fetch(url);
-        if (!response.ok) {
-          throw new Error("Erro ao buscar sugestões");
-        }
-
+        if (!response.ok) throw new Error("Erro ao buscar sugestões");
         const json = await response.json();
         const results: GeocodeResult[] = (json.features || []).map(
           (feature: any) => ({
@@ -72,22 +163,17 @@ export default function SearchContainer({
               latitude: feature.geometry.coordinates[1],
               longitude: feature.geometry.coordinates[0],
             },
-          }),
+          })
         );
-
         setSuggestions(results);
         setShowSuggestions(results.length > 0);
-      } catch (error) {
-        console.error("Erro ao buscar sugestões:", error);
+      } catch {
         setSuggestions([]);
         setShowSuggestions(false);
       }
-    }, 300); // Debounce de 300ms
-
+    }, 300);
     return () => {
-      if (debounceTimer.current) {
-        clearTimeout(debounceTimer.current);
-      }
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
     };
   }, [destinationText]);
 
@@ -95,172 +181,204 @@ export default function SearchContainer({
     onDestinationSelect(suggestion.placeName, suggestion.coordinates);
     setShowSuggestions(false);
     setSuggestions([]);
+    Keyboard.dismiss();
+  };
+
+  const expandSheet = () => {
+    Animated.spring(sheetHeight, {
+      toValue: EXPANDED_HEIGHT,
+      useNativeDriver: false,
+      tension: 65,
+      friction: 11,
+    }).start();
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.searchContainer}>
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>Destino</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Vai para onde?"
-            placeholderTextColor="#9ca3af"
-            value={destinationText}
-            onChangeText={onDestinationChange}
-            editable={!loading && !geocoding}
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-          {(loading || geocoding) && (
-            <View style={styles.loadingIndicator}>
-              <ActivityIndicator size="small" color="#3b82f6" />
+    <KeyboardAvoidingView
+      style={styles.wrapper}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={0}
+      pointerEvents="box-none"
+    >
+      <Animated.View
+        style={[
+          styles.container,
+          {
+            height: sheetHeight,
+          },
+        ]}
+      >
+        {/* Drag handle */}
+        <View {...panResponder.panHandlers} style={styles.dragHandle}>
+          <View style={styles.dragBar} />
+        </View>
+
+        <View style={styles.content}>
+          <View style={styles.inputRow}>
+            <View style={styles.inputWrap}>
+              <Ionicons
+                name="search"
+                size={20}
+                color="#6b7280"
+                style={styles.inputIcon}
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="Vai para onde?"
+                placeholderTextColor="#9ca3af"
+                value={destinationText}
+                onChangeText={onDestinationChange}
+                onFocus={expandSheet}
+                editable={!loading && !geocoding}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              {(loading || geocoding) && (
+                <View style={styles.loadingIndicator}>
+                  <ActivityIndicator size="small" color="#3b82f6" />
+                </View>
+              )}
+            </View>
+
+            <TouchableOpacity
+              style={[
+                styles.searchButton,
+                (loading || geocoding) && styles.searchButtonDisabled,
+              ]}
+              onPress={onSearchRoute}
+              disabled={loading || geocoding || !destinationText.trim()}
+            >
+              {(loading || geocoding) ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Ionicons name="navigate" size={22} color="#fff" />
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {showSuggestions && suggestions.length > 0 && (
+            <View style={styles.suggestionsContainer}>
+              <FlatList
+                data={suggestions}
+                keyExtractor={(item) => item.id}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.suggestionItem}
+                    onPress={() => handleSelectSuggestion(item)}
+                  >
+                    <Ionicons
+                      name="location-outline"
+                      size={18}
+                      color="#6b7280"
+                    />
+                    <Text style={styles.suggestionText} numberOfLines={1}>
+                      {item.placeName}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                style={styles.suggestionsList}
+                keyboardShouldPersistTaps="handled"
+              />
             </View>
           )}
         </View>
-
-        <TouchableOpacity
-          style={[
-            styles.searchButton,
-            (loading || geocoding) && styles.searchButtonDisabled,
-          ]}
-          onPress={onSearchRoute}
-          disabled={loading || geocoding || !destinationText.trim()}
-        >
-          {loading || geocoding ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <Text style={styles.searchButtonText}>Buscar Rota</Text>
-          )}
-        </TouchableOpacity>
-      </View>
-
-      {/* Lista de sugestões */}
-      {showSuggestions && suggestions.length > 0 && (
-        <View style={styles.suggestionsContainer}>
-          <FlatList
-            data={suggestions}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={styles.suggestionItem}
-                onPress={() => handleSelectSuggestion(item)}
-              >
-                <Text style={styles.suggestionText}>{item.placeName}</Text>
-              </TouchableOpacity>
-            )}
-            style={styles.suggestionsList}
-            keyboardShouldPersistTaps="handled"
-          />
-        </View>
-      )}
-
-      {/* Contador de radares */}
-      {/* {radarsCount > 0 && (
-        <View style={styles.radarCountContainer}>
-          <Text style={styles.radarCountText}>
-            📍 {radarsCount} {radarsCount === 1 ? "radar" : "radares"} próximo
-            {radarsCount === 1 ? "" : "s"}
-          </Text>
-        </View>
-      )} */}
-    </View>
+      </Animated.View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  wrapper: {
     position: "absolute",
-    top: Platform.OS === "ios" ? 50 : 20,
     left: 0,
     right: 0,
+    bottom: 0,
     zIndex: 1000,
-    paddingHorizontal: 16,
   },
-  searchContainer: {
+  container: {
     backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 16,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    overflow: "hidden",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 16,
   },
-  inputContainer: {
-    marginBottom: 12,
+  dragHandle: {
+    alignItems: "center",
+    paddingVertical: 10,
   },
-  label: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#374151",
-    marginBottom: 8,
+  dragBar: {
+    width: 40,
+    height: 4,
+    backgroundColor: "#d1d5db",
+    borderRadius: 2,
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingBottom: Platform.OS === "ios" ? 34 : 20,
+  },
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  inputWrap: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f3f4f6",
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    minHeight: 48,
+  },
+  inputIcon: {
+    marginRight: 10,
   },
   input: {
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    flex: 1,
     fontSize: 16,
     color: "#111827",
-    backgroundColor: "#f9fafb",
+    paddingVertical: 12,
   },
   loadingIndicator: {
-    position: "absolute",
-    right: 12,
-    top: 40,
+    marginLeft: 8,
   },
   searchButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: "#3b82f6",
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: "center",
     justifyContent: "center",
-    minHeight: 44,
+    alignItems: "center",
   },
   searchButtonDisabled: {
     backgroundColor: "#9ca3af",
     opacity: 0.6,
   },
-  searchButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
   suggestionsContainer: {
+    flex: 1,
     marginTop: 8,
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-    maxHeight: 200,
+    minHeight: 0,
   },
   suggestionsList: {
-    maxHeight: 200,
+    flex: 1,
   },
   suggestionItem: {
-    padding: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 4,
+    gap: 12,
     borderBottomWidth: 1,
     borderBottomColor: "#f3f4f6",
   },
   suggestionText: {
-    fontSize: 14,
-    color: "#111827",
-  },
-  radarCountContainer: {
-    marginTop: 8,
-    backgroundColor: "rgba(59, 130, 246, 0.1)",
-    borderRadius: 8,
-    padding: 8,
-    alignItems: "center",
-  },
-  radarCountText: {
-    fontSize: 12,
-    color: "#3b82f6",
-    fontWeight: "500",
+    flex: 1,
+    fontSize: 15,
+    color: "#374151",
   },
 });

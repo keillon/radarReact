@@ -428,7 +428,7 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
   }, [radars?.length || 0]); */
 
   return (
-    <View style={styles.container} pointerEvents="box-none">
+    <View style={styles.container} pointerEvents="auto">
       {showMenu && (
         <>
           <TouchableOpacity
