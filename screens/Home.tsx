@@ -45,6 +45,7 @@ function getGeolocation(): GeolocationApi {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getClosestPlacaName, radarImages, type MapHandle } from "../components/Map";
 import SearchContainer from "../components/SearchContainer";
+import { useSettings } from "../context/SettingsContext";
 import { VignetteOverlay } from "../components/VignetteOverlay";
 import { useRadarProximity } from "../hooks/useRadarProximity";
 import {
@@ -227,6 +228,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
   type RadarArrayUpdater = Radar[] | ((prev: Radar[]) => Radar[]);
   type RadarIdArrayUpdater = string[] | ((prev: string[]) => string[]);
 
+  const { soundEnabled, mapVoiceEnabled } = useSettings();
   const [origin, setOrigin] = useState<LatLng | null>(null);
   const [destination, setDestination] = useState<LatLng | null>(null);
   const [destinationText, setDestinationText] = useState<string>("");
@@ -340,8 +342,9 @@ export default function Home({ onOpenEditor }: HomeProps) {
 
   // Combinar: concat é MUITO mais rápido que criar novo Map gigante
   // csvRadars raramente muda (16k array criado 1x), reportedRadars é pequeno
+  // Ambos aparecem: CSV (oficial) e reportados (comunidade) são lógicas distintas
   const radars = useMemo(() => {
-    // Dedup: se reported tem mesmo ID que CSV, reported ganha
+    // Dedup por ID: se reported tem mesmo ID que CSV, reported ganha
     const reportedIds = new Set(reportedRadars.map((r) => r.id));
     const filtered = csvRadars.filter((r) => !reportedIds.has(r.id));
     return [...filtered, ...reportedRadars];
@@ -939,6 +942,12 @@ export default function Home({ onOpenEditor }: HomeProps) {
         })
         ?.catch(() => {});
     }, 900);
+  }, []);
+
+  const handleMapPressForReport = useCallback((coords: { latitude: number; longitude: number }) => {
+    setReportCustomLocation(coords);
+    setReportLocationMode("map");
+    setShowReportModal(true);
   }, []);
 
   // Reportar radar na localização atual (modal: velocidade + tipo).
@@ -1670,14 +1679,14 @@ export default function Home({ onOpenEditor }: HomeProps) {
       setNearbyRadarIds(proximityNearbyRadarIds);
     }
 
-    if (deveTocarAlerta) {
+    if (soundEnabled && deveTocarAlerta) {
       playAlertRadar3Times();
     }
 
     if (acabouDePassar) {
       if (!radarCriticalSoundPlayedIds.current.has(activeRadar.id)) {
         radarCriticalSoundPlayedIds.current.add(activeRadar.id);
-        playAlertRadar3Times();
+        if (soundEnabled) playAlertRadar3Times();
       }
 
       if (radarZeroTimeRef2.current === null) {
@@ -1737,12 +1746,14 @@ export default function Home({ onOpenEditor }: HomeProps) {
         message += `. Limite ${activeRadar.speedLimit} quilômetros por hora`;
       }
 
-      const Tts = getTts();
-      if (Tts && typeof Tts.speak === "function") {
-        try {
-          Tts.speak(message);
-        } catch {
-          // ignore
+      if (mapVoiceEnabled) {
+        const Tts = getTts();
+        if (Tts && typeof Tts.speak === "function") {
+          try {
+            Tts.speak(message);
+          } catch {
+            // ignore
+          }
         }
       }
     }
@@ -1768,11 +1779,13 @@ export default function Home({ onOpenEditor }: HomeProps) {
     distanciaAtual,
     hideRadarModal,
     isNavigating,
+    mapVoiceEnabled,
     modalOpacity,
     modalScale,
     openRadarFeedbackCard,
     proximityNearbyRadarIds,
     radarAtivo,
+    soundEnabled,
   ]);
 
   // Fechar modal de alerta/feedback assim que o radar em destaque for excluído (WebSocket)
@@ -2183,11 +2196,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
               currentLocation={currentLocation}
               nearbyRadarIds={nearbyRadarIds}
               onRadarPress={handleRadarPress}
-              onMapPress={(coords: any) => {
-                setReportCustomLocation(coords);
-                setReportLocationMode("map");
-                setShowReportModal(true);
-              }}
+              onMapPress={handleMapPressForReport}
             />
           </Suspense>
 
@@ -2492,7 +2501,7 @@ export default function Home({ onOpenEditor }: HomeProps) {
                       styles.radarFeedbackButton,
                       styles.radarFeedbackConfirm,
                     ]}
-                    onPress={() => handleRadarFeedbackAction("confirm")}
+                    onPress={() => {handleRadarFeedbackAction("confirm")}}
                     disabled={radarFeedbackSubmitting}
                     activeOpacity={0.8}
                   >
@@ -3276,7 +3285,7 @@ const styles = StyleSheet.create({
   },
   radarFeedbackTitle: {
     color: "#fff",
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "700",
   },
   radarFeedbackSubtitle: {
@@ -3284,15 +3293,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 4,
     marginBottom: 10,
+    fontWeight: "900",
   },
   radarFeedbackActions: {
     flexDirection: "row",
     gap: 8,
   },
   radarFeedbackButton: {
+    marginTop: 15,
     flex: 1,
     borderRadius: 10,
-    paddingVertical: 10,
+    paddingVertical: 20,
     alignItems: "center",
   },
   radarFeedbackConfirm: {

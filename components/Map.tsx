@@ -18,7 +18,6 @@ import React, {
   useState,
 } from "react";
 import {
-  Animated,
   Image,
   Platform,
   StyleSheet,
@@ -132,7 +131,6 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
   const [hasInitialized, setHasInitialized] = useState(false);
   const cameraRef = useRef<any>(null);
   const mapViewRef = useRef<any>(null);
-  const pulseAnimation = useRef(new Animated.Value(1)).current;
 
   const emitCameraCenter = (rawCenter: any) => {
     if (!onCameraChanged || rawCenter == null) return;
@@ -159,29 +157,6 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
     if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) return;
     onCameraChanged({ latitude: lat, longitude: lng });
   };
-
-  // Animação de pulso para radares próximos
-  useEffect(() => {
-    if (nearbyRadarIds.size > 0) {
-      // Criar loop de animação de pulso
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnimation, {
-            toValue: 1.5,
-            duration: 1000,
-            useNativeDriver: false, // Não pode usar native driver para propriedades do Mapbox
-          }),
-          Animated.timing(pulseAnimation, {
-            toValue: 1,
-            duration: 1000,
-            useNativeDriver: false,
-          }),
-        ]),
-      ).start();
-    } else {
-      pulseAnimation.setValue(1);
-    }
-  }, [nearbyRadarIds.size]);
 
   // Atualizar userLocation quando currentLocation mudar
   useEffect(() => {
@@ -320,37 +295,50 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
     return "radarMovel";
   };
 
+  // Chave estável para nearbyRadarIds — evita recalc desnecessário quando Set tem mesmos IDs
+  const nearbyIdsKey = useMemo(
+    () =>
+      nearbyRadarIds?.size
+        ? Array.from(nearbyRadarIds).sort().join(",")
+        : "",
+    [nearbyRadarIds],
+  );
+
   // Criar GeoJSON para radares com ícone por tipo (radar, radarFixo, radarMovel, radarSemaforico)
   const radarsGeoJSON = useMemo(
-    () => ({
-      type: "FeatureCollection" as const,
-      features: (radars || [])
-        .filter(
-          (radar) =>
-            radar != null &&
-            radar.id != null &&
-            typeof radar.latitude === "number" &&
-            typeof radar.longitude === "number" &&
-            !isNaN(radar.latitude) &&
-            !isNaN(radar.longitude),
-        )
-        .map((radar) => ({
-          type: "Feature" as const,
-          id: radar.id,
-          geometry: {
-            type: "Point" as const,
-            coordinates: [radar.longitude, radar.latitude],
-          },
-          properties: {
+    () => {
+      const idsSet = nearbyRadarIds ?? new Set<string>();
+      const hasId = (id: string) => idsSet.has(id);
+      return {
+        type: "FeatureCollection" as const,
+        features: (radars || [])
+          .filter(
+            (radar) =>
+              radar != null &&
+              radar.id != null &&
+              typeof radar.latitude === "number" &&
+              typeof radar.longitude === "number" &&
+              !isNaN(radar.latitude) &&
+              !isNaN(radar.longitude),
+          )
+          .map((radar) => ({
+            type: "Feature" as const,
             id: radar.id,
-            type: radar.type || "default",
-            iconImage: getRadarIconForMap(radar),
-            iconSize: getIconSizeForIcon(getRadarIconForMap(radar)),
-            isNearby: nearbyRadarIds?.has(radar.id) ? 1 : 0,
-          },
-        })),
-    }),
-    [radars, nearbyRadarIds],
+            geometry: {
+              type: "Point" as const,
+              coordinates: [radar.longitude, radar.latitude],
+            },
+            properties: {
+              id: radar.id,
+              type: radar.type || "default",
+              iconImage: getRadarIconForMap(radar),
+              iconSize: getIconSizeForIcon(getRadarIconForMap(radar)),
+              isNearby: hasId(radar.id) ? 1 : 0,
+            },
+          })),
+      };
+    },
+    [radars, nearbyIdsKey],
   );
 
   const showUserLocation: boolean =
