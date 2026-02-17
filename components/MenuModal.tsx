@@ -16,6 +16,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { useAuth } from "../context/AuthContext";
 import { useSettings } from "../context/SettingsContext";
@@ -85,7 +86,6 @@ function MenuModal({ visible, onClose }: MenuModalProps) {
 
   const [screen, setScreen] = useState<MenuScreen>("menu");
   const [profileName, setProfileName] = useState("");
-  const [profileEmail, setProfileEmail] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -94,13 +94,12 @@ function MenuModal({ visible, onClose }: MenuModalProps) {
   useEffect(() => {
     if (visible) {
       setProfileName(user?.name || "");
-      setProfileEmail(user?.email || "");
       setScreen("menu");
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
     }
-  }, [visible, user?.name, user?.email]);
+  }, [visible, user?.name]);
 
   useEffect(() => {
     if (visible) {
@@ -145,16 +144,11 @@ function MenuModal({ visible, onClose }: MenuModalProps) {
 
   const handleSaveProfile = async () => {
     const name = profileName.trim() || undefined;
-    const email = profileEmail.trim().toLowerCase();
-    if (!email) {
-      Alert.alert("Erro", "Email é obrigatório");
-      return;
-    }
     setSaving(true);
     try {
-      await updateProfile({ name: name || undefined, email });
+      await updateProfile({ name: name || undefined });
       Alert.alert("Sucesso", "Perfil atualizado com sucesso");
-      setScreen("menu");
+      closeFullScreen();
     } catch (e) {
       Alert.alert("Erro", e instanceof Error ? e.message : "Erro ao atualizar perfil");
     } finally {
@@ -179,7 +173,7 @@ function MenuModal({ visible, onClose }: MenuModalProps) {
     try {
       await changePassword(currentPassword, newPassword);
       Alert.alert("Sucesso", "Senha alterada com sucesso");
-      setScreen("menu");
+      closeFullScreen();
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
@@ -190,7 +184,7 @@ function MenuModal({ visible, onClose }: MenuModalProps) {
     }
   };
 
-  const goBack = () => {
+  const closeFullScreen = () => {
     Keyboard.dismiss();
     setScreen("menu");
   };
@@ -214,16 +208,7 @@ function MenuModal({ visible, onClose }: MenuModalProps) {
     }
   };
 
-  const renderHeader = (title: string, showBack = false) => (
-    <View style={styles.screenHeader}>
-      {showBack && (
-        <TouchableOpacity onPress={goBack} style={styles.backButton} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
-      )}
-      <Text style={styles.screenTitle}>{title}</Text>
-    </View>
-  );
+  const openFullScreen = (s: "profile" | "accountSettings") => setScreen(s);
 
   const renderMenuContent = () => (
     <>
@@ -291,12 +276,12 @@ function MenuModal({ visible, onClose }: MenuModalProps) {
         <MenuItem
           icon="person"
           label="Perfil"
-          onPress={() => setScreen("profile")}
+          onPress={() => openFullScreen("profile")}
         />
         <MenuItem
           icon="settings"
           label="Configurações da conta"
-          onPress={() => setScreen("accountSettings")}
+          onPress={() => openFullScreen("accountSettings")}
         />
         <MenuItem
           icon="log-out"
@@ -310,9 +295,9 @@ function MenuModal({ visible, onClose }: MenuModalProps) {
   const renderProfileContent = () => (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : undefined}
-      style={styles.keyboardView}
+      style={styles.fullScreenKeyboard}
     >
-      <ScrollView style={styles.formScroll} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.fullScreenScroll} showsVerticalScrollIndicator={false}>
         <View style={styles.avatarLarge}>
           <Text style={styles.avatarTextLarge}>
             {(user?.name || user?.email || "U").charAt(0).toUpperCase()}
@@ -330,16 +315,11 @@ function MenuModal({ visible, onClose }: MenuModalProps) {
         />
 
         <Text style={styles.fieldLabel}>Email</Text>
-        <TextInput
-          style={styles.input}
-          value={profileEmail}
-          onChangeText={setProfileEmail}
-          placeholder="seu@email.com"
-          placeholderTextColor="#64748b"
-          keyboardType="email-address"
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
+        <View style={styles.readOnlyField}>
+          <Text style={styles.readOnlyText}>{user?.email}</Text>
+          <Ionicons name="lock-closed" size={16} color="#64748b" />
+        </View>
+        <Text style={styles.fieldHint}>O email não pode ser alterado</Text>
 
         <View style={styles.infoRow}>
           <Ionicons name="calendar-outline" size={18} color="#64748b" />
@@ -366,9 +346,9 @@ function MenuModal({ visible, onClose }: MenuModalProps) {
   const renderAccountSettingsContent = () => (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : undefined}
-      style={styles.keyboardView}
+      style={styles.fullScreenKeyboard}
     >
-      <ScrollView style={styles.formScroll} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.fullScreenScroll} showsVerticalScrollIndicator={false}>
         <Text style={styles.sectionTitle}>Alterar senha</Text>
 
         <Text style={styles.fieldLabel}>Senha atual</Text>
@@ -421,7 +401,7 @@ function MenuModal({ visible, onClose }: MenuModalProps) {
           onPress={() => setScreen("profile")}
         >
           <Ionicons name="person-outline" size={20} color="#3b82f6" />
-          <Text style={styles.secondaryButtonText}>Editar perfil (nome e email)</Text>
+          <Text style={styles.secondaryButtonText}>Editar perfil (nome)</Text>
         </TouchableOpacity>
 
         <View style={styles.accountInfo}>
@@ -443,42 +423,54 @@ function MenuModal({ visible, onClose }: MenuModalProps) {
     </KeyboardAvoidingView>
   );
 
+  const handleRequestClose = () => {
+    if (screen === "menu") onClose();
+    else closeFullScreen();
+  };
+
   return (
     <Modal
       visible={visible}
-      transparent
+      transparent={screen === "menu"}
       animationType="none"
-      onRequestClose={onClose}
+      onRequestClose={handleRequestClose}
     >
-      <Pressable style={styles.overlay} onPress={onClose}>
-        <Animated.View
-          style={[styles.backdrop, { opacity: backdropOpacity }]}
-          pointerEvents="none"
-        />
-        <Animated.View
-          style={[
-            styles.drawer,
-            {
-              transform: [{ translateX: slideAnim }],
-            },
-          ]}
-          onStartShouldSetResponder={() => true}
-        >
-          {screen === "menu" && renderMenuContent()}
-          {screen === "profile" && (
-            <>
-              {renderHeader("Perfil", true)}
-              {renderProfileContent()}
-            </>
-          )}
-          {screen === "accountSettings" && (
-            <>
-              {renderHeader("Configurações da conta", true)}
-              {renderAccountSettingsContent()}
-            </>
-          )}
-        </Animated.View>
-      </Pressable>
+      {screen === "menu" ? (
+        <>
+          <Pressable style={styles.overlay} onPress={onClose}>
+            <Animated.View
+              style={[styles.backdrop, { opacity: backdropOpacity }]}
+              pointerEvents="none"
+            />
+          </Pressable>
+          <Animated.View
+            style={[
+              styles.drawer,
+              { transform: [{ translateX: slideAnim }] },
+            ]}
+            onStartShouldSetResponder={() => true}
+          >
+            {renderMenuContent()}
+          </Animated.View>
+        </>
+      ) : (
+        <SafeAreaView style={styles.fullScreenContainer} edges={["top", "left", "right"]}>
+          <View style={styles.fullScreenHeader}>
+            <TouchableOpacity
+              onPress={closeFullScreen}
+              style={styles.fullScreenBackBtn}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            >
+              <Ionicons name="arrow-back" size={24} color="#fff" />
+            </TouchableOpacity>
+            <Text style={styles.fullScreenTitle}>
+              {screen === "profile" ? "Perfil" : "Configurações da conta"}
+            </Text>
+          </View>
+          {screen === "profile" && renderProfileContent()}
+          {screen === "accountSettings" && renderAccountSettingsContent()}
+        </SafeAreaView>
+      )}
     </Modal>
   );
 }
@@ -512,22 +504,35 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 16,
   },
-  screenHeader: {
+  fullScreenContainer: {
+    flex: 1,
+    backgroundColor: "#1e293b",
+  },
+  fullScreenHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 20,
-    paddingBottom: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: "#334155",
   },
-  backButton: {
+  fullScreenBackBtn: {
     padding: 4,
-    marginRight: 8,
+    marginRight: 12,
   },
-  screenTitle: {
+  fullScreenTitle: {
     fontSize: 18,
     fontWeight: "600",
     color: "#fff",
+  },
+  fullScreenKeyboard: {
+    flex: 1,
+  },
+  fullScreenScroll: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 40,
   },
   header: {
     alignItems: "center",
@@ -637,6 +642,27 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 16,
     color: "#fff",
+  },
+  readOnlyField: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#334155",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  readOnlyText: {
+    fontSize: 16,
+    color: "#94a3b8",
+    flex: 1,
+  },
+  fieldHint: {
+    fontSize: 12,
+    color: "#64748b",
+    marginTop: 6,
+    marginLeft: 4,
   },
   infoRow: {
     flexDirection: "row",

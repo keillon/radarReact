@@ -141,19 +141,10 @@ export async function authRoutes(fastify: FastifyInstance) {
       }
       const token = authHeader.substring(7);
       const decoded = jwt.verify(token, JWT_SECRET) as { userId: string; email: string };
-      const body = request.body as { name?: string; email?: string };
+      const body = request.body as { name?: string };
 
-      const updateData: { name?: string; email?: string } = {};
+      const updateData: { name?: string } = {};
       if (body.name !== undefined) updateData.name = body.name.trim() || null;
-      if (body.email !== undefined) {
-        const newEmail = body.email.trim().toLowerCase();
-        if (!newEmail) return reply.status(400).send({ error: "Email inválido" });
-        const existing = await prisma.user.findUnique({ where: { email: newEmail } });
-        if (existing && existing.id !== decoded.userId) {
-          return reply.status(400).send({ error: "Email já em uso" });
-        }
-        updateData.email = newEmail;
-      }
       if (Object.keys(updateData).length === 0) {
         return reply.status(400).send({ error: "Nenhum dado para atualizar" });
       }

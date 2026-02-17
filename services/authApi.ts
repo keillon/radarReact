@@ -90,9 +90,7 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   };
 }
 
-export async function updateProfile(
-  data: { name?: string; email?: string }
-): Promise<AuthUser> {
+export async function updateProfile(data: { name?: string }): Promise<AuthUser> {
   const res = await fetch(`${API_BASE_URL}/auth/profile`, {
     method: "PATCH",
     headers: await getAuthHeaders(),
