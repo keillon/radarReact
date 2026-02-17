@@ -3,8 +3,8 @@ export type GeoPoint = {
   longitude: number;
 };
 
-/** Raio máximo (m) da rota para considerar radar: estradas têm ~10–30m de largura. */
-export const MAX_ROUTE_DISTANCE_METERS = 6;
+/** Raio máximo (m) da rota para considerar radar. Margem maior para ruas curvas/desvios. */
+export const MAX_ROUTE_DISTANCE_METERS = 50;
 export const RADAR_DIRECT_FILTER_METERS = 800;
 
 export const calculateDistance = (
@@ -111,18 +111,22 @@ export const calculateDistanceAlongRouteWithCumulative = (
   radarLocation: GeoPoint,
   routePoints: GeoPoint[],
   cumulative: number[]
-): { distance: number; hasPassed: boolean } => {
+): { distance: number; hasPassed: boolean; atRadarWindow: boolean } => {
   if (routePoints.length < 2 || cumulative.length !== routePoints.length) {
-    return { distance: Infinity, hasPassed: false };
+    return { distance: Infinity, hasPassed: false, atRadarWindow: false };
   }
   const userCumulative = projectPointOntoRoute(userLocation, routePoints, cumulative);
   const radarCumulative = projectPointOntoRoute(radarLocation, routePoints, cumulative);
   const distanceAlongRoute = radarCumulative - userCumulative;
-  const hasPassed = distanceAlongRoute < 5;
+  /** Janela "acabou de passar": -25m a +25m = ainda tratamos como "no radar" para mostrar modal. */
+  const PASS_WINDOW_METERS = 25;
+  const hasPassed = distanceAlongRoute < -PASS_WINDOW_METERS;
 
   return {
-    distance: hasPassed ? 0 : Math.max(0, distanceAlongRoute),
+    distance: distanceAlongRoute < 0 ? 0 : Math.max(0, distanceAlongRoute),
     hasPassed,
+    /** "At radar" = dentro da janela para capturar frame de passagem (0 a +25m ou -25 a 0). */
+    atRadarWindow: distanceAlongRoute >= -PASS_WINDOW_METERS && distanceAlongRoute <= PASS_WINDOW_METERS,
   };
 };
 

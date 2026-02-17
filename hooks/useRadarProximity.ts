@@ -28,8 +28,8 @@ type UseRadarProximityResult = {
   resetProximityState: () => void;
 };
 
-const PROXIMITY_DEBOUNCE_MS = 200;
-const MOVEMENT_THRESHOLD_METERS = 5;
+const PROXIMITY_DEBOUNCE_MS = 80;
+const MOVEMENT_THRESHOLD_METERS = 2;
 const ALONG_ROUTE_WINDOW_METERS = 800;
 const MODAL_WINDOW_METERS = 300;
 const PASS_DISTANCE_METERS = 10;
@@ -86,12 +86,7 @@ export function useRadarProximity({
     return index;
   }, [radars]);
 
-  useEffect(() => {
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-      debounceRef.current = null;
-    }
-
+  const runProximityCheck = useCallback((forceRun = false) => {
     if (
       !currentLocation ||
       routePoints.length < 2 ||
@@ -107,27 +102,26 @@ export function useRadarProximity({
       return;
     }
 
-    debounceRef.current = setTimeout(() => {
-      const checkLocation = {
-        latitude: currentLocation.latitude,
-        longitude: currentLocation.longitude,
-      };
+    const checkLocation = {
+      latitude: currentLocation.latitude,
+      longitude: currentLocation.longitude,
+    };
 
-      if (previousLocationRef.current) {
-        const movementDistance = calculateDistance(
-          previousLocationRef.current.latitude,
-          previousLocationRef.current.longitude,
-          checkLocation.latitude,
-          checkLocation.longitude
-        );
-        if (movementDistance < MOVEMENT_THRESHOLD_METERS) {
-          return;
-        }
+    if (!forceRun && previousLocationRef.current) {
+      const movementDistance = calculateDistance(
+        previousLocationRef.current.latitude,
+        previousLocationRef.current.longitude,
+        checkLocation.latitude,
+        checkLocation.longitude
+      );
+      if (movementDistance < MOVEMENT_THRESHOLD_METERS) {
+        return;
       }
+    }
 
-      previousLocationRef.current = checkLocation;
+    previousLocationRef.current = checkLocation;
 
-      const directCandidates: Radar[] = [];
+    const directCandidates: Radar[] = [];
       for (const radar of radars) {
         if (!radar?.id) continue;
         if (passedRadarIdsRef.current.has(radar.id)) continue;
@@ -159,15 +153,17 @@ export function useRadarProximity({
           routePoints,
           cumulativeDistances
         );
-        if (routeDistanceResult.hasPassed) {
+        if (routeDistanceResult.hasPassed && !routeDistanceResult.atRadarWindow) {
           passedRadarIdsRef.current.add(radar.id);
           continue;
         }
         const alongRouteDistance = routeDistanceResult.distance;
-        if (alongRouteDistance < 0 || alongRouteDistance > ALONG_ROUTE_WINDOW_METERS) continue;
+        const atRadarWindow = routeDistanceResult.atRadarWindow;
+        if (!atRadarWindow && (alongRouteDistance < 0 || alongRouteDistance > ALONG_ROUTE_WINDOW_METERS)) continue;
+        const displayDistance = atRadarWindow ? 0 : roundDistanceTo10(alongRouteDistance);
         candidates.push({
           radar,
-          distance: roundDistanceTo10(alongRouteDistance),
+          distance: displayDistance,
         });
       }
 
@@ -235,6 +231,18 @@ export function useRadarProximity({
       setDeveTocarAlerta(shouldPlayAlert);
       setDeveAbrirModal(nextDistance <= MODAL_WINDOW_METERS);
       setNearbyRadarIds(new Set([selectedRadar.id]));
+  }, [currentLocation, cumulativeDistances, radarIndexById, radars, routePoints]);
+
+  useEffect(() => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+
+    runProximityCheck();
+
+    debounceRef.current = setTimeout(() => {
+      runProximityCheck();
     }, PROXIMITY_DEBOUNCE_MS);
 
     return () => {
@@ -243,7 +251,20 @@ export function useRadarProximity({
         debounceRef.current = null;
       }
     };
-  }, [currentLocation, cumulativeDistances, radarIndexById, radars, routePoints]);
+  }, [currentLocation, cumulativeDistances, radarIndexById, radars, routePoints, runProximityCheck]);
+
+  const INTERVAL_MS = 120;
+  useEffect(() => {
+    if (
+      !currentLocation ||
+      routePoints.length < 2 ||
+      radars.length === 0
+    ) {
+      return;
+    }
+    const id = setInterval(() => runProximityCheck(true), INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [currentLocation, routePoints.length, radars.length, runProximityCheck]);
 
   return useMemo(
     () => ({

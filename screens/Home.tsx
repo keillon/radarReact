@@ -2279,38 +2279,30 @@ export default function Home({ onOpenEditor }: HomeProps) {
         </>
       )}
 
-      {/* Alerta de radar - Modal animado no topo */}
-      {isNavigating &&
-        nearestRadar &&
-        (() => {
-          console.log(
-            `🎯 Renderizando modal: isNavigating=${isNavigating}, nearestRadar=${!!nearestRadar}, distance=${
-              nearestRadar.distance
-            }m`,
-          );
-          return null;
-        })()}
+      {/* Alerta de radar - Modal para ficar acima do mapa nativo no Android */}
       {isNavigating && nearestRadar && (
-        <Animated.View
-          style={[
-            styles.radarAlertContainer,
-            {
-              opacity: modalOpacity,
-              transform: [
+        <Modal visible={true} transparent animationType="none" statusBarTranslucent>
+          <View style={{ flex: 1, pointerEvents: "none" }}>
+            <Animated.View
+              style={[
+                styles.radarAlertContainer,
                 {
-                  translateY: modalOpacity.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [-100, 0],
-                  }),
+                  opacity: modalOpacity,
+                  transform: [
+                    {
+                      translateY: modalOpacity.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [-100, 0],
+                      }),
+                    },
+                    {
+                      scale: modalScale,
+                    },
+                  ],
                 },
-                {
-                  scale: modalScale,
-                },
-              ],
-            },
-          ]}
-          pointerEvents="none"
-        >
+              ]}
+              pointerEvents="none"
+            >
           <Animated.View
             style={[
               styles.radarAlertContent,
@@ -2405,6 +2397,8 @@ export default function Home({ onOpenEditor }: HomeProps) {
             )}
           </Animated.View>
         </Animated.View>
+          </View>
+        </Modal>
       )}
 
       {isNavigating && showRadarFeedbackCard && radarFeedbackTarget && (
@@ -2426,38 +2420,39 @@ export default function Home({ onOpenEditor }: HomeProps) {
             />
             <View style={styles.radarFeedbackOverlay} pointerEvents="box-none">
               <View style={styles.radarFeedbackCard}>
-            <Text style={styles.radarFeedbackTitle}>
-              Esse radar ainda existe?
-            </Text>
-            <Text style={styles.radarFeedbackSubtitle}>
-              Responda para melhorar o mapa (crowdsourcing).
-            </Text>
-            <View style={styles.radarFeedbackActions}>
-              <TouchableOpacity
-                style={[
-                  styles.radarFeedbackButton,
-                  styles.radarFeedbackConfirm,
-                ]}
-                onPress={() => handleRadarFeedbackAction("confirm")}
-                disabled={radarFeedbackSubmitting}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.radarFeedbackButtonText}>
-                  {radarFeedbackSubmitting ? "Enviando..." : "Sim, existe"}
+                <Text style={styles.radarFeedbackTitle}>
+                  Esse radar ainda existe?
                 </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.radarFeedbackButton, styles.radarFeedbackDeny]}
-                onPress={() => handleRadarFeedbackAction("deny")}
-                disabled={radarFeedbackSubmitting}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.radarFeedbackButtonText}>
-                  {radarFeedbackSubmitting ? "Enviando..." : "Não existe"}
+                <Text style={styles.radarFeedbackSubtitle}>
+                  Responda para melhorar o mapa
                 </Text>
-              </TouchableOpacity>
+                <View style={styles.radarFeedbackActions}>
+                  <TouchableOpacity
+                    style={[
+                      styles.radarFeedbackButton,
+                      styles.radarFeedbackConfirm,
+                    ]}
+                    onPress={() => handleRadarFeedbackAction("confirm")}
+                    disabled={radarFeedbackSubmitting}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.radarFeedbackButtonText}>
+                      {radarFeedbackSubmitting ? "Enviando..." : "Sim, existe"}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.radarFeedbackButton, styles.radarFeedbackDeny]}
+                    onPress={() => handleRadarFeedbackAction("deny")}
+                    disabled={radarFeedbackSubmitting}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.radarFeedbackButtonText}>
+                      {radarFeedbackSubmitting ? "Enviando..." : "Não existe"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
             </View>
-          </View>
           </View>
         </Modal>
       )}
