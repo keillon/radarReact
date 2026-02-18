@@ -9,7 +9,6 @@ import React, {
 } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   Image,
   Modal,
@@ -67,6 +66,7 @@ import {
 } from "../services/mapbox";
 import { areMapboxRadarArraysEqual } from "../utils/radarDiff";
 import { colors } from "../utils/theme";
+import { AppModal } from "../components/AppModal";
 
 const VOTED_RADAR_IDS_KEY = "radarZone_votedRadarIds";
 import {
@@ -182,7 +182,7 @@ const normalizeRadarPayload = (raw: any): Radar | null => {
 };
 
 export default function Home() {
-  const { soundEnabled, volume, updateSettings } = useSettings();
+  const { soundEnabled, volume, updateSettings, ttsVoiceId } = useSettings();
   type RadarArrayUpdater = Radar[] | ((prev: Radar[]) => Radar[]);
   type RadarIdArrayUpdater = string[] | ((prev: string[]) => string[]);
 
@@ -194,6 +194,7 @@ export default function Home() {
   const [routeData, setRouteData] = useState<RouteResponse | null>(null);
   const [isNavigating, setIsNavigating] = useState(false);
   const [isPreparingNavigation, setIsPreparingNavigation] = useState(false);
+  const [recenterTrigger, setRecenterTrigger] = useState(0);
   // Radares do CSV: 16k+ radares fixos, carregados 1x, NUNCA mudam
   const [csvRadarsMap, setCsvRadarsMap] = useState<Map<string, Radar>>(
     new Map(),
@@ -273,6 +274,71 @@ export default function Home() {
     message: "",
     type: "info",
   });
+
+  // Modal genérico (substitui Alert.alert)
+  const [appModal, setAppModal] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    type: "alert" | "confirm";
+    confirmText?: string;
+    cancelText?: string;
+    onConfirm?: () => void;
+    onCancel?: () => void;
+  }>({
+    visible: false,
+    title: "",
+    message: "",
+    type: "alert",
+  });
+
+  const closeAppModal = useCallback(() => {
+    setAppModal((s) => ({ ...s, visible: false }));
+  }, []);
+
+  const showAppAlert = useCallback(
+    (title: string, message: string) => {
+      setAppModal({
+        visible: true,
+        title,
+        message,
+        type: "alert",
+        onConfirm: closeAppModal,
+      });
+    },
+    [closeAppModal],
+  );
+
+  const showAppConfirm = useCallback(
+    (
+      title: string,
+      message: string,
+      opts: {
+        confirmText?: string;
+        cancelText?: string;
+        onConfirm: () => void;
+        onCancel?: () => void;
+      },
+    ) => {
+      setAppModal({
+        visible: true,
+        title,
+        message,
+        type: "confirm",
+        confirmText: opts.confirmText ?? "Confirmar",
+        cancelText: opts.cancelText ?? "Cancelar",
+        onConfirm: () => {
+          closeAppModal();
+          opts.onConfirm();
+        },
+        onCancel: () => {
+          closeAppModal();
+          opts.onCancel?.();
+        },
+      });
+    },
+    [closeAppModal],
+  );
 
   // Radar selecionado ao clicar no mapa (destaque + modal no topo)
   const [selectedRadarDetail, setSelectedRadarDetail] = useState<Radar | null>(
@@ -427,6 +493,7 @@ export default function Home() {
   const mapPickerCenterRef = useRef<LatLng | null>(null); // Fallback centro ao abrir picker
   const mapPickerMapRef = useRef<MapHandle | null>(null); // Ref do Map no picker para getCenter()
   const pickerGetCenterIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const latestRadarsForTapRef = useRef<Radar[]>([]); // Para onRadarTap (navegação) resolver radar completo e abrir modal
   const reportCustomLocationRef = useRef<LatLng | null>(null); // Backup da localização escolhida no mapa
   const hasInitialRadarLoadRef = useRef(false);
   const routePointsRef = useRef<LatLng[]>([]);
@@ -567,41 +634,30 @@ export default function Home() {
     initMapbox();
     requestLocationPermission();
 
-    // Configurar TTS se disponível (aguardar inicialização do módulo nativo) — carregado sob demanda
+    // Configurar TTS: pt-BR e voz escolhida nas configurações (uma só voz para alertas e navegação)
     const Tts = getTts();
     if (Tts) {
-      if (Tts.getInitStatus && typeof Tts.getInitStatus === "function") {
-        Tts.getInitStatus()
-          .then((status: boolean) => {
-            if (status && Tts.setDefaultLanguage) {
-              try {
-                Tts.setDefaultLanguage("pt-BR");
-                Tts.setDefaultRate(0.5);
-                Tts.setDefaultPitch(1.0);
-              } catch (error) {
-                console.warn("Erro ao configurar TTS:", error);
-              }
-            }
-          })
-          .catch(() => {
-            if (Tts.setDefaultLanguage) {
-              try {
-                Tts.setDefaultLanguage("pt-BR");
-                Tts.setDefaultRate(0.5);
-                Tts.setDefaultPitch(1.0);
-              } catch (error) {
-                console.warn("Erro ao configurar TTS:", error);
-              }
-            }
-          });
-      } else if (Tts.setDefaultLanguage) {
+      const applyTtsSettings = () => {
         try {
-          Tts.setDefaultLanguage("pt-BR");
-          Tts.setDefaultRate(0.5);
-          Tts.setDefaultPitch(1.0);
+          if (Tts.setDefaultLanguage) Tts.setDefaultLanguage("pt-BR");
+          if (Tts.setDefaultRate) Tts.setDefaultRate(0.5);
+          if (Tts.setDefaultPitch) Tts.setDefaultPitch(1.0);
+          const { ttsVoiceId: storedVoiceId } = require("../utils/settingsStore").getStoredSettings();
+          if (storedVoiceId && typeof Tts.setDefaultVoice === "function") {
+            Tts.setDefaultVoice(storedVoiceId).catch(() => {});
+          }
         } catch (error) {
           console.warn("Erro ao configurar TTS:", error);
         }
+      };
+      if (Tts.getInitStatus && typeof Tts.getInitStatus === "function") {
+        Tts.getInitStatus()
+          .then((status: boolean) => {
+            if (status) applyTtsSettings();
+          })
+          .catch(() => applyTtsSettings());
+      } else {
+        applyTtsSettings();
       }
     }
 
@@ -625,6 +681,25 @@ export default function Home() {
       isMountedRef.current = false;
     };
   }, []);
+
+  // Manter voz única: aplicar voz escolhida nas configurações sempre que mudar (alertas + navegação)
+  useEffect(() => {
+    const Tts = getTts();
+    if (Tts && typeof Tts.setDefaultVoice === "function" && ttsVoiceId) {
+      Tts.setDefaultVoice(ttsVoiceId).catch(() => {});
+    }
+  }, [ttsVoiceId]);
+
+  // Ao iniciar navegação, reaplicar voz selecionada (instruções de rota + radar usam a mesma voz)
+  useEffect(() => {
+    if (!isNavigating) return;
+    const voiceId = ttsVoiceId ?? require("../utils/settingsStore").getStoredSettings().ttsVoiceId;
+    if (!voiceId) return;
+    const Tts = getTts();
+    if (Tts && typeof Tts.setDefaultVoice === "function") {
+      Tts.setDefaultVoice(voiceId).catch(() => {});
+    }
+  }, [isNavigating, ttsVoiceId]);
 
   // Carregar IDs de radares já confirmados/negados (único por usuário, não mostrar modal de novo)
   useEffect(() => {
@@ -713,7 +788,7 @@ export default function Home() {
           PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
         );
         if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-          Alert.alert(
+          showAppAlert(
             "Permissão negada",
             "É necessário permitir acesso à localização para usar o app",
           );
@@ -767,12 +842,12 @@ export default function Home() {
 
   const handleSearchRoute = async () => {
     if (!origin) {
-      Alert.alert("Erro", "Aguardando localização atual...");
+      showAppAlert("Erro", "Aguardando localização atual...");
       return;
     }
 
     if (!destinationText.trim()) {
-      Alert.alert("Erro", "Por favor, digite um endereço de destino");
+      showAppAlert("Erro", "Por favor, digite um endereço de destino");
       return;
     }
 
@@ -854,7 +929,7 @@ export default function Home() {
         setIsPreparingNavigation(false);
         loadingOpacity.setValue(0);
       });
-      Alert.alert(
+      showAppAlert(
         "Erro",
         error.message ||
           "Não foi possível calcular a rota. Verifique o endereço digitado.",
@@ -951,11 +1026,11 @@ export default function Home() {
 
     // Validação: velocidade obrigatória e máximo 120 km/h
     if (!speedLimit || isNaN(speedLimit)) {
-      Alert.alert("Atenção", "Por favor, selecione a velocidade do radar");
+      showAppAlert("Atenção", "Por favor, selecione a velocidade do radar");
       return;
     }
     if (speedLimit > 120) {
-      Alert.alert("Atenção", "A velocidade máxima permitida é 120 km/h");
+      showAppAlert("Atenção", "A velocidade máxima permitida é 120 km/h");
       return;
     }
 
@@ -1215,6 +1290,10 @@ export default function Home() {
     rearmRadarState,
     resetProximityState,
   } = proximity;
+
+  useEffect(() => {
+    latestRadarsForTapRef.current = radarsForProximity;
+  }, [radarsForProximity]);
 
   const rearmRadarRuntimeState = useCallback(
     (radarIds: string[]) => {
@@ -1703,20 +1782,20 @@ export default function Home() {
       setNearbyRadarIds(proximityNearbyRadarIds);
     }
 
-    // Alerta sonoro entre 40m e 5m: dispara uma vez quando na faixa (evita bug de não tocar em valor exato)
+    // Alerta sonoro entre 40m e 5m: dispara uma vez quando na faixa (usa soundEnabled reativo)
     const shouldPlay30mAlert =
       activeDistance != null &&
       activeDistance <= 40 &&
       activeDistance >= 5 &&
       !radar30mSoundPlayedIds.current.has(activeRadar.id);
-    if (deveTocarAlerta || shouldPlay30mAlert) {
+    if (soundEnabled && (deveTocarAlerta || shouldPlay30mAlert)) {
       if (shouldPlay30mAlert) radar30mSoundPlayedIds.current.add(activeRadar.id);
       playRadarAlert();
     }
 
     if (acabouDePassar) {
       radar30mSoundPlayedIds.current.delete(activeRadar.id); // Permitir tocar de novo na próxima aproximação
-      if (!radarCriticalSoundPlayedIds.current.has(activeRadar.id)) {
+      if (soundEnabled && !radarCriticalSoundPlayedIds.current.has(activeRadar.id)) {
         radarCriticalSoundPlayedIds.current.add(activeRadar.id);
         playRadarAlert();
       }
@@ -1812,6 +1891,7 @@ export default function Home() {
     playRadarAlert,
     proximityNearbyRadarIds,
     radarAtivo,
+    soundEnabled,
     speakRadarAlert,
   ]);
 
@@ -1945,7 +2025,41 @@ export default function Home() {
   }, []);
 
   const handleArrive = useCallback(() => {
-    Alert.alert("Chegada", "Você chegou ao destino!");
+    showAppAlert("Chegada", "Você chegou ao destino!");
+    setRoutePointsFromNav(null);
+    if (locationUpdateDebounce.current) {
+      clearTimeout(locationUpdateDebounce.current);
+      locationUpdateDebounce.current = null;
+    }
+    alertedRadarIds.current.clear();
+    radarCriticalSoundPlayedIds.current.clear();
+    radar30mSoundPlayedIds.current.clear();
+    resetProximityState();
+    if (postPassTimerRef.current) {
+      clearTimeout(postPassTimerRef.current);
+      postPassTimerRef.current = null;
+    }
+    if (radarFeedbackDismissTimerRef.current) {
+      clearTimeout(radarFeedbackDismissTimerRef.current);
+      radarFeedbackDismissTimerRef.current = null;
+    }
+    setRadarPassedLoading(false);
+    setRadarPassedPhase(null);
+    setShowRadarFeedbackCard(false);
+    setRadarFeedbackTarget(null);
+    setRadarFeedbackSubmitting(false);
+    setNearestRadar(null);
+    setLiveRadarOverlay([]);
+    setLiveDeletedRadarIds([]);
+    lastNearbyRadarIdRef.current = null;
+    setNearbyRadarIds(new Set());
+    setIsNavigating(false);
+    setIsPreparingNavigation(false);
+    setRouteData(null);
+    setRoute(null);
+  }, [resetProximityState, showAppAlert]);
+
+  const doCancelNavigation = useCallback(() => {
     setRoutePointsFromNav(null);
     if (locationUpdateDebounce.current) {
       clearTimeout(locationUpdateDebounce.current);
@@ -1980,38 +2094,12 @@ export default function Home() {
   }, [resetProximityState]);
 
   const handleCancelNavigation = useCallback(() => {
-    setRoutePointsFromNav(null);
-    if (locationUpdateDebounce.current) {
-      clearTimeout(locationUpdateDebounce.current);
-      locationUpdateDebounce.current = null;
-    }
-    alertedRadarIds.current.clear();
-    radarCriticalSoundPlayedIds.current.clear();
-    radar30mSoundPlayedIds.current.clear();
-    resetProximityState();
-    if (postPassTimerRef.current) {
-      clearTimeout(postPassTimerRef.current);
-      postPassTimerRef.current = null;
-    }
-    if (radarFeedbackDismissTimerRef.current) {
-      clearTimeout(radarFeedbackDismissTimerRef.current);
-      radarFeedbackDismissTimerRef.current = null;
-    }
-    setRadarPassedLoading(false);
-    setRadarPassedPhase(null);
-    setShowRadarFeedbackCard(false);
-    setRadarFeedbackTarget(null);
-    setRadarFeedbackSubmitting(false);
-    setNearestRadar(null);
-    setLiveRadarOverlay([]);
-    setLiveDeletedRadarIds([]);
-    lastNearbyRadarIdRef.current = null;
-    setNearbyRadarIds(new Set());
-    setIsNavigating(false);
-    setIsPreparingNavigation(false);
-    setRouteData(null);
-    setRoute(null);
-  }, [resetProximityState]);
+    showAppConfirm("Sair da navegação?", "Deseja realmente encerrar a navegação?", {
+      cancelText: "Não",
+      confirmText: "Sim, sair",
+      onConfirm: doCancelNavigation,
+    });
+  }, [showAppConfirm, doCancelNavigation]);
 
   const handleError = useCallback((error: any) => {
     try {
@@ -2021,11 +2109,11 @@ export default function Home() {
       console.error("Erro na navegação:", error);
       const errorMessage =
         error?.message || error?.toString() || "Erro na navegação";
-      Alert.alert("Erro", errorMessage);
+      showAppAlert("Erro", errorMessage);
     } catch (e) {
       console.error("Erro ao processar erro de navegação:", e);
     }
-  }, []);
+  }, [showAppAlert]);
 
   // Handler para selecionar rota alternativa (vinda do evento nativo)
   const handleRouteAlternativeSelected = useCallback((event: any) => {
@@ -2095,14 +2183,38 @@ export default function Home() {
         ) => {
           const ev = e?.nativeEvent ?? e;
           if (ev && typeof ev === "object" && "id" in ev && ev.latitude != null && ev.longitude != null) {
-            setSelectedRadarDetail({
-              id: String(ev.id),
-              latitude: Number(ev.latitude),
-              longitude: Number(ev.longitude),
-              speedLimit: ev.speedLimit,
-              type: ev.type ?? "unknown",
-            });
+            const idStr = String(ev.id);
+            const fullRadar = latestRadarsForTapRef.current.find((r) => r && String(r.id) === idStr);
+            if (fullRadar) {
+              setSelectedRadarDetail(fullRadar);
+              selectedRadarDetailRef.current = fullRadar;
+            } else {
+              const minimal: Radar = {
+                id: idStr,
+                latitude: Number(ev.latitude),
+                longitude: Number(ev.longitude),
+                speedLimit: ev.speedLimit,
+                type: ev.type ?? "unknown",
+              };
+              setSelectedRadarDetail(minimal);
+              selectedRadarDetailRef.current = minimal;
+            }
           }
+        }}
+        recenterTrigger={recenterTrigger}
+        ttsVoiceId={ttsVoiceId ?? require("../utils/settingsStore").getStoredSettings().ttsVoiceId ?? undefined}
+        onVoiceInstructionText={(e: { nativeEvent?: { text: string }; text?: string }) => {
+          const text = (e?.nativeEvent?.text ?? e?.text ?? "").replace(/<[^>]+>/g, "").trim();
+          if (!text) return;
+          const Tts = getTts();
+          if (!Tts || typeof Tts.speak !== "function") return;
+          const voiceId = ttsVoiceId ?? require("../utils/settingsStore").getStoredSettings().ttsVoiceId;
+          (async () => {
+            if (voiceId && typeof Tts.setDefaultVoice === "function") {
+              await Tts.setDefaultVoice(voiceId);
+            }
+            await Tts.speak(text, { androidParams: { KEY_PARAM_VOLUME: volume } });
+          })().catch(() => {});
         }}
       />
     );
@@ -2128,6 +2240,8 @@ export default function Home() {
     handleRouteChanged,
     API_BASE_URL,
     geoJsonRefreshKey,
+    recenterTrigger,
+    ttsVoiceId,
   ]);
 
   return (
@@ -2261,6 +2375,7 @@ export default function Home() {
               setSelectedRadarDetail(null);
               setVignetteCenter(null);
               selectedRadarDetailRef.current = null;
+              if (isNavigating) setRecenterTrigger((t) => t + 1);
             }}
             centerX={vignetteCenter?.x ?? null}
             centerY={vignetteCenter?.y ?? null}
@@ -2347,6 +2462,7 @@ export default function Home() {
                   setSelectedRadarDetail(null);
                   setVignetteCenter(null);
                   selectedRadarDetailRef.current = null;
+                  if (isNavigating) setRecenterTrigger((t) => t + 1);
                 }}
                 activeOpacity={0.8}
               >
@@ -2995,7 +3111,7 @@ export default function Home() {
                         await mapPickerMapRef.current?.getCenter?.();
                       const selected = center ?? mapPickerCenterRef.current;
                       if (!selected) {
-                        Alert.alert(
+                        showAppAlert(
                           "Erro",
                           "Não foi possível obter a posição do mapa. Tente novamente.",
                         );
@@ -3087,6 +3203,35 @@ export default function Home() {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* Modal genérico (substitui Alert.alert) */}
+      <AppModal
+        visible={appModal.visible}
+        title={appModal.title}
+        message={appModal.message}
+        buttons={
+          appModal.type === "alert"
+            ? [
+                {
+                  text: "OK",
+                  onPress: () => appModal.onConfirm?.(),
+                },
+              ]
+            : [
+                {
+                  text: appModal.cancelText ?? "Cancelar",
+                  style: "cancel",
+                  onPress: () => appModal.onCancel?.(),
+                },
+                {
+                  text: appModal.confirmText ?? "Confirmar",
+                  style: "default",
+                  onPress: () => appModal.onConfirm?.(),
+                },
+              ]
+        }
+        onRequestClose={closeAppModal}
+      />
 
       {/* Modal: Sucesso ao reportar (auto-dismiss 5s) */}
       <Modal

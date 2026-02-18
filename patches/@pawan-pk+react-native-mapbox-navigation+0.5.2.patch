@@ -172,8 +172,9 @@ index 41a3ba0..52dd7b5 100644
    private companion object {
      private const val BUTTON_ANIMATION_DURATION = 1500L
    }
-@@ -93,28 +121,26 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
-   private var destinationTitle: String = "Destination"
+@@ -93,28 +121,28 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+-  private var destinationTitle: String = "Destination"
++  private var destinationTitle: String = "Destino"
    private var waypoints: List<Point> = listOf()
    private var waypointLegs: List<WaypointLegs> = listOf()
 -  private var distanceUnit: String = DirectionsCriteria.IMPERIAL
@@ -3882,3 +3883,15 @@ index fb4a88f..c9ceb7c 100644
 +  onRouteChanged?: (event: { geometry: string }) => void;
 +  onMuteChange?: (event: { muted: boolean; soundEnabled: boolean }) => void;
  }
+
+diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/ios/MapboxNavigationView.swift b/node_modules/@pawan-pk/react-native-mapbox-navigation/ios/MapboxNavigationView.swift
+--- a/node_modules/@pawan-pk/react-native-mapbox-navigation/ios/MapboxNavigationView.swift
++++ b/node_modules/@pawan-pk/react-native-mapbox-navigation/ios/MapboxNavigationView.swift
+@@ -60,4 +60,4 @@
+     @objc var hideStatusView: Bool = false
+     @objc var mute: Bool = false
+     @objc var distanceUnit: NSString = "imperial"
+-    @objc var language: NSString = "us"
+-    @objc var destinationTitle: NSString = "Destination"
++    @objc var language: NSString = "pt-BR"
++    @objc var destinationTitle: NSString = "Destino"
