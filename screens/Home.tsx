@@ -44,6 +44,7 @@ function getGeolocation(): GeolocationApi {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getClosestPlacaName, radarImages, type MapHandle } from "../components/Map";
 import SearchContainer from "../components/SearchContainer";
+import { useIAP } from "../context/IAPContext";
 import { useSettings } from "../context/SettingsContext";
 import { VignetteOverlay } from "../components/VignetteOverlay";
 import { useRadarAudio } from "../hooks/useRadarAudio";
@@ -66,6 +67,7 @@ import {
 } from "../services/mapbox";
 import { areMapboxRadarArraysEqual } from "../utils/radarDiff";
 import { colors } from "../utils/theme";
+import { AdBanner } from "../components/AdBanner";
 import { AppModal } from "../components/AppModal";
 
 const VOTED_RADAR_IDS_KEY = "radarZone_votedRadarIds";
@@ -183,6 +185,7 @@ const normalizeRadarPayload = (raw: any): Radar | null => {
 
 export default function Home() {
   const { soundEnabled, volume, updateSettings, ttsVoiceId } = useSettings();
+  const { isSubscribed, isInFreePeriod } = useIAP();
   type RadarArrayUpdater = Radar[] | ((prev: Radar[]) => Radar[]);
   type RadarIdArrayUpdater = string[] | ((prev: string[]) => string[]);
 
@@ -549,6 +552,7 @@ export default function Home() {
       if (wsDeferredSyncTimeoutRef.current) {
         clearTimeout(wsDeferredSyncTimeoutRef.current);
       }
+      const debounceMs = 50;
       wsDeferredSyncTimeoutRef.current = setTimeout(() => {
         wsDeferredSyncTimeoutRef.current = null;
         getRadarsNearLocation(loc.latitude, loc.longitude, 50000)
@@ -574,7 +578,7 @@ export default function Home() {
           .catch((error) => {
             console.error("Erro ao sincronizar radares:", error);
           });
-      }, 200);
+      }, debounceMs);
     },
     [],
   );
@@ -1560,11 +1564,10 @@ export default function Home() {
           queuedEvents.push({ event, payload });
           if (wsFlushScheduledRef.current) return;
           wsFlushScheduledRef.current = true;
-          const delay = 16;
           setTimeout(() => {
             wsFlushScheduledRef.current = false;
             flushQueuedWsEvents();
-          }, delay);
+          }, 0);
         };
 
         ws.onclose = () => {
@@ -1613,11 +1616,20 @@ export default function Home() {
   }, []);
 
   const openRadarFeedbackCard = useCallback(
-    (radar: Radar) => {
+    async (radar: Radar) => {
       if (!radar?.id) return;
       if (radarFeedbackActionIds.current.has(radar.id)) return;
       // Não pedir confirmação de quem reportou — somente de outros usuários
       if (deviceUserId && radar.reportedBy && radar.reportedBy === deviceUserId) return;
+      // Verificar AsyncStorage (usuário já votou em sessão anterior)
+      try {
+        const raw = await AsyncStorage.getItem(VOTED_RADAR_IDS_KEY);
+        const ids: string[] = raw ? JSON.parse(raw) : [];
+        if (ids.includes(radar.id)) {
+          radarFeedbackActionIds.current.add(radar.id);
+          return;
+        }
+      } catch {}
 
       if (radarFeedbackDismissTimerRef.current) {
         clearTimeout(radarFeedbackDismissTimerRef.current);
@@ -1802,19 +1814,13 @@ export default function Home() {
 
       if (radarZeroTimeRef2.current === null) {
         radarZeroTimeRef2.current = Date.now();
-        setRadarPassedPhase('loading');
-        setRadarPassedLoading(true);
-        if (postPassTimerRef.current) clearTimeout(postPassTimerRef.current);
         const passedRadar = activeRadar; // Capturar em closure para o callback
-        postPassTimerRef.current = setTimeout(() => {
-          postPassTimerRef.current = null;
+        // Fecha modal imediatamente e mostra feedback (sem loading "Passou do radar")
+        hideRadarModal();
+        setTimeout(() => {
           radarZeroTimeRef2.current = null;
-          setRadarPassedLoading(false);
-          setRadarPassedPhase(null);
-          hideRadarModal();
           openRadarFeedbackCard(passedRadar);
-        }, 5500); // 5s loading + 0.5s "Passou" no modal, depois fecha
-        setTimeout(() => setRadarPassedPhase('passed'), 5000); // Após 5s: mostra "Passou" no próprio modal (sem loop)
+        }, 350);
       }
       setNearestRadar({ radar: activeRadar, distance: 0 });
     } else if (deveAbrirModal) {
@@ -2572,19 +2578,7 @@ export default function Home() {
                 })()}
               </View>
               <View style={styles.radarAlertTextContainer}>
-                {radarPassedLoading ? (
-                  <>
-                    <Text style={styles.radarAlertTitle}>Passou do radar</Text>
-                    {radarPassedPhase === 'loading' && (
-                      <ActivityIndicator
-                        size="large"
-                        color={colors.primaryLight}
-                        style={{ marginVertical: 8 }}
-                      />
-                    )}
-                  </>
-                ) : (
-                  <>
+                <>
                     <Text style={styles.radarAlertTitle}>
                       {(() => {
                         const type = normalizeRadarType(nearestRadar.radar.type);
@@ -2611,8 +2605,7 @@ export default function Home() {
                         </Text>
                       )}
                     </Text>
-                  </>
-                )}
+                </>
               </View>
             </>
           </Animated.View>
@@ -3276,6 +3269,11 @@ export default function Home() {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* Banner de anúncio no plano grátis (escondido para PRO) — fixo no rodapé */}
+      <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, alignItems: "center" }} pointerEvents="box-none">
+        <AdBanner visible={isInFreePeriod && !isSubscribed} />
+      </View>
     </View>
   );
 }

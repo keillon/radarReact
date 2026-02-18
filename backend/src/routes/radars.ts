@@ -31,7 +31,7 @@ type RadarCacheState = {
   loadingPromise: Promise<RadarResponseItem[]> | null;
 };
 
-const RADARS_CACHE_TTL_MS = 30_000;
+const RADARS_CACHE_TTL_MS = 5_000;
 const radarCache: RadarCacheState = {
   data: [],
   builtAt: 0,
@@ -420,7 +420,7 @@ export async function radarRoutes(fastify: FastifyInstance) {
         features,
       };
       reply.header("Content-Type", "application/geo+json; charset=utf-8");
-      reply.header("Cache-Control", "public, max-age=60");
+      reply.header("Cache-Control", "no-cache, must-revalidate");
       return reply.send(geojson);
     } catch (error: any) {
       fastify.log.error("Erro em /radars/geojson:", error);
@@ -901,74 +901,41 @@ export async function radarRoutes(fastify: FastifyInstance) {
       return reply.code(404).send({ error: "Radar not found" });
     }
 
-    // Verificar se o usuário já fez QUALQUER ação (confirm ou deny) - mutuamente exclusivo
-    // TODO: Reativar quando Prisma Client for regenerado
-    let existingConfirm = null;
-    let existingDeny = null;
-    try {
-      if (prisma.userRadarAction) {
-        // Verificar confirmação
-        existingConfirm = await prisma.userRadarAction.findUnique({
-          where: {
-            userId_radarId_action: {
-              userId: body.userId,
-              radarId: id,
-              action: "confirm",
-            },
-          },
+    // Verificar se o usuário já fez QUALQUER ação (confirm ou deny) - 1 por usuário/radar
+    const existingAction = await prisma.userRadarAction.findFirst({
+      where: {
+        userId: body.userId,
+        radarId: id,
+      },
+    });
+    if (existingAction) {
+      if (existingAction.action === "confirm") {
+        return reply.code(400).send({
+          error: "Você já confirmou este radar",
+          alreadyConfirmed: true,
         });
-
-        if (existingConfirm) {
-          return reply.code(400).send({
-            error: "Você já confirmou este radar",
-            alreadyConfirmed: true,
-          });
-        }
-
-        // Verificar negação - se já negou, não pode confirmar (mutuamente exclusivo)
-        existingDeny = await prisma.userRadarAction.findUnique({
-          where: {
-            userId_radarId_action: {
-              userId: body.userId,
-              radarId: id,
-              action: "deny",
-            },
-          },
-        });
-
-        if (existingDeny) {
-          return reply.code(400).send({
-            error:
-              "Você já negou este radar. Não é possível confirmar um radar que foi negado.",
-            alreadyDenied: true,
-          });
-        }
       }
-    } catch (error) {
-      // Prisma Client não regenerado ainda, continuar sem verificação
-      console.warn(
-        "⚠️ userRadarAction não disponível, pulando verificação:",
-        error
-      );
+      return reply.code(400).send({
+        error:
+          "Você já negou este radar. Não é possível confirmar um radar que foi negado.",
+        alreadyDenied: true,
+      });
     }
 
-    // Registrar a confirmação
+    // Registrar a confirmação (1 ação por usuário/radar)
     try {
-      if (prisma.userRadarAction) {
-        await prisma.userRadarAction.create({
-          data: {
-            userId: body.userId,
-            radarId: id,
-            action: "confirm",
-          },
-        });
+      await prisma.userRadarAction.create({
+        data: {
+          userId: body.userId,
+          radarId: id,
+          action: "confirm",
+        },
+      });
+    } catch (e: any) {
+      if (e?.code === "P2002") {
+        return reply.code(400).send({ error: "Você já reagiu a este radar", alreadyConfirmed: true });
       }
-    } catch (error) {
-      // Prisma Client não regenerado ainda, continuar sem registro
-      console.warn(
-        "⚠️ userRadarAction não disponível, pulando registro:",
-        error
-      );
+      throw e;
     }
 
     // Incrementar confirmações (preservar tipoRadar e outros campos)
@@ -1038,74 +1005,41 @@ export async function radarRoutes(fastify: FastifyInstance) {
       return reply.code(404).send({ error: "Radar not found" });
     }
 
-    // Verificar se o usuário já fez QUALQUER ação (confirm ou deny) - mutuamente exclusivo
-    // TODO: Reativar quando Prisma Client for regenerado
-    let existingConfirm = null;
-    let existingDeny = null;
-    try {
-      if (prisma.userRadarAction) {
-        // Verificar negação
-        existingDeny = await prisma.userRadarAction.findUnique({
-          where: {
-            userId_radarId_action: {
-              userId: body.userId,
-              radarId: id,
-              action: "deny",
-            },
-          },
+    // Verificar se o usuário já fez QUALQUER ação (confirm ou deny) - 1 por usuário/radar
+    const existingAction = await prisma.userRadarAction.findFirst({
+      where: {
+        userId: body.userId,
+        radarId: id,
+      },
+    });
+    if (existingAction) {
+      if (existingAction.action === "deny") {
+        return reply.code(400).send({
+          error: "Você já negou este radar",
+          alreadyDenied: true,
         });
-
-        if (existingDeny) {
-          return reply.code(400).send({
-            error: "Você já negou este radar",
-            alreadyDenied: true,
-          });
-        }
-
-        // Verificar confirmação - se já confirmou, não pode negar (mutuamente exclusivo)
-        existingConfirm = await prisma.userRadarAction.findUnique({
-          where: {
-            userId_radarId_action: {
-              userId: body.userId,
-              radarId: id,
-              action: "confirm",
-            },
-          },
-        });
-
-        if (existingConfirm) {
-          return reply.code(400).send({
-            error:
-              "Você já confirmou este radar. Não é possível negar um radar que foi confirmado.",
-            alreadyConfirmed: true,
-          });
-        }
       }
-    } catch (error) {
-      // Prisma Client não regenerado ainda, continuar sem verificação
-      console.warn(
-        "⚠️ userRadarAction não disponível, pulando verificação:",
-        error
-      );
+      return reply.code(400).send({
+        error:
+          "Você já confirmou este radar. Não é possível negar um radar que foi confirmado.",
+        alreadyConfirmed: true,
+      });
     }
 
-    // Registrar a negação
+    // Registrar a negação (1 ação por usuário/radar)
     try {
-      if (prisma.userRadarAction) {
-        await prisma.userRadarAction.create({
-          data: {
-            userId: body.userId,
-            radarId: id,
-            action: "deny",
-          },
-        });
+      await prisma.userRadarAction.create({
+        data: {
+          userId: body.userId,
+          radarId: id,
+          action: "deny",
+        },
+      });
+    } catch (e: any) {
+      if (e?.code === "P2002") {
+        return reply.code(400).send({ error: "Você já reagiu a este radar", alreadyDenied: true });
       }
-    } catch (error) {
-      // Prisma Client não regenerado ainda, continuar sem registro
-      console.warn(
-        "⚠️ userRadarAction não disponível, pulando registro:",
-        error
-      );
+      throw e;
     }
 
     // Incrementar negações (preservar tipoRadar e outros campos)
