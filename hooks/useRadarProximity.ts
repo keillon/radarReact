@@ -8,6 +8,7 @@ import {
   MAX_ROUTE_DISTANCE_METERS,
   RADAR_DIRECT_FILTER_METERS,
   roundDistanceTo10,
+  roundDistanceTo5,
 } from "../utils/radarGeometry";
 
 type UseRadarProximityInput = {
@@ -33,6 +34,8 @@ const MOVEMENT_THRESHOLD_METERS = 2;
 const ALONG_ROUTE_WINDOW_METERS = 800;
 const MODAL_WINDOW_METERS = 300;
 const PASS_DISTANCE_METERS = 10;
+/** Se o radar estiver a até esta distância (m) do usuário em linha reta, considera para alerta mesmo fora da rota (ex.: radar do admin a 30m). */
+const DIRECT_ALERT_RANGE_METERS = 6;
 
 export function useRadarProximity({
   currentLocation,
@@ -121,32 +124,33 @@ export function useRadarProximity({
 
     previousLocationRef.current = checkLocation;
 
-    const directCandidates: Radar[] = [];
-      for (const radar of radars) {
-        if (!radar?.id) continue;
-        if (passedRadarIdsRef.current.has(radar.id)) continue;
-        if (radar.situacao && radar.situacao.toLowerCase().includes("inativ")) continue;
-        const directDistance = calculateDistance(
-          checkLocation.latitude,
-          checkLocation.longitude,
-          radar.latitude,
-          radar.longitude
-        );
-        if (directDistance <= RADAR_DIRECT_FILTER_METERS) {
-          directCandidates.push(radar);
-        }
+    type DirectCandidate = { radar: Radar; directDistance: number };
+    const directCandidates: DirectCandidate[] = [];
+    for (const radar of radars) {
+      if (!radar?.id) continue;
+      if (passedRadarIdsRef.current.has(radar.id)) continue;
+      if (radar.situacao && radar.situacao.toLowerCase().includes("inativ")) continue;
+      const directDistance = calculateDistance(
+        checkLocation.latitude,
+        checkLocation.longitude,
+        radar.latitude,
+        radar.longitude
+      );
+      if (directDistance <= RADAR_DIRECT_FILTER_METERS) {
+        directCandidates.push({ radar, directDistance });
       }
+    }
 
-      type Candidate = {
-        radar: Radar;
-        distance: number;
-      };
-      const candidates: Candidate[] = [];
-      for (const radar of directCandidates) {
-        const radarPoint = { latitude: radar.latitude, longitude: radar.longitude };
-        const routeDistance = calculateDistanceToRoute(radarPoint, routePoints);
-        if (routeDistance > MAX_ROUTE_DISTANCE_METERS) continue;
+    type Candidate = {
+      radar: Radar;
+      distance: number;
+    };
+    const candidates: Candidate[] = [];
+    for (const { radar, directDistance } of directCandidates) {
+      const radarPoint = { latitude: radar.latitude, longitude: radar.longitude };
+      const routeDistance = calculateDistanceToRoute(radarPoint, routePoints);
 
+      if (routeDistance <= MAX_ROUTE_DISTANCE_METERS) {
         const routeDistanceResult = calculateDistanceAlongRouteWithCumulative(
           checkLocation,
           radarPoint,
@@ -161,11 +165,15 @@ export function useRadarProximity({
         const atRadarWindow = routeDistanceResult.atRadarWindow;
         if (!atRadarWindow && (alongRouteDistance < 0 || alongRouteDistance > ALONG_ROUTE_WINDOW_METERS)) continue;
         const displayDistance = atRadarWindow ? 0 : roundDistanceTo10(alongRouteDistance);
+        candidates.push({ radar, distance: displayDistance });
+      } else if (directDistance <= DIRECT_ALERT_RANGE_METERS) {
+        // Radar perto do usuário em linha reta mas fora da rota (ex.: criado pelo admin): usa distância direta para alerta/modal
         candidates.push({
           radar,
-          distance: displayDistance,
+          distance: roundDistanceTo10(directDistance),
         });
       }
+    }
 
       candidates.sort((a, b) => a.distance - b.distance);
 
@@ -207,13 +215,10 @@ export function useRadarProximity({
       }
 
       const nextDistance = selectedCandidate.distance;
-      if (lastDistanceRef.current != null && Math.abs(lastDistanceRef.current - nextDistance) < MOVEMENT_THRESHOLD_METERS) {
-        return;
-      }
-      lastDistanceRef.current = nextDistance;
-
       const selectedRadar = selectedCandidate.radar;
       const justPassed = nextDistance < PASS_DISTANCE_METERS;
+      const displayDistance = justPassed ? 0 : roundDistanceTo5(nextDistance);
+      lastDistanceRef.current = nextDistance;
       if (justPassed) {
         passedRadarIdsRef.current.add(selectedRadar.id);
       }
@@ -226,7 +231,7 @@ export function useRadarProximity({
       }
 
       setRadarAtivo(selectedRadar);
-      setDistanciaAtual(justPassed ? 0 : nextDistance);
+      setDistanciaAtual(justPassed ? 0 : displayDistance);
       setAcabouDePassar(justPassed);
       setDeveTocarAlerta(shouldPlayAlert);
       setDeveAbrirModal(nextDistance <= MODAL_WINDOW_METERS);

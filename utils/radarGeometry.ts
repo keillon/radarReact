@@ -135,3 +135,9 @@ export const roundDistanceTo10 = (meters: number): number => {
   if (meters <= 0) return 0;
   return Math.round(meters / 10) * 10;
 };
+
+/** Arredonda para múltiplos de 5m; uso no modal para atualizar metros com mais frequência. */
+export const roundDistanceTo5 = (meters: number): number => {
+  if (meters <= 0) return 0;
+  return Math.round(meters / 5) * 5;
+};
