@@ -3845,7 +3845,7 @@ index 4c3d3c3..b0dd903 100644
 +    </style>
  </resources>
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/ios/MapboxNavigationView.swift b/node_modules/@pawan-pk/react-native-mapbox-navigation/ios/MapboxNavigationView.swift
-index 05c943f..7a8457d 100644
+index 05c943f..7488f27 100644
 --- a/node_modules/@pawan-pk/react-native-mapbox-navigation/ios/MapboxNavigationView.swift
 +++ b/node_modules/@pawan-pk/react-native-mapbox-navigation/ios/MapboxNavigationView.swift
 @@ -2,6 +2,8 @@
@@ -3922,7 +3922,7 @@ index 05c943f..7a8457d 100644
              }
  
              strongSelf.embedding = false
-@@ -191,4 +224,387 @@ public class MapboxNavigationView: UIView, NavigationViewControllerDelegate {
+@@ -191,4 +224,398 @@ public class MapboxNavigationView: UIView, NavigationViewControllerDelegate {
          ])
          return true;
      }
@@ -4037,17 +4037,28 @@ index 05c943f..7a8457d 100644
 +    private func ensureRadarImagesInStyle(style: Style) {
 +        let placas = [0, 10] + Array(stride(from: 20, through: 160, by: 10))
 +        let iconIds = ["radar_semaforico", "radar_movel", "radar_fixo"] + placas.map { "placa\($0)" }
++        let searchDirs: [String?] = ["RadarImages", "assets/images", nil]
 +        for id in iconIds {
 +            if style.imageExists(withId: id) { continue }
 +            let camel = id.split(separator: "_").enumerated().map { $0.offset == 0 ? String($0.element) : String($0.element).capitalized }.joined()
-+            let candidates = [id, camel, "radarSemaforico", "radarMovel", "radarFixo", "assets_images_\(id)"]
++            var candidates = [id, camel, "radarSemaforico", "radarMovel", "radarFixo", "assets_images_\(id)"]
++            if id == "radar_fixo" { candidates.append("placa60") }
 +            var added = false
-+            for name in candidates {
-+                if let img = UIImage(named: name) ?? (Bundle.main.path(forResource: name, ofType: "png").flatMap { UIImage(contentsOfFile: $0) }) {
-+                    try? style.addImage(img, id: id, sdf: false, stretchX: [], stretchY: [], content: nil)
-+                    added = true
-+                    break
++            for dir in searchDirs {
++                for name in candidates {
++                    let path = dir.map { Bundle.main.path(forResource: name, ofType: "png", inDirectory: $0) } ?? Bundle.main.path(forResource: name, ofType: "png")
++                    if let p = path, let img = UIImage(contentsOfFile: p) {
++                        try? style.addImage(img, id: id, sdf: false, stretchX: [], stretchY: [], content: nil)
++                        added = true
++                        break
++                    }
++                    if dir == nil, let img = UIImage(named: name) {
++                        try? style.addImage(img, id: id, sdf: false, stretchX: [], stretchY: [], content: nil)
++                        added = true
++                        break
++                    }
 +                }
++                if added { break }
 +            }
 +            if !added, let fallback = makePlaceholderRadarImage() {
 +                try? style.addImage(fallback, id: id, sdf: false, stretchX: [], stretchY: [], content: nil)

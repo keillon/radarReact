@@ -23,11 +23,19 @@
 - **onRadarTap** ao tocar em radar
 - Idioma e unidade em pt-BR
 
+## Imagens de radar (100% configurado)
+
+- **Android**: `android/app/build.gradle` → task `copyRadarIconsToDrawable` copia `assets/images/` para `drawable/`
+- **iOS**: 
+  - Script `ios/scripts/copy-radar-icons.sh` (Run Script "Copy Radar Icons") copia para `RadarBot/RadarImages/`
+  - Pasta `RadarImages` adicionada ao Xcode como recurso
+  - Rode o build uma vez para popular; o script roda automaticamente em cada build
+
 ## O que ainda falta no iOS
 
-1. **Rotas alternativas com callouts** – UI customizada do Android
-2. **RecenterTrigger, TTS voice** – Controles extras
-3. **Imagens de radar**: Adicione `assets/images/*.png` (placa20–160, radarMovel, radarSemaforico) ao Xcode ou use o placeholder (círculo amarelo) que é gerado quando as imagens não existem no bundle
+1. **bottomPadding**: prop recebida mas não aplicada à câmera (Android usa `viewportDataSource.followingPadding`; API iOS difere)
+2. **Rotas alternativas com callouts** – UI customizada do Android
+3. **RecenterTrigger, TTS voice** – Controles extras
 
 ## Como alcançar paridade
 
