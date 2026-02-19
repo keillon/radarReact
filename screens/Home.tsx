@@ -189,7 +189,7 @@ const normalizeRadarPayload = (raw: any): Radar | null => {
 
 export default function Home() {
   const { soundEnabled, volume, updateSettings, ttsVoiceId } = useSettings();
-  const { isSubscribed, isInFreePeriod } = useIAP();
+  const { isSubscribed, isInFreePeriod, hasFullAccess, isLoading: iapLoading } = useIAP();
   type RadarArrayUpdater = Radar[] | ((prev: Radar[]) => Radar[]);
   type RadarIdArrayUpdater = string[] | ((prev: string[]) => string[]);
 
@@ -1660,10 +1660,14 @@ export default function Home() {
   }, [rearmRadarRuntimeState, syncAllRadarsFromCurrentLocation]);
 
   // Highlight só durante navegação: um radar por vez (o ativo). Ao passar, remove pulse.
+  // SEMPRE incluir o radar do modal (radarAtivo/nearestRadar) para evitar highlight ausente até "alguma atualização"
   const nearbyRadarIdsForMap = useMemo(() => {
     if (!isNavigating) return new Set<string>();
-    return proximityNearbyRadarIds;
-  }, [isNavigating, proximityNearbyRadarIds]);
+    const base = new Set(proximityNearbyRadarIds);
+    const activeId = radarAtivo?.id ?? nearestRadar?.radar?.id;
+    if (activeId) base.add(activeId);
+    return base;
+  }, [isNavigating, proximityNearbyRadarIds, radarAtivo?.id, nearestRadar?.radar?.id]);
 
   useEffect(() => {
     setNearbyRadarIds(nearbyRadarIdsForMap);
@@ -1699,10 +1703,10 @@ export default function Home() {
     [nearbyRadarIds],
   );
 
-  // Durante navegação: passar proximityNearbyRadarIds DIRETO ao nativo (sem delay do useEffect)
+  // Durante navegação: passar nearbyRadarIdsForMap (inclui radar do modal) ao nativo
   const nearbyRadarIdsArrayForNav = useMemo(
-    () => (isNavigating ? Array.from(proximityNearbyRadarIds).sort() : []),
-    [isNavigating, proximityNearbyRadarIds],
+    () => (isNavigating ? Array.from(nearbyRadarIdsForMap).sort() : []),
+    [isNavigating, nearbyRadarIdsForMap],
   );
 
   const closeRadarFeedbackCard = useCallback(() => {
@@ -1891,7 +1895,7 @@ export default function Home() {
 
     if (lastNearbyRadarIdRef.current !== activeRadar.id) {
       lastNearbyRadarIdRef.current = activeRadar.id;
-      setNearbyRadarIds(proximityNearbyRadarIds);
+      // nearbyRadarIdsForMap (via useEffect) já inclui radarAtivo/nearestRadar — highlight sincronizado
     }
 
     // Alerta sonoro entre 40m e 5m: dispara uma vez quando na faixa (usa soundEnabled reativo)
@@ -3437,6 +3441,25 @@ export default function Home() {
       <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, alignItems: "center" }} pointerEvents="box-none">
         <AdBanner visible={isInFreePeriod && !isSubscribed} />
       </View>
+
+      {/* Bloqueio: período grátis encerrado, só PRO libera */}
+      {!iapLoading && !hasFullAccess && (
+        <View style={styles.blockOverlay} pointerEvents="box-none">
+          <View style={styles.blockOverlayCard}>
+            <Text style={styles.blockOverlayTitle}>Período grátis encerrado</Text>
+            <Text style={styles.blockOverlayText}>
+              Assine o RadarZone PRO para continuar usando alertas de radares, navegação com voz e todas as funcionalidades sem anúncios.
+            </Text>
+            <TouchableOpacity
+              style={styles.blockOverlayButton}
+              onPress={() => mainMapRef.current?.openMenuToSubscription?.()}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.blockOverlayButtonText}>Assinar PRO</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -3551,6 +3574,59 @@ const styles = StyleSheet.create({
     alignItems: "center",
     zIndex: 9999,
     elevation: 9999,
+  },
+  blockOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.75)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 10000,
+    elevation: 10000,
+    padding: 24,
+    pointerEvents: "none",
+  },
+  blockOverlayCard: {
+    backgroundColor: colors.backgroundLight,
+    borderRadius: 16,
+    padding: 28,
+    maxWidth: 340,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 12,
+  },
+  blockOverlayTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: colors.textDark,
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  blockOverlayText: {
+    fontSize: 15,
+    color: colors.textSecondary,
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  blockOverlayButton: {
+    backgroundColor: colors.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    borderRadius: 12,
+    minHeight: 48,
+    justifyContent: "center",
+  },
+  blockOverlayButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#111111",
   },
   loadingContainer: {
     backgroundColor: colors.backgroundLight,
@@ -3761,6 +3837,7 @@ const styles = StyleSheet.create({
   },
   reportModalSubmit: {
     flex: 1,
+    minHeight: 48,
     paddingVertical: 14,
     borderRadius: 12,
     backgroundColor: colors.primary,
@@ -3775,6 +3852,6 @@ const styles = StyleSheet.create({
   reportModalSubmitText: {
     fontSize: 18,
     fontWeight: "bold",
-    color: colors.text,
+    color: "#111111",
   },
 });
