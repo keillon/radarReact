@@ -1,5 +1,6 @@
 import { FastifyInstance } from "fastify";
 import { prisma } from "../utils/prisma";
+import { requireAdmin } from "../middlewares/adminAuth";
 
 // Expo Push Notification Service URL
 // Esta é a URL pública oficial da Expo - não precisa estar no .env
@@ -181,8 +182,8 @@ export async function notificationRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // Enviar notificação (endpoint admin)
-  fastify.post("/admin/notifications/send", async (request, reply) => {
+  // Enviar notificação (endpoint admin — protegido)
+  fastify.post("/admin/notifications/send", { preHandler: [requireAdmin] }, async (request, reply) => {
     const body = request.body as SendNotificationBody;
 
     if (!body.title || !body.body) {
@@ -221,8 +222,8 @@ export async function notificationRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // Listar todos os tokens registrados (endpoint admin)
-  fastify.get("/admin/notifications/tokens", async (request, reply) => {
+  // Listar todos os tokens registrados (endpoint admin — protegido)
+  fastify.get("/admin/notifications/tokens", { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const tokens = await prisma.deviceToken.findMany({
         orderBy: { createdAt: "desc" },
@@ -246,8 +247,8 @@ export async function notificationRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // Remover token (endpoint admin)
-  fastify.delete("/admin/notifications/tokens/:id", async (request, reply) => {
+  // Remover token (endpoint admin — protegido)
+  fastify.delete("/admin/notifications/tokens/:id", { preHandler: [requireAdmin] }, async (request, reply) => {
     const { id } = request.params as { id: string };
 
     try {

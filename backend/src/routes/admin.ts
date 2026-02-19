@@ -1,8 +1,14 @@
 import { FastifyInstance } from "fastify";
 import path from "path";
 import fs from "fs";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import { prisma } from "../utils/prisma";
 import { getCsvImportStatus, importRadarCsv } from "../services/csvRadarImport";
 import { invalidateRadarCache } from "./radars";
+import { requireAdmin } from "../middlewares/adminAuth";
+
+const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-in-production";
 
 /**
  * Painel Admin HTML simples para enviar notificações
@@ -174,6 +180,13 @@ const adminHTML = `
     }
     .tab-panel { display: none; }
     .tab-panel.active { display: block; }
+    .login-panel {
+      max-width: 400px;
+      margin: 0 auto;
+    }
+    .login-panel h1 {
+      margin-bottom: 24px;
+    }
     .csv-drop {
       border: 2px dashed #cbd5e1;
       border-radius: 10px;
@@ -195,7 +208,27 @@ const adminHTML = `
 </head>
 <body>
   <div class="container">
+    <div id="loginPanel" class="login-panel" style="display:block;">
+      <h1>🔐 Painel Admin - Login</h1>
+      <form id="loginForm">
+        <div class="form-group">
+          <label for="loginEmail">Email</label>
+          <input type="email" id="loginEmail" name="email" required placeholder="admin@exemplo.com">
+        </div>
+        <div class="form-group">
+          <label for="loginPassword">Senha</label>
+          <input type="password" id="loginPassword" name="password" required placeholder="••••••••">
+        </div>
+        <div id="loginError" class="message error" style="display:none;"></div>
+        <button type="submit" id="loginBtn">Entrar</button>
+      </form>
+    </div>
+
+    <div id="adminPanel" style="display:none;">
     <h1>🚨 Painel Admin - Notificações</h1>
+    <p style="text-align:right; margin-bottom:12px; font-size:13px; color:#666;">
+      <span id="adminEmail"></span> <a href="#" id="logoutBtn" style="margin-left:8px; color:#dc3545;">Sair</a>
+    </p>
 
     <div class="tabs">
       <button class="tab-btn active" data-tab="notifications">Notificações</button>
@@ -255,10 +288,61 @@ const adminHTML = `
 
       <div id="csvStatus" class="csv-meta">Carregando status...</div>
     </div>
+    </div>
   </div>
 
   <script>
     const API_URL = window.location.origin;
+    const TOKEN_KEY = 'radarAdminToken';
+    const USER_KEY = 'radarAdminUser';
+
+    function getToken() {
+      return localStorage.getItem(TOKEN_KEY);
+    }
+
+    function setToken(token) {
+      if (token) localStorage.setItem(TOKEN_KEY, token);
+      else { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(USER_KEY); }
+    }
+
+    function setUser(user) {
+      if (user) localStorage.setItem(USER_KEY, JSON.stringify(user));
+    }
+
+    function getUser() {
+      try {
+        const u = localStorage.getItem(USER_KEY);
+        return u ? JSON.parse(u) : null;
+      } catch { return null; }
+    }
+
+    function isLoggedIn() {
+      return !!getToken();
+    }
+
+    function showLogin() {
+      document.getElementById('loginPanel').style.display = 'block';
+      document.getElementById('adminPanel').style.display = 'none';
+    }
+
+    function showAdmin(email) {
+      document.getElementById('loginPanel').style.display = 'none';
+      document.getElementById('adminPanel').style.display = 'block';
+      document.getElementById('adminEmail').textContent = email || '';
+    }
+
+    async function adminFetch(url, opts) {
+      const token = getToken();
+      const headers = { ...(opts?.headers || {}), 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = 'Bearer ' + token;
+      const res = await fetch(url, { ...opts, headers });
+      if (res.status === 401 || res.status === 403) {
+        setToken(null);
+        showLogin();
+        throw new Error('Sessão expirada. Faça login novamente.');
+      }
+      return res;
+    }
 
     function switchTab(tabId) {
       document.querySelectorAll('.tab-btn').forEach((btn) => {
@@ -269,10 +353,56 @@ const adminHTML = `
       });
     }
 
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('loginBtn');
+      const errEl = document.getElementById('loginError');
+      btn.disabled = true;
+      errEl.style.display = 'none';
+      try {
+        const res = await fetch(API_URL + '/admin/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: document.getElementById('loginEmail').value,
+            password: document.getElementById('loginPassword').value
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Login falhou');
+        if (!data.token) throw new Error('Resposta inválida');
+        setToken(data.token);
+        setUser(data.user || { email: document.getElementById('loginEmail').value });
+        showAdmin((data.user && data.user.email) || document.getElementById('loginEmail').value);
+        loadStats();
+        loadCsvStatus();
+      } catch (err) {
+        errEl.textContent = err.message || 'Erro ao fazer login';
+        errEl.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    document.getElementById('logoutBtn').addEventListener('click', (e) => {
+      e.preventDefault();
+      setToken(null);
+      showLogin();
+    });
+
+    if (!isLoggedIn()) {
+      showLogin();
+    } else {
+      showAdmin((getUser() && getUser().email) || '');
+      loadStats();
+      loadCsvStatus();
+    }
+
     // Carregar estatísticas e tokens
     async function loadStats() {
+      if (!isLoggedIn()) return;
       try {
-        const response = await fetch(API_URL + '/admin/notifications/tokens');
+        const response = await adminFetch(API_URL + '/admin/notifications/tokens');
         
         if (!response.ok) {
           throw new Error(\`Erro HTTP: \${response.status} \${response.statusText}\`);
@@ -296,9 +426,10 @@ const adminHTML = `
     }
 
     async function loadCsvStatus() {
+      if (!isLoggedIn()) return;
       const container = document.getElementById('csvStatus');
       try {
-        const response = await fetch(API_URL + '/admin/csv/status');
+        const response = await adminFetch(API_URL + '/admin/csv/status');
         const data = await response.json();
         if (!response.ok || !data.success) throw new Error(data.error || 'Falha ao carregar status');
 
@@ -355,7 +486,7 @@ const adminHTML = `
       }
 
       try {
-        const response = await fetch(API_URL + \`/admin/notifications/tokens/\${id}\`, {
+        const response = await adminFetch(API_URL + '/admin/notifications/tokens/' + id, {
           method: 'DELETE'
         });
         const data = await response.json();
@@ -393,7 +524,7 @@ const adminHTML = `
       const body = document.getElementById('body').value;
 
       try {
-        const response = await fetch(API_URL + '/admin/notifications/send', {
+        const response = await adminFetch(API_URL + '/admin/notifications/send', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -439,7 +570,7 @@ const adminHTML = `
       btn.textContent = 'Processando CSV...';
       try {
         const text = await file.text();
-        const response = await fetch(API_URL + '/admin/csv/upload', {
+        const response = await adminFetch(API_URL + '/admin/csv/upload', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -487,12 +618,53 @@ const adminHTML = `
 `;
 
 export async function adminRoutes(fastify: FastifyInstance) {
-  // Servir painel admin
-  fastify.get("/admin", async (request, reply) => {
+  // Login admin — não protegido
+  fastify.post("/admin/auth/login", async (request, reply) => {
+    try {
+      const body = request.body as { email: string; password: string };
+      if (!body.email || !body.password) {
+        return reply.code(400).send({ error: "Email e senha são obrigatórios" });
+      }
+      const user = await prisma.user.findUnique({
+        where: { email: body.email.trim().toLowerCase() },
+      });
+      if (!user) {
+        return reply.code(401).send({ error: "Email ou senha incorretos" });
+      }
+      if (user.role !== "admin") {
+        return reply.code(403).send({ error: "Acesso negado. Apenas administradores." });
+      }
+      const valid = await bcrypt.compare(body.password, user.password);
+      if (!valid) {
+        return reply.code(401).send({ error: "Email ou senha incorretos" });
+      }
+      const token = jwt.sign(
+        { userId: user.id, email: user.email },
+        JWT_SECRET,
+        { expiresIn: "7d" }
+      );
+      return reply.send({
+        success: true,
+        token,
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+        },
+      });
+    } catch (error: any) {
+      fastify.log.error({ error }, "Erro no login admin");
+      return reply.code(500).send({ error: "Erro ao fazer login" });
+    }
+  });
+
+  // Servir painel admin (HTML — sem proteção; a própria página exige login)
+  fastify.get("/admin", async (_request, reply) => {
     reply.type("text/html").send(adminHTML);
   });
 
-  fastify.get("/admin/csv/status", async (_request, reply) => {
+  // Rotas protegidas — exigem token admin
+  fastify.get("/admin/csv/status", { preHandler: [requireAdmin] }, async (_request, reply) => {
     try {
       const status = getCsvImportStatus();
       return reply.send({ success: true, status });
@@ -505,7 +677,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
     }
   });
 
-  fastify.post("/admin/csv/upload", async (request, reply) => {
+  fastify.post("/admin/csv/upload", { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const body = request.body as {
         csvText?: string;

@@ -1529,10 +1529,9 @@ export default function Home() {
           rearmRadarRuntimeState(Array.from(overlayUpserts.keys()));
         }
 
+        // Só forçar refetch GeoJSON ao adicionar/remover radares — NÃO em radar:update (confirm/deny)
+        // Evita piscar/desaparecer radares quando usuário confirma/nega (já temos merge local)
         if (overlayDeletes.size > 0 || baseDeletes.size > 0) {
-          refreshGeoJsonRef.current();
-        }
-        if (baseUpserts.size > 0 && isNavigatingRef.current) {
           refreshGeoJsonRef.current();
         }
         if (overlayUpserts.size > 0 || overlayDeletes.size > 0) {
@@ -1698,6 +1697,12 @@ export default function Home() {
   const nearbyRadarIdsArray = useMemo(
     () => Array.from(nearbyRadarIds).sort(),
     [nearbyRadarIds],
+  );
+
+  // Durante navegação: passar proximityNearbyRadarIds DIRETO ao nativo (sem delay do useEffect)
+  const nearbyRadarIdsArrayForNav = useMemo(
+    () => (isNavigating ? Array.from(proximityNearbyRadarIds).sort() : []),
+    [isNavigating, proximityNearbyRadarIds],
   );
 
   const closeRadarFeedbackCard = useCallback(() => {
@@ -2265,7 +2270,7 @@ export default function Home() {
         // @ts-ignore
         overlayRadars={mapboxOverlayForNative}
         // @ts-ignore
-        nearbyRadarIds={nearbyRadarIdsArray}
+        nearbyRadarIds={nearbyRadarIdsArrayForNav}
         // @ts-ignore
         bottomPadding={nearestRadar ? (Platform.OS === "ios" ? 180 : 240) : 0}
         onLocationChange={handleLocationChange}
@@ -2330,7 +2335,7 @@ export default function Home() {
     updateSettings,
     mapboxBaseForNative,
     mapboxOverlayForNative,
-    nearbyRadarIdsArray,
+    nearbyRadarIdsArrayForNav,
     nearestRadar,
     handleLocationChange,
     handleRouteProgressChange,

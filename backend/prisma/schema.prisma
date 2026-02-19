@@ -53,6 +53,7 @@ model User {
   email     String   @unique
   password  String // Hash da senha
   name      String?
+  role      String   @default("user") // "user" | "admin" — admin acessa painel /admin
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

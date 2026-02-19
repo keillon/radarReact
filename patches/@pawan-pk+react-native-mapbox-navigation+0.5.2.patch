@@ -75,7 +75,7 @@ index 7d28df3..f6c5272 100644
    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
    implementation 'androidx.cardview:cardview:1.0.0'
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
-index 41a3ba0..52dd7b5 100644
+index 41a3ba0..b51b05f 100644
 --- a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
 +++ b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationView.kt
 @@ -3,25 +3,39 @@ package com.mapboxnavigation
@@ -146,7 +146,7 @@ index 41a3ba0..52dd7b5 100644
  import com.mapbox.navigation.ui.maps.route.line.api.MapboxRouteLineApi
  import com.mapbox.navigation.ui.maps.route.line.api.MapboxRouteLineView
  import com.mapbox.navigation.ui.maps.route.line.model.MapboxRouteLineApiOptions
-@@ -80,10 +94,24 @@ import com.mapbox.navigation.voice.model.SpeechError
+@@ -80,41 +94,58 @@ import com.mapbox.navigation.voice.model.SpeechError
  import com.mapbox.navigation.voice.model.SpeechValue
  import com.mapbox.navigation.voice.model.SpeechVolume
  import com.mapboxnavigation.databinding.NavigationViewBinding
@@ -172,7 +172,9 @@ index 41a3ba0..52dd7b5 100644
    private companion object {
      private const val BUTTON_ANIMATION_DURATION = 1500L
    }
-@@ -93,28 +121,28 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+ 
+   private var origin: Point? = null
+   private var destination: Point? = null
 -  private var destinationTitle: String = "Destination"
 +  private var destinationTitle: String = "Destino"
    private var waypoints: List<Point> = listOf()
@@ -186,6 +188,11 @@ index 41a3ba0..52dd7b5 100644
 -   * Bindings to the example layout.
 -   */
 -  private var binding: NavigationViewBinding = NavigationViewBinding.inflate(LayoutInflater.from(context), this, true)
++  /** Quando definido, instruções de voz são enviadas ao JS (onVoiceInstructionText) para usar react-native-tts com a voz do usuário. */
++  private var ttsVoiceId: String? = null
++  /** Uma vez true, todas as instruções de rota vão para o JS (voz do app); evita Mapbox sobrescrever após início da navegação. */
++  private var useAppVoicePreferred: Boolean = false
++
 +  /** Bindings to the example layout. */
 +  private var binding: NavigationViewBinding =
 +          NavigationViewBinding.inflate(LayoutInflater.from(context), this, true)
@@ -213,7 +220,7 @@ index 41a3ba0..52dd7b5 100644
  
    /**
     * Mapbox Navigation entry point. There should only be one instance of this object for the app.
-@@ -123,43 +149,74 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -123,43 +154,74 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
    private var mapboxNavigation: MapboxNavigation? = null
  
    /*
@@ -314,21 +321,22 @@ index 41a3ba0..52dd7b5 100644
    /**
     * Generates updates for the [MapboxManeuverView] to display the upcoming maneuver instructions
     * and remaining distance to the maneuver point.
-@@ -167,12 +224,26 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -167,12 +229,26 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
    private lateinit var maneuverApi: MapboxManeuverApi
  
    /**
 -   * Generates updates for the [MapboxTripProgressView] that include remaining time and distance to the destination.
 +   * Generates updates for the [MapboxTripProgressView] that include remaining time and distance to
 +   * the destination.
-+   */
-+  private var tripProgressApi: MapboxTripProgressApi? = null
-+
-+  /**
-+   * Speed Limit API: formata dados de limite de velocidade para o MapboxSpeedInfoView. Ver:
-+   * https://docs.mapbox.com/android/navigation/guides/ui-components/speed-limit/
     */
 -  private lateinit var tripProgressApi: MapboxTripProgressApi
++  private var tripProgressApi: MapboxTripProgressApi? = null
+ 
+   /**
+-   * Stores and updates the state of whether the voice instructions should be played as they come or muted.
++   * Speed Limit API: formata dados de limite de velocidade para o MapboxSpeedInfoView. Ver:
++   * https://docs.mapbox.com/android/navigation/guides/ui-components/speed-limit/
++   */
 +  private val speedInfoApi: MapboxSpeedInfoApi by lazy { MapboxSpeedInfoApi() }
 +
 +  /** Opções de formatação de distância (usadas também pelo Speed Limit API). */
@@ -336,15 +344,14 @@ index 41a3ba0..52dd7b5 100644
 +
 +  /** Volume da voz (0f a 1f). Respeitado quando não está mute. */
 +  private var voiceVolume: Float = 1f
- 
-   /**
--   * Stores and updates the state of whether the voice instructions should be played as they come or muted.
++
++  /**
 +   * Stores and updates the state of whether the voice instructions should be played as they come or
 +   * muted.
     */
    private var isVoiceInstructionsMuted = false
      set(value) {
-@@ -182,139 +253,135 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -182,139 +258,158 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
          voiceInstructionsPlayer?.volume(SpeechVolume(0f))
        } else {
          binding.soundButton.unmuteAndExtend(BUTTON_ANIMATION_DURATION)
@@ -414,19 +421,42 @@ index 41a3ba0..52dd7b5 100644
 -      )
 -    }
 +          MapboxNavigationConsumer<Expected<SpeechError, SpeechValue>> { expected ->
-+            expected.fold(
-+                    { error ->
-+                      // play the instruction via fallback text-to-speech engine
-+                      voiceInstructionsPlayer?.play(error.fallback, voiceInstructionsPlayerCallback)
-+                    },
-+                    { value ->
-+                      // play the sound file from the external generator
-+                      voiceInstructionsPlayer?.play(
-+                              value.announcement,
-+                              voiceInstructionsPlayerCallback
-+                      )
-+                    }
-+            )
++            val useAppVoice = useAppVoicePreferred || !ttsVoiceId.isNullOrBlank()
++            if (useAppVoice) {
++              val text: String? = expected.fold(
++                      { error ->
++                        val f = error.fallback
++                        (f.announcement.takeIf { !it.isNullOrBlank() } ?: f.ssmlAnnouncement) ?: ""
++                      },
++                      { value ->
++                        val a = value.announcement
++                        (a.announcement.takeIf { !it.isNullOrBlank() } ?: a.ssmlAnnouncement) ?: ""
++                      }
++              )
++              if (text != null && text.isNotBlank()) {
++                val ev = com.facebook.react.bridge.Arguments.createMap()
++                ev.putString("text", text)
++                safeEmitEvent("onVoiceInstructionText", ev)
++              }
++              expected.fold(
++                      { _ -> Unit },
++                      { value -> Unit.also { speechApi?.clean(value.announcement) } }
++              )
++            } else {
++              expected.fold(
++                      { error ->
++                        voiceInstructionsPlayer?.play(error.fallback, voiceInstructionsPlayerCallback)
++                        Unit
++                      },
++                      { value ->
++                        voiceInstructionsPlayer?.play(
++                                value.announcement,
++                                voiceInstructionsPlayerCallback
++                        )
++                        Unit
++                      }
++              )
++            }
 +          }
  
    /**
@@ -560,7 +590,7 @@ index 41a3ba0..52dd7b5 100644
     */
    private val routeArrowView: MapboxRouteArrowView by lazy {
      MapboxRouteArrowView(routeArrowOptions)
-@@ -323,54 +390,133 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -323,54 +418,133 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
    /**
     * Gets notified with location updates.
     *
@@ -736,7 +766,7 @@ index 41a3ba0..52dd7b5 100644
      // update the camera position to account for the progressed fragment of the route
      if (routeProgress.fractionTraveled.toDouble() != 0.0) {
        viewportDataSource.onRouteProgressChanged(routeProgress)
-@@ -378,57 +524,112 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -378,57 +552,112 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
      viewportDataSource.evaluate()
  
      // draw the upcoming maneuver arrow on the map
@@ -894,7 +924,7 @@ index 41a3ba0..52dd7b5 100644
    }
  
    /**
-@@ -436,39 +637,82 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -436,39 +665,82 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
     *
     * A change can mean:
     * - routes get changed with [MapboxNavigation.setNavigationRoutes]
@@ -1003,7 +1033,7 @@ index 41a3ba0..52dd7b5 100644
      }
    }
  
-@@ -477,156 +721,330 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -477,156 +749,316 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
    }
  
    private fun onCreate() {
@@ -1254,25 +1284,11 @@ index 41a3ba0..52dd7b5 100644
 +                    val pointCountEl = props?.get("point_count")
 +                    val pointCount = (pointCountEl as? com.google.gson.JsonPrimitive)?.asLong
 +                    if (pointCount != null && pointCount > 0L) {
-+                      // Cluster: flyTo no centro
-+                      binding.mapView.camera.easeTo(
-+                              com.mapbox.maps.CameraOptions.Builder()
-+                                      .center(com.mapbox.geojson.Point.fromLngLat(lng, lat))
-+                                      .zoom(17.5)
-+                                      .build(),
-+                              MapAnimationOptions.Builder().duration(800L).build()
-+                      )
++                      // Cluster: não mover câmera; usuário pode abrir o cluster sem perder foco na localização
 +                    } else {
-+                      // Radar individual — zoom 18 para ficar focado (câmera já elevada com radar em alerta)
++                      // Radar individual: não mover câmera; só emitir evento (recenter ao fechar modal)
 +                      val radarId = (props?.get("id") as? com.google.gson.JsonPrimitive)?.asString
 +                      if (radarId != null && radarId.isNotBlank()) {
-+                        binding.mapView.camera.easeTo(
-+                                com.mapbox.maps.CameraOptions.Builder()
-+                                        .center(com.mapbox.geojson.Point.fromLngLat(lng, lat))
-+                                        .zoom(18.0)
-+                                        .build(),
-+                                MapAnimationOptions.Builder().duration(800L).build()
-+                        )
 +                        val event = com.facebook.react.bridge.Arguments.createMap()
 +                        event.putString("id", radarId)
 +                        event.putDouble("latitude", lat)
@@ -1454,7 +1470,7 @@ index 41a3ba0..52dd7b5 100644
        puckBearingEnabled = true
        enabled = true
      }
-@@ -634,31 +1052,34 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -634,31 +1066,34 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
      startRoute()
    }
  
@@ -1509,7 +1525,7 @@ index 41a3ba0..52dd7b5 100644
      }
    }
  
-@@ -669,8 +1090,8 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -669,8 +1104,8 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
  
    private val measureAndLayout = Runnable {
      measure(
@@ -1520,7 +1536,7 @@ index 41a3ba0..52dd7b5 100644
      )
      layout(left, top, right, bottom)
    }
-@@ -687,53 +1108,94 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -687,53 +1122,94 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
      names.add(destinationTitle)
  
      mapboxNavigation?.requestRoutes(
@@ -1654,7 +1670,7 @@ index 41a3ba0..52dd7b5 100644
      // register event listeners
      mapboxNavigation?.registerRoutesObserver(routesObserver)
      mapboxNavigation?.registerArrivalObserver(arrivalObserver)
-@@ -741,39 +1203,48 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -741,39 +1217,48 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
      mapboxNavigation?.registerLocationObserver(locationObserver)
      mapboxNavigation?.registerVoiceInstructionsObserver(voiceInstructionsObserver)
  
@@ -1677,7 +1693,9 @@ index 41a3ba0..52dd7b5 100644
      mapboxNavigation?.unregisterVoiceInstructionsObserver(voiceInstructionsObserver)
 +    onDestroy()
 +  }
-+
+ 
+-    // Clear routs and end
+-    mapboxNavigation?.setNavigationRoutes(listOf())
 +  private fun startAutoRecenterTimer() {
 +    stopAutoRecenterTimer()
 +    autoRecenterRunnable = Runnable {
@@ -1688,9 +1706,7 @@ index 41a3ba0..52dd7b5 100644
 +    }
 +    autoRecenterRunnable?.let { autoRecenterHandler.postDelayed(it, AUTO_RECENTER_DELAY) }
 +  }
- 
--    // Clear routs and end
--    mapboxNavigation?.setNavigationRoutes(listOf())
++
 +  private fun stopAutoRecenterTimer() {
 +    autoRecenterRunnable?.let { autoRecenterHandler.removeCallbacks(it) }
 +    autoRecenterRunnable = null
@@ -1719,7 +1735,7 @@ index 41a3ba0..52dd7b5 100644
    }
  
    fun onDropViewInstance() {
-@@ -782,10 +1253,12 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -782,10 +1267,12 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
  
    fun setStartOrigin(origin: Point?) {
      this.origin = origin
@@ -1732,7 +1748,7 @@ index 41a3ba0..52dd7b5 100644
    }
  
    fun setDestinationTitle(title: String) {
-@@ -802,7 +1275,7 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -802,7 +1289,7 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
  
    fun setDirectionUnit(unit: String) {
      this.distanceUnit = unit
@@ -1741,7 +1757,7 @@ index 41a3ba0..52dd7b5 100644
    }
  
    fun setLocal(language: String) {
-@@ -817,7 +1290,1739 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -817,7 +1304,1757 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
      this.isVoiceInstructionsMuted = mute
    }
  
@@ -1765,6 +1781,23 @@ index 41a3ba0..52dd7b5 100644
 +    } catch (e: Exception) {
 +      Log.e("MapboxNavigationView", "Erro ao definir bottom padding", e)
 +    }
++  }
++
++  /** Quando este valor muda (ex.: JS incrementa ao fechar modal do radar), volta câmera a seguir o usuário */
++  fun setRecenterTrigger(value: Int) {
++    post {
++      try {
++        navigationCamera.requestNavigationCameraToFollowing()
++      } catch (e: Exception) {
++        Log.e("MapboxNavigationView", "Erro ao recentrar câmera", e)
++      }
++    }
++  }
++
++  fun setTtsVoiceId(voiceId: String?) {
++    val id = voiceId?.takeIf { it.isNotBlank() }
++    ttsVoiceId = id
++    useAppVoicePreferred = !id.isNullOrBlank()
 +  }
 +
 +  /** Base: CSV ao longo da rota — enviada UMA vez, nunca muda ao reportar */
@@ -3084,16 +3117,17 @@ index 41a3ba0..52dd7b5 100644
 +  }
 +
 +  private val PULSE_INTERVAL_MS = 120L
-+  private val PULSE_MIN_RADIUS = 22.0
-+  private val PULSE_MAX_RADIUS = 38.0
-+  private val PULSE_MIN_OPACITY = 0.25
-+  private val PULSE_MAX_OPACITY = 0.55
++  private val PULSE_MIN_RADIUS = 26.0
++  private val PULSE_MAX_RADIUS = 44.0
++  private val PULSE_MIN_OPACITY = 0.45
++  private val PULSE_MAX_OPACITY = 0.75
 +
 +  private fun buildHighlightFilterJson(): String {
 +    val ids = nearbyRadarIds.toList()
 +    if (ids.isEmpty()) return """["==", true, false]"""
 +    val escaped = ids.joinToString(",") { "\"${it.replace("\\", "\\\\").replace("\"", "\\\"")}\"" }
-+    return """["all", ["!", ["has", "point_count"]], ["in", ["get", "id"], ["literal", [$escaped]]]]"""
++    // to-string garante match mesmo se GeoJSON properties.id vier como número
++    return """["all", ["!", ["has", "point_count"]], ["in", ["to-string", ["get", "id"]], ["literal", [$escaped]]]]"""
 +  }
 +
 +  private fun buildHighlightFilterForBaseJson(): String {
@@ -3482,7 +3516,7 @@ index 41a3ba0..52dd7b5 100644
 +  }
  }
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationViewManager.kt b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationViewManager.kt
-index 03fad26..2a50098 100644
+index 03fad26..1586bc5 100644
 --- a/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationViewManager.kt
 +++ b/node_modules/@pawan-pk/react-native-mapbox-navigation/android/src/main/java/com/mapboxnavigation/MapboxNavigationViewManager.kt
 @@ -11,6 +11,10 @@ import com.mapbox.geojson.Point
@@ -3496,7 +3530,7 @@ index 03fad26..2a50098 100644
    override fun getName(): String {
      return NAME
    }
-@@ -25,13 +29,19 @@ class MapboxNavigationViewManager(private var reactContext: ReactApplicationCont
+@@ -25,13 +29,20 @@ class MapboxNavigationViewManager(private var reactContext: ReactApplicationCont
    }
  
    override fun getExportedCustomDirectEventTypeConstants(): MutableMap<String, Map<String, String>> {
@@ -3519,11 +3553,12 @@ index 03fad26..2a50098 100644
 +      .put("onRadarTap", MapBuilder.of("registrationName", "onRadarTap"))
 +      .put("onRouteChanged", MapBuilder.of("registrationName", "onRouteChanged"))
 +      .put("onMuteChange", MapBuilder.of("registrationName", "onMuteChange"))
++      .put("onVoiceInstructionText", MapBuilder.of("registrationName", "onVoiceInstructionText"))
 +      .build()
    }
  
    @ReactProp(name = "startOrigin")
-@@ -109,6 +119,101 @@ class MapboxNavigationViewManager(private var reactContext: ReactApplicationCont
+@@ -109,6 +120,111 @@ class MapboxNavigationViewManager(private var reactContext: ReactApplicationCont
      view?.setMute(value)
    }
  
@@ -3620,6 +3655,16 @@ index 03fad26..2a50098 100644
 +  @ReactProp(name = "bottomPadding")
 +  fun setBottomPadding(view: MapboxNavigationView?, value: Double) {
 +    view?.setBottomPadding(value)
++  }
++
++  @ReactProp(name = "recenterTrigger")
++  fun setRecenterTrigger(view: MapboxNavigationView?, value: Int) {
++    view?.setRecenterTrigger(value)
++  }
++
++  @ReactProp(name = "ttsVoiceId")
++  fun setTtsVoiceId(view: MapboxNavigationView?, value: String?) {
++    view?.setTtsVoiceId(value)
 +  }
 +
    companion object {
@@ -3783,6 +3828,21 @@ index 4c3d3c3..b0dd903 100644
 +        <item name="android:textSize">14sp</item>
 +    </style>
  </resources>
+diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/ios/MapboxNavigationView.swift b/node_modules/@pawan-pk/react-native-mapbox-navigation/ios/MapboxNavigationView.swift
+index 05c943f..44f77e1 100644
+--- a/node_modules/@pawan-pk/react-native-mapbox-navigation/ios/MapboxNavigationView.swift
++++ b/node_modules/@pawan-pk/react-native-mapbox-navigation/ios/MapboxNavigationView.swift
+@@ -60,8 +60,8 @@ public class MapboxNavigationView: UIView, NavigationViewControllerDelegate {
+     @objc var hideStatusView: Bool = false
+     @objc var mute: Bool = false
+     @objc var distanceUnit: NSString = "imperial"
+-    @objc var language: NSString = "us"
+-    @objc var destinationTitle: NSString = "Destination"
++    @objc var language: NSString = "pt-BR"
++    @objc var destinationTitle: NSString = "Destino"
+ 
+     @objc var onLocationChange: RCTDirectEventBlock?
+     @objc var onRouteProgressChange: RCTDirectEventBlock?
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/src/MapboxNavigation.tsx b/node_modules/@pawan-pk/react-native-mapbox-navigation/src/MapboxNavigation.tsx
 index e3d3f19..fcba4f4 100644
 --- a/node_modules/@pawan-pk/react-native-mapbox-navigation/src/MapboxNavigation.tsx
@@ -3846,7 +3906,7 @@ index e3d3f19..fcba4f4 100644
          />
        </View>
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/src/MapboxNavigationViewNativeComponent.ts b/node_modules/@pawan-pk/react-native-mapbox-navigation/src/MapboxNavigationViewNativeComponent.ts
-index 14196df..5617171 100644
+index 14196df..cd27085 100644
 --- a/node_modules/@pawan-pk/react-native-mapbox-navigation/src/MapboxNavigationViewNativeComponent.ts
 +++ b/node_modules/@pawan-pk/react-native-mapbox-navigation/src/MapboxNavigationViewNativeComponent.ts
 @@ -7,6 +7,7 @@ import codegenNativeComponent from 'react-native/Libraries/Utilities/codegenNati
@@ -3857,11 +3917,20 @@ index 14196df..5617171 100644
    separateLegs?: boolean;
    distanceUnit?: string;
    startOrigin: NativeCoordinate;
+@@ -23,6 +24,8 @@ interface NativeProps extends ViewProps {
+   shouldSimulateRoute?: boolean;
+   showsEndOfRouteFeedback?: boolean;
+   hideStatusView?: boolean;
++  recenterTrigger?: number;
++  ttsVoiceId?: string;
+ }
+ 
+ export default codegenNativeComponent<NativeProps>(
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/src/types.ts b/node_modules/@pawan-pk/react-native-mapbox-navigation/src/types.ts
-index fb4a88f..c9ceb7c 100644
+index fb4a88f..9f8c842 100644
 --- a/node_modules/@pawan-pk/react-native-mapbox-navigation/src/types.ts
 +++ b/node_modules/@pawan-pk/react-native-mapbox-navigation/src/types.ts
-@@ -57,6 +57,11 @@ export type NativeEventsProps = {
+@@ -57,6 +57,12 @@ export type NativeEventsProps = {
    onError?: (event: NativeEvent<MapboxEvent>) => void;
    onCancelNavigation?: (event: NativeEvent<MapboxEvent>) => void;
    onArrive?: (event: NativeEvent<WaypointEvent>) => void;
@@ -3870,10 +3939,11 @@ index fb4a88f..c9ceb7c 100644
 +  onRouteAlternativeSelected?: (event: NativeEvent<{ routeIndex: number; source: string }>) => void;
 +  onRouteChanged?: (event: NativeEvent<{ geometry: string }>) => void;
 +  onMuteChange?: (event: NativeEvent<{ muted: boolean; soundEnabled: boolean }>) => void;
++  onVoiceInstructionText?: (event: NativeEvent<{ text: string }>) => void;
  };
  
  export interface MapboxNavigationProps {
-@@ -94,4 +99,9 @@ export interface MapboxNavigationProps {
+@@ -94,4 +100,14 @@ export interface MapboxNavigationProps {
    onError?: (error: MapboxEvent) => void;
    onCancelNavigation?: (event: MapboxEvent) => void;
    onArrive?: (point: WaypointEvent) => void;
@@ -3882,16 +3952,9 @@ index fb4a88f..c9ceb7c 100644
 +  onRouteAlternativeSelected?: (event: { routeIndex: number; source: string }) => void;
 +  onRouteChanged?: (event: { geometry: string }) => void;
 +  onMuteChange?: (event: { muted: boolean; soundEnabled: boolean }) => void;
++  /** Incrementar para forçar câmera a voltar a seguir o usuário (ex.: ao fechar modal do radar) */
++  recenterTrigger?: number;
++  /** Quando definido, instruções de voz são faladas via react-native-tts (voz do usuário) em vez do TTS do Mapbox */
++  ttsVoiceId?: string | null;
++  onVoiceInstructionText?: (event: { text: string }) => void;
  }
-
-diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/ios/MapboxNavigationView.swift b/node_modules/@pawan-pk/react-native-mapbox-navigation/ios/MapboxNavigationView.swift
---- a/node_modules/@pawan-pk/react-native-mapbox-navigation/ios/MapboxNavigationView.swift
-+++ b/node_modules/@pawan-pk/react-native-mapbox-navigation/ios/MapboxNavigationView.swift
-@@ -60,4 +60,4 @@
-     @objc var hideStatusView: Bool = false
-     @objc var mute: Bool = false
-     @objc var distanceUnit: NSString = "imperial"
--    @objc var language: NSString = "us"
--    @objc var destinationTitle: NSString = "Destination"
-+    @objc var language: NSString = "pt-BR"
-+    @objc var destinationTitle: NSString = "Destino"

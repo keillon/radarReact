@@ -13,7 +13,8 @@
     "sync:radars": "tsx src/scripts/syncRadars.ts",
     "import:antt": "tsx src/scripts/importANTTFile.ts",
     "sync:antt:auto": "tsx src/scripts/syncANTTAuto.ts",
-    "clear:database": "tsx src/scripts/clearDatabase.ts"
+    "clear:database": "tsx src/scripts/clearDatabase.ts",
+    "create-admin": "tsx scripts/create-admin.ts"
   },
   "dependencies": {
     "@fastify/cors": "^8.4.0",
