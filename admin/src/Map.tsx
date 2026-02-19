@@ -147,22 +147,36 @@ function Map({
           clusterMaxZoom: 14,
         });
 
-        // Carregar ícones (radar, radarFixo, radarMovel, radarSemaforico)
-        const base = window.location.origin;
-        Promise.all(
-          ICON_NAMES.map(
-            (name) =>
-              new Promise<void>((resolve, reject) => {
-                map.loadImage(`${base}/icons/${name}.png`, (err, img) => {
-                  if (err) reject(err);
-                  else if (img) {
-                    map.addImage(name, img);
-                    resolve();
-                  } else reject(new Error(`Failed to load ${name}.png`));
-                });
-              })
-          )
-        ).then(() => {
+        // Base dos ícones: em /admin/ usar /admin/icons; em dev usar /icons
+        const base =
+          typeof window !== "undefined" && window.location.pathname.startsWith("/admin")
+            ? window.location.origin + "/admin"
+            : window.location.origin;
+
+        const loadIcon = (name: string): Promise<void> =>
+          new Promise((resolve, reject) => {
+            map.loadImage(`${base}/icons/${name}.png`, (err, img) => {
+              if (err) reject(err);
+              else if (img) {
+                map.addImage(name, img);
+                resolve();
+              } else reject(new Error(`Failed to load ${name}.png`));
+            });
+          });
+
+        Promise.allSettled(ICON_NAMES.map((name) => loadIcon(name))).then((results) => {
+          const placa60Ok = ICON_NAMES.some(
+            (name, i) => name === "placa60" && results[i]?.status === "fulfilled"
+          );
+          if (!placa60Ok) {
+            // Fallback: ícone 1x1 para não quebrar a camada de símbolos
+            const size = 1;
+            const data = new Uint8Array(size * size * 4);
+            for (let i = 0; i < data.length; i += 4) {
+              data[i] = 59; data[i + 1] = 130; data[i + 2] = 246; data[i + 3] = 255;
+            }
+            map.addImage("placa60", { width: size, height: size, data });
+          }
           // Camada de clusters (círculos)
           map.addLayer({
             id: CLUSTER_LAYER_ID,

@@ -170,3 +170,32 @@ export async function deleteRadar(id: string): Promise<boolean> {
   }
   return true;
 }
+
+/** Status do import CSV (admin) — cookie de sessão é enviado automaticamente */
+export async function getCsvStatus(): Promise<{
+  success: boolean;
+  status?: {
+    state?: { importedAt?: string; fileName?: string; totalRows?: number; created?: number; updated?: number; deactivated?: number };
+    csvInfo?: { exists?: boolean; size?: number; mtimeMs?: number };
+  };
+}> {
+  const res = await fetch(`${API_BASE_URL}/admin/csv/status`, { credentials: "same-origin" });
+  return res.json();
+}
+
+/** Upload e processamento de CSV (admin) */
+export async function uploadCsv(fileName: string, csvText: string): Promise<{
+  success: boolean;
+  imported?: boolean;
+  reason?: string;
+  stats?: { created?: number; updated?: number };
+  error?: string;
+}> {
+  const res = await fetch(`${API_BASE_URL}/admin/csv/upload`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ fileName, csvText }),
+  });
+  return res.json();
+}

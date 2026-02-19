@@ -3,10 +3,12 @@ import MapView from "./Map";
 import {
   Radar,
   deleteRadar,
+  getCsvStatus,
   getRadarsNearLocation,
   normalizeRadarPayload,
   reportRadar,
   updateRadar,
+  uploadCsv,
 } from "./api";
 
 const DEFAULT_CENTER: [number, number] = [-46.6333, -23.5505]; // [lng, lat] São Paulo
@@ -44,6 +46,10 @@ export default function App() {
     "placa" | "móvel" | "semaforo"
   >("placa");
   const [error, setError] = useState<string | null>(null);
+  const [adminTab, setAdminTab] = useState<"map" | "csv">("map");
+  const [csvStatus, setCsvStatus] = useState<string>("Carregando…");
+  const [csvMessage, setCsvMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
+  const [csvUploading, setCsvUploading] = useState(false);
   const loadTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const RADAR_TYPES = [
@@ -85,6 +91,35 @@ export default function App() {
       }
     };
   }, [loadRadars]);
+
+  const loadCsvStatus = useCallback(async () => {
+    setCsvStatus("Carregando…");
+    try {
+      const data = await getCsvStatus();
+      if (!data.success || !data.status) {
+        setCsvStatus("Erro ao carregar status.");
+        return;
+      }
+      const s = data.status;
+      const state = s.state ?? null;
+      const info = s.csvInfo ?? {};
+      setCsvStatus(
+        `CSV atual: ${info.exists ? "sim" : "não"}\n` +
+          `Tamanho: ${info.size ?? 0} bytes\n` +
+          `Modificado: ${info.mtimeMs ? new Date(info.mtimeMs).toLocaleString("pt-BR") : "-"}\n\n` +
+          `Último import: ${state?.importedAt ? new Date(state.importedAt).toLocaleString("pt-BR") : "nunca"}\n` +
+          `Arquivo: ${state?.fileName ?? "-"}\n` +
+          `Rows: ${state?.totalRows ?? 0}\n` +
+          `Criados: ${state?.created ?? 0} | Atualizados: ${state?.updated ?? 0} | Inativados: ${state?.deactivated ?? 0}`
+      );
+    } catch {
+      setCsvStatus("Erro ao carregar status CSV.");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (adminTab === "csv") loadCsvStatus();
+  }, [adminTab, loadCsvStatus]);
 
   // WebSocket Connection for Real-time Updates
   // Dedupe: evita processar radar:update duplicado (React StrictMode ou múltiplas conexões)
@@ -377,6 +412,11 @@ export default function App() {
     }
   };
 
+  const iconBase =
+    typeof window !== "undefined" && window.location.pathname.startsWith("/admin")
+      ? "/admin"
+      : "";
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh" }}>
       <header
@@ -394,12 +434,38 @@ export default function App() {
           Admin Radares — Radar React
         </h1>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <a
-            href="/admin/csv"
-            style={{ color: "#fff", textDecoration: "none", fontWeight: 600, padding: "8px 12px" }}
+          <button
+            type="button"
+            onClick={() => setAdminTab("map")}
+            style={{
+              padding: "8px 14px",
+              background: adminTab === "map" ? "#4f46e5" : "transparent",
+              color: "#fff",
+              border: "1px solid rgba(255,255,255,0.5)",
+              borderRadius: 8,
+              cursor: "pointer",
+              fontWeight: 600,
+            }}
+          >
+            Mapa
+          </button>
+          <button
+            type="button"
+            onClick={() => setAdminTab("csv")}
+            style={{
+              padding: "8px 14px",
+              background: adminTab === "csv" ? "#4f46e5" : "transparent",
+              color: "#fff",
+              border: "1px solid rgba(255,255,255,0.5)",
+              borderRadius: 8,
+              cursor: "pointer",
+              fontWeight: 600,
+            }}
           >
             CSV
-          </a>
+          </button>
+          {adminTab === "map" && (
+          <>
           <button
             type="button"
             onClick={() => setMode("add")}
@@ -432,11 +498,125 @@ export default function App() {
           >
             {loading ? "Carregando…" : "Recarregar"}
           </button>
+          </>
+          )}
         </div>
       </header>
 
+      {/* Aba CSV */}
+      {adminTab === "csv" && (
+        <div
+          style={{
+            flex: 1,
+            overflow: "auto",
+            padding: 24,
+            background: "#f8fafc",
+          }}
+        >
+          <h2 style={{ margin: "0 0 16px", fontSize: 20 }}>📄 CSV de Radares</h2>
+          <p style={{ marginBottom: 16, color: "#475569" }}>
+            O backend só reprocessa quando o CSV mudar (hash diferente).
+          </p>
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            id="admin-csv-file"
+            style={{ marginBottom: 12 }}
+          />
+          <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+            <button
+              type="button"
+              disabled={csvUploading}
+              onClick={async () => {
+                const input = document.getElementById("admin-csv-file") as HTMLInputElement;
+                const file = input?.files?.[0];
+                if (!file) {
+                  setCsvMessage({ text: "Selecione um arquivo CSV.", type: "error" });
+                  return;
+                }
+                setCsvUploading(true);
+                setCsvMessage(null);
+                try {
+                  const text = await file.text();
+                  const data = await uploadCsv(file.name, text);
+                  if (data.success && data.imported) {
+                    setCsvMessage({
+                      text: `✅ Processado. Criados: ${data.stats?.created ?? 0}, Atualizados: ${data.stats?.updated ?? 0}`,
+                      type: "success",
+                    });
+                    loadCsvStatus();
+                  } else if (data.success) {
+                    setCsvMessage({ text: `ℹ️ ${data.reason ?? "Sem mudanças."}`, type: "success" });
+                    loadCsvStatus();
+                  } else {
+                    setCsvMessage({ text: data.error ?? "Erro ao processar.", type: "error" });
+                  }
+                } catch (e) {
+                  setCsvMessage({ text: e instanceof Error ? e.message : "Erro ao enviar CSV.", type: "error" });
+                } finally {
+                  setCsvUploading(false);
+                }
+              }}
+              style={{
+                padding: "10px 20px",
+                background: "#3b82f6",
+                color: "#fff",
+                border: "none",
+                borderRadius: 8,
+                cursor: csvUploading ? "not-allowed" : "pointer",
+                fontWeight: 600,
+              }}
+            >
+              {csvUploading ? "Processando…" : "Enviar CSV e processar"}
+            </button>
+            <button
+              type="button"
+              onClick={loadCsvStatus}
+              style={{
+                padding: "10px 20px",
+                background: "#16a34a",
+                color: "#fff",
+                border: "none",
+                borderRadius: 8,
+                cursor: "pointer",
+                fontWeight: 600,
+              }}
+            >
+              Atualizar status
+            </button>
+          </div>
+          {csvMessage && (
+            <div
+              style={{
+                padding: 12,
+                marginBottom: 16,
+                borderRadius: 8,
+                background: csvMessage.type === "success" ? "#d4edda" : "#f8d7da",
+                color: csvMessage.type === "success" ? "#155724" : "#721c24",
+              }}
+            >
+              {csvMessage.text}
+            </div>
+          )}
+          <pre
+            style={{
+              margin: 0,
+              padding: 16,
+              background: "#fff",
+              border: "1px solid #e2e8f0",
+              borderRadius: 8,
+              whiteSpace: "pre-wrap",
+              fontSize: 13,
+              color: "#475569",
+            }}
+          >
+            {csvStatus}
+          </pre>
+        </div>
+      )}
+
       {/* Banner quando em modo adicionar ou mover */}
-      {mode === "add" && (
+      {adminTab === "map" && mode === "add" && (
         <div
           style={{
             background: "#3b82f6",
@@ -450,7 +630,7 @@ export default function App() {
           Clique em um ponto do mapa para posicionar o novo radar
         </div>
       )}
-      {mode === "move" && selected && (
+      {adminTab === "map" && mode === "move" && selected && (
         <div
           style={{
             background: "#3b82f6",
@@ -466,7 +646,7 @@ export default function App() {
       )}
 
       {/* Modal: Adicionar radar — com imagens e velocidades padrão (como no app) */}
-      {pendingAdd && (
+      {adminTab === "map" && pendingAdd && (
         <div
           style={{
             position: "fixed",
@@ -526,7 +706,7 @@ export default function App() {
                   }}
                 >
                   <img
-                    src={`/icons/${t.icon}.png`}
+                    src={`${iconBase}/icons/${t.icon}.png`}
                     alt=""
                     style={{ width: 40, height: 40, objectFit: "contain" }}
                     onError={(e) => {
@@ -631,7 +811,7 @@ export default function App() {
       )}
 
       {/* Modal radar no topo (radar destacado no mapa, sem vignette) */}
-      {selected && !pendingAdd && (
+      {adminTab === "map" && selected && !pendingAdd && (
         <div
           style={{
             position: "fixed",
@@ -689,6 +869,7 @@ export default function App() {
         </div>
       )}
 
+      {adminTab === "map" && (
       <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
         <div style={{ flex: 1, position: "relative" }}>
           {!import.meta.env.VITE_MAPBOX_TOKEN &&
@@ -926,6 +1107,7 @@ export default function App() {
           </p>
         </aside>
       </div>
+      )}
     </div>
   );
 }

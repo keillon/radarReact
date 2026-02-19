@@ -4,7 +4,7 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "prisma generate && tsc",
+    "build": "npm run embed-admin && prisma generate && tsc",
     "start": "node dist/index.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
@@ -15,7 +15,7 @@
     "sync:antt:auto": "tsx src/scripts/syncANTTAuto.ts",
     "clear:database": "tsx src/scripts/clearDatabase.ts",
     "create-admin": "tsx scripts/create-admin.ts",
-    "embed-admin": "cd ../admin && npm run build && cd ../backend && node scripts/embed-admin.mjs"
+    "embed-admin": "cd ../admin && npm install --no-save && npm run build && cd ../backend && node scripts/embed-admin.mjs"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",
