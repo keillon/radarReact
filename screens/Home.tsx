@@ -55,8 +55,8 @@ import {
   API_BASE_URL,
   confirmRadar,
   denyRadar,
+  getRadarsFromGeoJson,
   getRadarsLastUpdated,
-  getRadarsNearLocation,
   Radar,
   reportRadar,
 } from "../services/api";
@@ -561,7 +561,7 @@ export default function Home() {
       const debounceMs = 50;
       wsDeferredSyncTimeoutRef.current = setTimeout(() => {
         wsDeferredSyncTimeoutRef.current = null;
-        getRadarsNearLocation(loc.latitude, loc.longitude, 50000)
+        getRadarsFromGeoJson()
           .then((allRadars) => {
             if (!isMountedRef.current) return;
             startTransition(() => {
@@ -592,7 +592,7 @@ export default function Home() {
     const loc = currentLocationRef.current;
     if (!loc?.latitude || !loc?.longitude) return;
     setIsUpdatingRadars(true);
-    getRadarsNearLocation(loc.latitude, loc.longitude, 50000)
+    getRadarsFromGeoJson()
       .then((allRadars) => {
         if (!isMountedRef.current) return;
         hasInitialRadarLoadRef.current = true;
@@ -881,7 +881,7 @@ export default function Home() {
           // Primeira carga: buscar radares automaticamente (obrigatório, sem modal)
           if (!hasInitialRadarLoadRef.current) {
             hasInitialRadarLoadRef.current = true;
-            getRadarsNearLocation(loc.latitude, loc.longitude, 50000)
+            getRadarsFromGeoJson()
               .then((allRadars) => {
                 if (!isMountedRef.current) return;
                 const now = Date.now();

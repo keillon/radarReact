@@ -53,6 +53,40 @@ const mapApiRadarToRadar = (apiRadar: ApiRadarResponse): Radar => {
   };
 };
 
+/** Busca radares via GeoJSON — payload menor, mais rápido que /radars */
+export const getRadarsFromGeoJson = async (): Promise<Radar[]> => {
+  const url = `${API_BASE_URL}/radars/geojson`;
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: { Accept: "application/geo+json, application/json" },
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    const features = data?.features ?? [];
+    const parsed = features.map((f: any) => {
+      const coords = f?.geometry?.coordinates ?? [];
+      const p = f?.properties ?? {};
+      const lat = Number(coords[1]);
+      const lng = Number(coords[0]);
+      const speedNum = p.speedLimit ? parseInt(String(p.speedLimit), 10) : NaN;
+      return {
+        id: String(p.id ?? ""),
+        latitude: lat,
+        longitude: lng,
+        speedLimit: !isNaN(speedNum) ? speedNum : undefined,
+        type: p.radarType ?? p.iconImage ?? "unknown",
+      } as Radar;
+    });
+    return parsed.filter(
+      (r: Radar) => r.id && !Number.isNaN(r.latitude) && !Number.isNaN(r.longitude),
+    );
+  } catch (e: any) {
+    console.error("Erro ao buscar radares (GeoJSON):", e);
+    throw e;
+  }
+};
+
 /** Retorna timestamp (ms) da última atualização dos radares (CSV, report, etc.) */
 export const getRadarsLastUpdated = async (): Promise<number> => {
   try {
