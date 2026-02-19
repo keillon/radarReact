@@ -9,6 +9,8 @@ import React, {
 } from "react";
 import {
   ActivityIndicator,
+  AppState,
+  AppStateStatus,
   Animated,
   Image,
   Modal,
@@ -53,6 +55,7 @@ import {
   API_BASE_URL,
   confirmRadar,
   denyRadar,
+  getRadarsLastUpdated,
   getRadarsNearLocation,
   Radar,
   reportRadar,
@@ -71,6 +74,7 @@ import { AdBanner } from "../components/AdBanner";
 import { AppModal } from "../components/AppModal";
 
 const VOTED_RADAR_IDS_KEY = "radarZone_votedRadarIds";
+const RADARS_LAST_FETCH_AT_KEY = "radarZone_radarsLastFetchAt";
 import {
   calculateDistance,
   getCumulativeDistances,
@@ -583,7 +587,7 @@ export default function Home() {
     [],
   );
 
-  // Atualização manual de radares (modal ou menu) — uma única chamada, mantém até fechar app
+  // Atualização manual de radares (modal ou menu) — obrigatória quando há atualização
   const fetchRadarsManually = useCallback(() => {
     const loc = currentLocationRef.current;
     if (!loc?.latitude || !loc?.longitude) return;
@@ -592,6 +596,10 @@ export default function Home() {
       .then((allRadars) => {
         if (!isMountedRef.current) return;
         hasInitialRadarLoadRef.current = true;
+        const now = Date.now();
+        AsyncStorage.setItem(RADARS_LAST_FETCH_AT_KEY, String(now)).catch(
+          () => {},
+        );
         startTransition(() => {
           setCsvRadarsMap(() => {
             const nextMap = new Map<string, Radar>();
@@ -816,6 +824,34 @@ export default function Home() {
     };
   }, []);
 
+  // Checar atualizações quando app volta para foreground (só mostra modal se houver update)
+  useEffect(() => {
+    const sub = AppState.addEventListener(
+      "change",
+      (nextState: AppStateStatus) => {
+        if (nextState !== "active") return;
+        if (!hasInitialRadarLoadRef.current || isNavigating) return;
+        if (csvRadarsMap.size === 0) return;
+
+        getRadarsLastUpdated()
+          .then((serverLastUpdated) => {
+            if (!isMountedRef.current) return;
+            if (serverLastUpdated <= 0) return;
+
+            AsyncStorage.getItem(RADARS_LAST_FETCH_AT_KEY).then((stored) => {
+              if (!isMountedRef.current) return;
+              const clientLastFetch = Number(stored ?? 0) || 0;
+              if (serverLastUpdated > clientLastFetch) {
+                setShowUpdateRadarsModal(true);
+              }
+            });
+          })
+          .catch(() => {});
+      },
+    );
+    return () => sub.remove();
+  }, [csvRadarsMap.size, isNavigating]);
+
   const requestLocationPermission = async () => {
     try {
       if (Platform.OS === "android") {
@@ -842,9 +878,30 @@ export default function Home() {
           setCurrentLocation(loc);
           setOrigin(loc);
 
-          // Mostrar modal "Atualizar lista de radares?" em vez de buscar automaticamente
+          // Primeira carga: buscar radares automaticamente (obrigatório, sem modal)
           if (!hasInitialRadarLoadRef.current) {
-            setShowUpdateRadarsModal(true);
+            hasInitialRadarLoadRef.current = true;
+            getRadarsNearLocation(loc.latitude, loc.longitude, 50000)
+              .then((allRadars) => {
+                if (!isMountedRef.current) return;
+                const now = Date.now();
+                AsyncStorage.setItem(RADARS_LAST_FETCH_AT_KEY, String(now)).catch(
+                  () => {},
+                );
+                startTransition(() => {
+                  setCsvRadarsMap(() => {
+                    const nextMap = new Map<string, Radar>();
+                    for (const radar of allRadars) {
+                      if (!radar?.id) continue;
+                      nextMap.set(radar.id, radar);
+                    }
+                    return nextMap;
+                  });
+                });
+              })
+              .catch((error) => {
+                console.error("Erro ao buscar radares na inicialização:", error);
+              });
           }
         },
         (error: unknown) => {
@@ -1518,7 +1575,8 @@ export default function Home() {
         }
 
         if (shouldRefreshAll && !isNavigatingRef.current) {
-          syncAllRadarsFromCurrentLocation(true);
+          // CSV atualizado: mostrar modal obrigatório para atualizar
+          setShowUpdateRadarsModal(true);
         }
 
         if (
@@ -3204,18 +3262,14 @@ export default function Home() {
         </TouchableOpacity>
       </Modal>
 
-      {/* Modal: Atualizar lista de radares (estilo Waze/RadarBot) */}
+      {/* Modal: Atualizar lista de radares — só quando há update; obrigatório */}
       <Modal
         visible={showUpdateRadarsModal}
         transparent
         animationType="fade"
-        onRequestClose={() => setShowUpdateRadarsModal(false)}
+        onRequestClose={() => {}}
       >
-        <TouchableOpacity
-          activeOpacity={1}
-          style={styles.reportModalOverlay}
-          onPress={() => !isUpdatingRadars && setShowUpdateRadarsModal(false)}
-        >
+        <View style={styles.reportModalOverlay} pointerEvents="box-none">
           <View
             style={[styles.reportModalContent, { maxWidth: 320 }]}
             onStartShouldSetResponder={() => true}
@@ -3233,7 +3287,7 @@ export default function Home() {
                   { textAlign: "center", fontSize: 18 },
                 ]}
               >
-                Atualizar lista de radares?
+                Atualizações disponíveis
               </Text>
             </View>
             <Text
@@ -3243,44 +3297,31 @@ export default function Home() {
                   textAlign: "center",
                   fontSize: 14,
                   lineHeight: 20,
-                  marginBottom: 20,
+                  marginBottom: 24,
                   color: colors.textSecondary,
                 },
               ]}
             >
-              Buscar radares próximos à sua localização para exibir no mapa.
-              Dados atualizados até o fechamento do app.
+              Novos radares ou atualizações no mapa. É necessário atualizar para
+              continuar.
             </Text>
-            <View style={{ flexDirection: "row", gap: 12 }}>
-              <TouchableOpacity
-                style={[
-                  styles.reportModalCancel,
-                  { flex: 1 },
-                  isUpdatingRadars && { opacity: 0.6 },
-                ]}
-                onPress={() => !isUpdatingRadars && setShowUpdateRadarsModal(false)}
-                disabled={isUpdatingRadars}
-              >
-                <Text style={styles.reportModalCancelText}>Agora não</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.reportModalSubmit,
-                  { flex: 1 },
-                  isUpdatingRadars && { opacity: 0.8 },
-                ]}
-                onPress={() => fetchRadarsManually()}
-                disabled={isUpdatingRadars}
-              >
-                {isUpdatingRadars ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={styles.reportModalSubmitText}>Atualizar</Text>
-                )}
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              style={[
+                styles.reportModalSubmit,
+                { width: "100%", marginHorizontal: 0 },
+                isUpdatingRadars && { opacity: 0.8 },
+              ]}
+              onPress={() => fetchRadarsManually()}
+              disabled={isUpdatingRadars}
+            >
+              {isUpdatingRadars ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.reportModalSubmitText}>Atualizar radares</Text>
+              )}
+            </TouchableOpacity>
           </View>
-        </TouchableOpacity>
+        </View>
       </Modal>
 
       {/* Modal genérico (substitui Alert.alert) */}

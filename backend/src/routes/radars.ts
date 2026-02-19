@@ -267,8 +267,11 @@ async function getAllRadarsCached(forceRefresh: boolean = false): Promise<RadarR
   return radarCache.loadingPromise;
 }
 
-function invalidateRadarCache() {
+let radarsLastUpdatedAt = Date.now();
+
+export function invalidateRadarCache() {
   radarCache.builtAt = 0;
+  radarsLastUpdatedAt = Date.now();
 }
 
 export async function radarRoutes(fastify: FastifyInstance) {
@@ -349,6 +352,11 @@ export async function radarRoutes(fastify: FastifyInstance) {
         details: error.message,
       });
     }
+  });
+
+  /** GET /radars/last-updated — Cliente verifica se há atualizações (CSV, report, etc.) */
+  fastify.get("/radars/last-updated", async (request, reply) => {
+    return reply.send({ lastUpdated: radarsLastUpdatedAt });
   });
 
   /** Mapeia radar para propriedades GeoJSON (iconImage/iconSize) — alinhado ao Map.tsx (camelCase) */

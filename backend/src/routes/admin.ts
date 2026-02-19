@@ -2,6 +2,7 @@ import { FastifyInstance } from "fastify";
 import path from "path";
 import fs from "fs";
 import { getCsvImportStatus, importRadarCsv } from "../services/csvRadarImport";
+import { invalidateRadarCache } from "./radars";
 
 /**
  * Painel Admin HTML simples para enviar notificações
@@ -523,6 +524,9 @@ export async function adminRoutes(fastify: FastifyInstance) {
         fileName: body.fileName || "maparadar.csv",
         force: body.force === true,
       });
+
+      // Invalidar cache e avisar clientes para recarregar
+      invalidateRadarCache();
 
       // Avisar clientes para recarregar uma vez a base de radares
       fastify.wsBroadcast("radar:refresh", {

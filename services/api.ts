@@ -53,6 +53,18 @@ const mapApiRadarToRadar = (apiRadar: ApiRadarResponse): Radar => {
   };
 };
 
+/** Retorna timestamp (ms) da última atualização dos radares (CSV, report, etc.) */
+export const getRadarsLastUpdated = async (): Promise<number> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/radars/last-updated`);
+    if (!response.ok) return 0;
+    const data = await response.json();
+    return Number(data?.lastUpdated ?? 0) || 0;
+  } catch {
+    return 0;
+  }
+};
+
 // Buscar radares próximos a uma localização (GET)
 export const getRadarsNearLocation = async (
   latitude: number,
