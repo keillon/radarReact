@@ -677,6 +677,33 @@ export default function Home() {
     initMapbox();
     requestLocationPermission();
 
+    // Buscar radares imediatamente (não espera GPS) — GeoJSON retorna todos os radares
+    if (!hasInitialRadarLoadRef.current) {
+      hasInitialRadarLoadRef.current = true;
+      getRadarsFromGeoJson()
+        .then((allRadars) => {
+          if (!isMountedRef.current) return;
+          const now = Date.now();
+          AsyncStorage.setItem(RADARS_LAST_FETCH_AT_KEY, String(now)).catch(
+            () => {},
+          );
+          startTransition(() => {
+            setCsvRadarsMap(() => {
+              const nextMap = new Map<string, Radar>();
+              for (const radar of allRadars) {
+                if (!radar?.id) continue;
+                nextMap.set(radar.id, radar);
+              }
+              return nextMap;
+            });
+          });
+        })
+        .catch((error) => {
+          console.error("Erro ao buscar radares na inicialização:", error);
+          hasInitialRadarLoadRef.current = false;
+        });
+    }
+
     // Configurar TTS: pt-BR e voz escolhida nas configurações (uma só voz para alertas e navegação)
     const Tts = getTts();
     if (Tts) {
@@ -877,32 +904,7 @@ export default function Home() {
           currentLocationRef.current = loc;
           setCurrentLocation(loc);
           setOrigin(loc);
-
-          // Primeira carga: buscar radares automaticamente (obrigatório, sem modal)
-          if (!hasInitialRadarLoadRef.current) {
-            hasInitialRadarLoadRef.current = true;
-            getRadarsFromGeoJson()
-              .then((allRadars) => {
-                if (!isMountedRef.current) return;
-                const now = Date.now();
-                AsyncStorage.setItem(RADARS_LAST_FETCH_AT_KEY, String(now)).catch(
-                  () => {},
-                );
-                startTransition(() => {
-                  setCsvRadarsMap(() => {
-                    const nextMap = new Map<string, Radar>();
-                    for (const radar of allRadars) {
-                      if (!radar?.id) continue;
-                      nextMap.set(radar.id, radar);
-                    }
-                    return nextMap;
-                  });
-                });
-              })
-              .catch((error) => {
-                console.error("Erro ao buscar radares na inicialização:", error);
-              });
-          }
+          // Radares já carregados em paralelo no mount
         },
         (error: unknown) => {
           console.error("Erro ao obter localização:", error);
