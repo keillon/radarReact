@@ -87,6 +87,8 @@ interface MapProps {
   onMapIdle?: () => void;
   /** Mostrar botão hamburger e menu (ocultar no picker) */
   showMenu?: boolean;
+  /** Chamado ao tocar em "Atualizar radares" no menu */
+  onRefreshRadars?: () => void;
 }
 
 export type MapHandle = {
@@ -118,9 +120,10 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
     onCameraChanged,
     hideUserLocation = false,
     pickerSelectedPoint = null,
-    onMapIdle,
-    showMenu = !hideUserLocation,
-  },
+  onMapIdle,
+  showMenu = !hideUserLocation,
+  onRefreshRadars,
+},
   ref,
 ) {
   const [menuVisible, setMenuVisible] = useState(false);
@@ -483,6 +486,7 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
           <MenuModal
             visible={menuVisible}
             onClose={() => setMenuVisible(false)}
+            onRefreshRadars={onRefreshRadars}
           />
         </>
       )}
@@ -751,10 +755,10 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
                   if (!Array.isArray(features) || features.length === 0) return;
                   const feature = features[0];
                   if (feature == null) return;
-                  const radarId = feature.properties?.id ?? feature.id;
-                  if (radarId == null) return;
+                  const radarId = String(feature.properties?.id ?? feature.id ?? "");
+                  if (!radarId) return;
                   const radar = radars.find(
-                    (r) => r != null && r.id === radarId,
+                    (r) => r != null && String(r.id) === radarId,
                   );
                   if (radar != null) onRadarPress(radar);
                 } catch (_) {

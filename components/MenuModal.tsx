@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   Keyboard,
   KeyboardAvoidingView,
@@ -19,10 +18,12 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { useAuth } from "../context/AuthContext";
+import { useIAP } from "../context/IAPContext";
 import { useSettings } from "../context/SettingsContext";
 import { colors } from "../utils/theme";
+import { AppModal, type AppModalButton } from "./AppModal";
 
-type MenuScreen = "menu" | "profile" | "accountSettings" | "soundSettings";
+type MenuScreen = "menu" | "profile" | "accountSettings" | "soundSettings" | "subscription";
 
 interface MenuItemProps {
   icon: string;
@@ -70,9 +71,11 @@ function MenuItem({
 interface MenuModalProps {
   visible: boolean;
   onClose: () => void;
+  /** Chamado ao tocar em "Atualizar radares" (opcional) */
+  onRefreshRadars?: () => void;
 }
 
-function MenuModal({ visible, onClose }: MenuModalProps) {
+function MenuModal({ visible, onClose, onRefreshRadars }: MenuModalProps) {
   const slideAnim = useRef(new Animated.Value(-300)).current;
   const backdropAnim = useRef(new Animated.Value(0)).current;
   const { user, logout, updateProfile, changePassword } = useAuth();
@@ -86,16 +89,73 @@ function MenuModal({ visible, onClose }: MenuModalProps) {
     ttsVoiceId,
     setTtsVoiceId,
   } = useSettings();
+  const {
+    isSubscribed,
+    isInFreePeriod,
+    hasFullAccess,
+    freePeriodEndsAt,
+    subscriptionPrice,
+    purchaseSubscription,
+    restorePurchases,
+  } = useIAP();
 
   const [screen, setScreen] = useState<MenuScreen>("menu");
-  const [maleVoice, setMaleVoice] = useState<{ id: string; name: string } | null>(null);
-  const [femaleVoice, setFemaleVoice] = useState<{ id: string; name: string } | null>(null);
-  const [previewing, setPreviewing] = useState<"male" | "female" | null>(null);
+  const [iapActionLoading, setIapActionLoading] = useState(false);
+  const [iapMessage, setIapMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [previewingId, setPreviewingId] = useState<string | null>(null);
+
+  // Vozes pt-BR fixas (ids do dispositivo)
+  const MALE_VOICE_ID = "pt-br-x-ptd-network";
+  const FEMALE_VOICE_ID = "pt-br-x-pte-local";
   const [profileName, setProfileName] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [saving, setSaving] = useState(false);
+  const [appModal, setAppModal] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    buttons: AppModalButton[];
+  }>({ visible: false, title: "", message: "", buttons: [] });
+
+  const showAlert = (title: string, message: string) => {
+    setAppModal({
+      visible: true,
+      title,
+      message,
+      buttons: [
+        { text: "OK", onPress: () => setAppModal((s) => ({ ...s, visible: false })) },
+      ],
+    });
+  };
+
+  const showConfirm = (
+    title: string,
+    message: string,
+    opts: { confirmText?: string; cancelText?: string; onConfirm: () => void },
+  ) => {
+    setAppModal({
+      visible: true,
+      title,
+      message,
+      buttons: [
+        {
+          text: opts.cancelText ?? "Cancelar",
+          style: "cancel",
+          onPress: () => setAppModal((s) => ({ ...s, visible: false })),
+        },
+        {
+          text: opts.confirmText ?? "Confirmar",
+          style: "destructive",
+          onPress: () => {
+            setAppModal((s) => ({ ...s, visible: false }));
+            opts.onConfirm();
+          },
+        },
+      ],
+    });
+  };
 
   useEffect(() => {
     if (visible) {
@@ -107,79 +167,39 @@ function MenuModal({ visible, onClose }: MenuModalProps) {
     }
   }, [visible, user?.name]);
 
-  const lower = (s: string) => (s || "").toLowerCase();
-  const MALE_TERMS = ["male", "masculin", "homem", "masculino"];
-  const FEMALE_TERMS = ["female", "feminin", "mulher", "feminino", "feminina"];
-
-  const pickVoiceByGender = (gender: "male" | "female") => {
-    const voice = gender === "male" ? maleVoice : femaleVoice;
-    if (voice) {
-      setTtsVoiceId(voice.id);
-      try {
-        require("react-native-tts").default.setDefaultVoice?.(voice.id);
-      } catch {}
-    }
+  const pickVoice = (voiceId: string) => {
+    setTtsVoiceId(voiceId);
+    try {
+      require("react-native-tts").default.setDefaultVoice?.(voiceId);
+    } catch {}
   };
 
-  const previewVoice = (gender: "male" | "female") => {
-    const voice = gender === "male" ? maleVoice : femaleVoice;
-    if (!voice) return;
+  const previewVoiceById = (voiceId: string) => {
     try {
       const Tts = require("react-native-tts").default;
-      if (previewing === gender) {
+      if (previewingId === voiceId) {
         Tts.stop?.();
-        setPreviewing(null);
+        setPreviewingId(null);
         return;
       }
-      setPreviewing(gender);
+      setPreviewingId(voiceId);
       const { volume } = require("../utils/settingsStore").getStoredSettings();
       const init = async () => {
         await Tts.setDefaultLanguage?.("pt-BR");
         await Tts.getInitStatus?.();
       };
       init().then(() => {
-        Tts.setDefaultVoice?.(voice.id);
+        Tts.setDefaultVoice?.(voiceId);
         const opts = Platform.OS === "android"
           ? { androidParams: { KEY_PARAM_VOLUME: volume, KEY_PARAM_STREAM: "STREAM_MUSIC" } }
           : {};
         Tts.speak("Radar a 100 metros", opts);
-        setTimeout(() => setPreviewing(null), 2500);
+        setTimeout(() => setPreviewingId(null), 2500);
       });
     } catch {
-      setPreviewing(null);
+      setPreviewingId(null);
     }
   };
-
-  useEffect(() => {
-    if (screen === "soundSettings") {
-      try {
-        const Tts = require("react-native-tts").default;
-        Tts.voices?.()
-          .then((list: Array<{ id: string; name: string; language: string }>) => {
-            const all = (list || []).filter((v) => v?.id);
-            if (all.length === 0) {
-              setMaleVoice(null);
-              setFemaleVoice(null);
-              return;
-            }
-            const ptFirst = [...all.filter((v) => v.language?.startsWith("pt")), ...all];
-            let male = ptFirst.find((v) => MALE_TERMS.some((t) => lower(v.name).includes(t) || lower(v.id).includes(t)));
-            let female = ptFirst.find((v) => FEMALE_TERMS.some((t) => lower(v.name).includes(t) || lower(v.id).includes(t)));
-            if (!male) male = ptFirst[0];
-            if (!female) female = ptFirst[1] ?? ptFirst[0];
-            setMaleVoice(male ? { id: male.id, name: male.name || "Voz 1" } : null);
-            setFemaleVoice(female ? { id: female.id, name: female.name || "Voz 2" } : null);
-          })
-          .catch(() => {
-            setMaleVoice(null);
-            setFemaleVoice(null);
-          });
-      } catch {
-        setMaleVoice(null);
-        setFemaleVoice(null);
-      }
-    }
-  }, [screen]);
 
   useEffect(() => {
     if (visible) {
@@ -212,14 +232,15 @@ function MenuModal({ visible, onClose }: MenuModalProps) {
     }
   }, [visible, slideAnim, backdropAnim]);
 
-  const handleLogout = async () => {
-    Alert.alert("Sair", "Deseja realmente sair da sua conta?", [
-      { text: "Cancelar", style: "cancel" },
-      { text: "Sair", style: "destructive", onPress: async () => {
+  const handleLogout = () => {
+    showConfirm("Sair", "Deseja realmente sair da sua conta?", {
+      cancelText: "Cancelar",
+      confirmText: "Sair",
+      onConfirm: async () => {
         onClose();
         await logout();
-      }},
-    ]);
+      },
+    });
   };
 
   const handleSaveProfile = async () => {
@@ -227,10 +248,10 @@ function MenuModal({ visible, onClose }: MenuModalProps) {
     setSaving(true);
     try {
       await updateProfile({ name: name || undefined });
-      Alert.alert("Sucesso", "Perfil atualizado com sucesso");
+      showAlert("Sucesso", "Perfil atualizado com sucesso");
       closeFullScreen();
     } catch (e) {
-      Alert.alert("Erro", e instanceof Error ? e.message : "Erro ao atualizar perfil");
+      showAlert("Erro", e instanceof Error ? e.message : "Erro ao atualizar perfil");
     } finally {
       setSaving(false);
     }
@@ -238,27 +259,27 @@ function MenuModal({ visible, onClose }: MenuModalProps) {
 
   const handleChangePassword = async () => {
     if (!currentPassword || !newPassword || !confirmPassword) {
-      Alert.alert("Erro", "Preencha todos os campos");
+      showAlert("Erro", "Preencha todos os campos");
       return;
     }
     if (newPassword.length < 6) {
-      Alert.alert("Erro", "A nova senha deve ter pelo menos 6 caracteres");
+      showAlert("Erro", "A nova senha deve ter pelo menos 6 caracteres");
       return;
     }
     if (newPassword !== confirmPassword) {
-      Alert.alert("Erro", "A nova senha e a confirmação não coincidem");
+      showAlert("Erro", "A nova senha e a confirmação não coincidem");
       return;
     }
     setSaving(true);
     try {
       await changePassword(currentPassword, newPassword);
-      Alert.alert("Sucesso", "Senha alterada com sucesso");
+      showAlert("Sucesso", "Senha alterada com sucesso");
       closeFullScreen();
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
     } catch (e) {
-      Alert.alert("Erro", e instanceof Error ? e.message : "Erro ao alterar senha");
+      showAlert("Erro", e instanceof Error ? e.message : "Erro ao alterar senha");
     } finally {
       setSaving(false);
     }
@@ -288,7 +309,7 @@ function MenuModal({ visible, onClose }: MenuModalProps) {
     }
   };
 
-  const openFullScreen = (s: "profile" | "accountSettings" | "soundSettings") => setScreen(s);
+  const openFullScreen = (s: "profile" | "accountSettings" | "soundSettings" | "subscription") => setScreen(s);
 
   const renderMenuContent = () => (
     <>
@@ -303,6 +324,19 @@ function MenuModal({ visible, onClose }: MenuModalProps) {
       </View>
 
       <ScrollView style={styles.menuScroll} showsVerticalScrollIndicator={false}>
+        {onRefreshRadars && (
+          <>
+            <Text style={styles.sectionTitle}>Mapa</Text>
+            <MenuItem
+              icon="radio"
+              label="Atualizar lista de radares"
+              onPress={() => {
+                onClose();
+                onRefreshRadars();
+              }}
+            />
+          </>
+        )}
         <Text style={styles.sectionTitle}>Conta</Text>
         <MenuItem
           icon="person"
@@ -318,6 +352,22 @@ function MenuModal({ visible, onClose }: MenuModalProps) {
           icon="volume-high"
           label="Som e voz"
           onPress={() => openFullScreen("soundSettings")}
+        />
+        <MenuItem
+          icon="diamond"
+          label="Assinatura Premium"
+          onPress={() => openFullScreen("subscription")}
+          right={
+            isSubscribed ? (
+              <View style={styles.premiumBadge}>
+                <Text style={styles.premiumBadgeText}>PRO</Text>
+              </View>
+            ) : isInFreePeriod && freePeriodEndsAt ? (
+              <View style={styles.freeBadge}>
+                <Text style={styles.premiumBadgeText}>Grátis</Text>
+              </View>
+            ) : null
+          }
         />
         <MenuItem
           icon="log-out"
@@ -414,30 +464,19 @@ function MenuModal({ visible, onClose }: MenuModalProps) {
 
       <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Voz (TTS)</Text>
       <Text style={styles.fieldHint}>
-        Escolha a voz para os alertas de radar. Toque em Ouvir para pré-visualizar.
+        Uma só voz para alertas e navegação (pt-BR). Toque em Ouvir para pré-visualizar.
       </Text>
-      <TouchableOpacity
-        style={[styles.voiceOption, !ttsVoiceId && styles.voiceOptionSelected]}
-        onPress={() => setTtsVoiceId(null)}
-      >
-        <Ionicons
-          name={!ttsVoiceId ? "checkmark-circle" : "ellipse-outline"}
-          size={24}
-          color={!ttsVoiceId ? colors.primary : colors.textSecondary}
-        />
-        <Text style={styles.voiceOptionText}>Padrão do sistema</Text>
-      </TouchableOpacity>
       <View style={styles.voiceRow}>
-        <View collapsable={false} style={[styles.voiceCard, ttsVoiceId === maleVoice?.id && styles.voiceCardSelected]}>
+        <View style={[styles.voiceCard, ttsVoiceId === MALE_VOICE_ID && styles.voiceCardSelected]}>
           <Pressable
             style={styles.voiceCardTouchable}
-            onPress={() => maleVoice && pickVoiceByGender("male")}
+            onPress={() => pickVoice(MALE_VOICE_ID)}
             android_ripple={{ color: "rgba(255,193,7,0.3)" }}
           >
             <Ionicons
-              name={ttsVoiceId === maleVoice?.id ? "checkmark-circle" : "ellipse-outline"}
+              name={ttsVoiceId === MALE_VOICE_ID ? "checkmark-circle" : "ellipse-outline"}
               size={24}
-              color={ttsVoiceId === maleVoice?.id ? colors.primary : colors.textSecondary}
+              color={ttsVoiceId === MALE_VOICE_ID ? colors.primary : colors.textSecondary}
             />
             <View style={styles.voiceCardContent}>
               <Ionicons name="male" size={28} color={colors.primaryDark} />
@@ -445,31 +484,24 @@ function MenuModal({ visible, onClose }: MenuModalProps) {
             </View>
           </Pressable>
           <Pressable
-            style={[styles.previewBtn, (!maleVoice || previewing) && styles.previewBtnDisabled]}
-            onPress={() => maleVoice && previewVoice("male")}
-            disabled={!maleVoice || (previewing !== null && previewing !== "male")}
-            android_ripple={{ color: "rgba(255,255,255,0.2)" }}
+            style={[styles.previewBtn, (previewingId !== null && previewingId !== MALE_VOICE_ID) && styles.previewBtnDisabled]}
+            onPress={() => previewVoiceById(MALE_VOICE_ID)}
+            disabled={previewingId !== null && previewingId !== MALE_VOICE_ID}
           >
-            <Ionicons
-              name={previewing === "male" ? "stop" : "play"}
-              size={18}
-              color={colors.text}
-            />
-            <Text style={styles.previewBtnText}>
-              {previewing === "male" ? "Parar" : "Ouvir"}
-            </Text>
+            <Ionicons name={previewingId === MALE_VOICE_ID ? "stop" : "play"} size={18} color={colors.text} />
+            <Text style={styles.previewBtnText}>{previewingId === MALE_VOICE_ID ? "Parar" : "Ouvir"}</Text>
           </Pressable>
         </View>
-        <View collapsable={false} style={[styles.voiceCard, ttsVoiceId === femaleVoice?.id && styles.voiceCardSelected]}>
+        <View style={[styles.voiceCard, ttsVoiceId === FEMALE_VOICE_ID && styles.voiceCardSelected]}>
           <Pressable
             style={styles.voiceCardTouchable}
-            onPress={() => femaleVoice && pickVoiceByGender("female")}
+            onPress={() => pickVoice(FEMALE_VOICE_ID)}
             android_ripple={{ color: "rgba(255,193,7,0.3)" }}
           >
             <Ionicons
-              name={ttsVoiceId === femaleVoice?.id ? "checkmark-circle" : "ellipse-outline"}
+              name={ttsVoiceId === FEMALE_VOICE_ID ? "checkmark-circle" : "ellipse-outline"}
               size={24}
-              color={ttsVoiceId === femaleVoice?.id ? colors.primary : colors.textSecondary}
+              color={ttsVoiceId === FEMALE_VOICE_ID ? colors.primary : colors.textSecondary}
             />
             <View style={styles.voiceCardContent}>
               <Ionicons name="female" size={28} color={colors.warning} />
@@ -477,21 +509,119 @@ function MenuModal({ visible, onClose }: MenuModalProps) {
             </View>
           </Pressable>
           <Pressable
-            style={[styles.previewBtn, (!femaleVoice || previewing) && styles.previewBtnDisabled]}
-            onPress={() => femaleVoice && previewVoice("female")}
-            disabled={!femaleVoice || (previewing !== null && previewing !== "female")}
-            android_ripple={{ color: "rgba(255,255,255,0.2)" }}
+            style={[styles.previewBtn, (previewingId !== null && previewingId !== FEMALE_VOICE_ID) && styles.previewBtnDisabled]}
+            onPress={() => previewVoiceById(FEMALE_VOICE_ID)}
+            disabled={previewingId !== null && previewingId !== FEMALE_VOICE_ID}
           >
-            <Ionicons
-              name={previewing === "female" ? "stop" : "play"}
-              size={18}
-              color={colors.text}
-            />
-            <Text style={styles.previewBtnText}>
-              {previewing === "female" ? "Parar" : "Ouvir"}
-            </Text>
+            <Ionicons name={previewingId === FEMALE_VOICE_ID ? "stop" : "play"} size={18} color={colors.text} />
+            <Text style={styles.previewBtnText}>{previewingId === FEMALE_VOICE_ID ? "Parar" : "Ouvir"}</Text>
           </Pressable>
         </View>
+      </View>
+    </ScrollView>
+  );
+
+  const handlePurchase = async () => {
+    setIapMessage(null);
+    setIapActionLoading(true);
+    try {
+      const result = await purchaseSubscription();
+      if (result.success) {
+        setIapMessage({ type: "success", text: "Assinatura ativada com sucesso!" });
+      } else {
+        setIapMessage({ type: "error", text: result.error || "Erro ao assinar" });
+      }
+    } finally {
+      setIapActionLoading(false);
+    }
+  };
+
+  const handleRestore = async () => {
+    setIapMessage(null);
+    setIapActionLoading(true);
+    try {
+      const result = await restorePurchases();
+      if (result.success) {
+        setIapMessage({
+          type: isSubscribed ? "success" : "error",
+          text: isSubscribed ? "Assinatura restaurada com sucesso!" : "Nenhuma assinatura encontrada para esta conta.",
+        });
+      } else {
+        setIapMessage({ type: "error", text: result.error || "Erro ao restaurar" });
+      }
+    } finally {
+      setIapActionLoading(false);
+    }
+  };
+
+  const formatFreePeriodEnd = (ts: number) => {
+    try {
+      return new Date(ts).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" });
+    } catch {
+      return "";
+    }
+  };
+
+  const renderSubscriptionContent = () => (
+    <ScrollView style={styles.fullScreenScroll} showsVerticalScrollIndicator={false}>
+      {isInFreePeriod && freePeriodEndsAt && !isSubscribed && (
+        <View style={styles.freePeriodBanner}>
+          <Ionicons name="gift" size={22} color={colors.primary} />
+          <Text style={styles.freePeriodBannerText}>
+            Plano grátis ativo até {formatFreePeriodEnd(freePeriodEndsAt)}. Depois assine PRO para continuar sem anúncios.
+          </Text>
+        </View>
+      )}
+      <View style={styles.subscriptionCard}>
+        <Ionicons name="diamond" size={48} color={colors.primary} />
+        <Text style={styles.subscriptionTitle}>RadarZone PRO</Text>
+        <Text style={styles.subscriptionDesc}>
+          Sem anúncios, acesso completo a alertas de radares, navegação com voz e atualizações. Cancele quando quiser.
+        </Text>
+        <View style={styles.subscriptionPriceRow}>
+          <Text style={styles.subscriptionPriceIntro}>R$ 9,90/mês</Text>
+          <Text style={styles.subscriptionPriceSub}>nos 3 primeiros meses</Text>
+          <Text style={styles.subscriptionPriceStandard}>depois R$ 14,90/mês</Text>
+        </View>
+        {isSubscribed ? (
+          <View style={styles.subscriptionStatusActive}>
+            <Ionicons name="checkmark-circle" size={24} color={colors.success} />
+            <Text style={styles.subscriptionStatusText}>Sua assinatura PRO está ativa</Text>
+          </View>
+        ) : (
+          <>
+            <TouchableOpacity
+              style={[styles.primaryButton, iapActionLoading && styles.buttonDisabled]}
+              onPress={handlePurchase}
+              disabled={iapActionLoading}
+            >
+              {iapActionLoading ? (
+                <ActivityIndicator color={colors.textDark} size="small" />
+              ) : (
+                <Text style={[styles.primaryButtonText, { padding: 8 }]}>Assinar PRO — R$ 9,90/mês (3 meses)</Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.restoreButton}
+              onPress={handleRestore}
+              disabled={iapActionLoading}
+            >
+              <Text style={styles.restoreButtonText}>Restaurar compras</Text>
+            </TouchableOpacity>
+          </>
+        )}
+        {iapMessage && (
+          <View style={[styles.iapMessage, iapMessage.type === "error" && styles.iapMessageError]}>
+            <Ionicons
+              name={iapMessage.type === "success" ? "checkmark-circle" : "alert-circle"}
+              size={20}
+              color={iapMessage.type === "success" ? colors.success : colors.error}
+            />
+            <Text style={[styles.iapMessageText, iapMessage.type === "error" && styles.iapMessageTextError]}>
+              {iapMessage.text}
+            </Text>
+          </View>
+        )}
       </View>
     </ScrollView>
   );
@@ -582,6 +712,7 @@ function MenuModal({ visible, onClose }: MenuModalProps) {
   };
 
   return (
+    <>
     <Modal
       visible={visible}
       transparent={screen === "menu"}
@@ -617,16 +748,27 @@ function MenuModal({ visible, onClose }: MenuModalProps) {
                 ? "Perfil"
                 : screen === "soundSettings"
                   ? "Som e voz"
-                  : "Configurações da conta"}
+                  : screen === "subscription"
+                    ? "Assinatura"
+                    : "Configurações da conta"}
             </Text>
           </View>
             {screen === "profile" && renderProfileContent()}
             {screen === "accountSettings" && renderAccountSettingsContent()}
             {screen === "soundSettings" && renderSoundSettingsContent()}
+            {screen === "subscription" && renderSubscriptionContent()}
           </SafeAreaView>
         </View>
       )}
     </Modal>
+    <AppModal
+      visible={appModal.visible}
+      title={appModal.title}
+      message={appModal.message}
+      buttons={appModal.buttons}
+      onRequestClose={() => setAppModal((s) => ({ ...s, visible: false }))}
+    />
+    </>
   );
 }
 
@@ -844,10 +986,131 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     fontSize: 16,
     fontWeight: "600",
-    color: colors.text,
+    color: colors.textDark,
   },
   buttonDisabled: {
     opacity: 0.7,
+  },
+  premiumBadge: {
+    backgroundColor: colors.success,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  premiumBadgeText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.text,
+  },
+  freeBadge: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  freePeriodBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "rgba(255, 193, 7, 0.15)",
+    padding: 14,
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  freePeriodBannerText: {
+    flex: 1,
+    fontSize: 13,
+    color: colors.text,
+  },
+  subscriptionCard: {
+    backgroundColor: colors.backgroundCardSecondary,
+    borderRadius: 16,
+    padding: 24,
+    marginTop: 8,
+    alignItems: "center",
+  },
+  subscriptionTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: colors.text,
+    marginTop: 16,
+  },
+  subscriptionDesc: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: "center",
+    marginTop: 8,
+    lineHeight: 22,
+  },
+  subscriptionPriceRow: {
+    marginTop: 20,
+    alignItems: "center",
+  },
+  subscriptionPrice: {
+    fontSize: 28,
+    fontWeight: "700",
+    color: colors.primary,
+  },
+  subscriptionPriceIntro: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: colors.primary,
+  },
+  subscriptionPriceSub: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: 4,
+  },
+  subscriptionPriceStandard: {
+    fontSize: 15,
+    color: colors.text,
+    marginTop: 8,
+    fontWeight: "600",
+  },
+  subscriptionStatusActive: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 24,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: "rgba(34, 197, 94, 0.15)",
+    borderRadius: 12,
+  },
+  subscriptionStatusText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: colors.success,
+  },
+  restoreButton: {
+    paddingVertical: 14,
+    alignItems: "center",
+    marginTop: 12,
+  },
+  restoreButtonText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    fontWeight: "500",
+  },
+  iapMessage: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 16,
+    padding: 12,
+    backgroundColor: "rgba(34, 197, 94, 0.15)",
+    borderRadius: 12,
+  },
+  iapMessageError: {
+    backgroundColor: "rgba(239, 68, 68, 0.15)",
+  },
+  iapMessageText: {
+    fontSize: 14,
+    color: colors.success,
+    flex: 1,
+  },
+  iapMessageTextError: {
+    color: colors.error,
   },
   secondaryButton: {
     flexDirection: "row",
