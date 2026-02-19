@@ -806,13 +806,34 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
                 }}
               />
 
+              {/* Highlight/pulse em radares próximos (alertados ou perto de alertar) */}
+              <CircleLayer
+                id="radarNearbyHighlight"
+                filter={[
+                  "all",
+                  ["!", ["has", "point_count"]],
+                  ["==", ["get", "isNearby"], 1],
+                ]}
+                style={{
+                  circleRadius: 28,
+                  circleColor: "transparent",
+                  circleStrokeWidth: 3,
+                  circleStrokeColor: colors.warning,
+                  circleOpacity: 0.9,
+                }}
+              />
               {/* Marcadores individuais: ícone por tipo (radar, radarFixo, radarMovel, radarSemaforico) */}
               <SymbolLayer
                 id="radarMarkers"
                 filter={["!", ["has", "point_count"]]}
                 style={{
                   iconImage: ["coalesce", ["get", "iconImage"], "radarMovel"],
-                  iconSize: ["coalesce", ["get", "iconSize"], 0.2],
+                  iconSize: [
+                    "case",
+                    ["==", ["get", "isNearby"], 1],
+                    ["*", ["coalesce", ["get", "iconSize"], 0.2], 1.3],
+                    ["coalesce", ["get", "iconSize"], 0.2],
+                  ],
                   iconAllowOverlap: true,
                   iconIgnorePlacement: true,
                 }}

@@ -518,6 +518,7 @@ export default function Home() {
   const wsDeferredSyncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+  const prevIsNavigatingRef = useRef(false);
   const lastPushedBaseRef = useRef<any[] | null>(null);
   const lastPushedOverlayRef = useRef<any[] | null>(null);
   const wsFlushScheduledRef = useRef(false);
@@ -1659,11 +1660,57 @@ export default function Home() {
     };
   }, [rearmRadarRuntimeState, syncAllRadarsFromCurrentLocation]);
 
-  // Durante navegação, manter highlight/pulse no nativo em sync com proximidade
+  // Durante navegação: highlight via proximity. Fora: highlight radares próximos (800m)
+  const nearbyRadarIdsForMap = useMemo(() => {
+    if (isNavigating) return proximityNearbyRadarIds;
+    if (!currentLocation || radars.length === 0) return new Set<string>();
+    const HIGHLIGHT_RANGE_M = 800;
+    const nearby = new Set<string>();
+    for (const r of radars) {
+      if (!r?.id) continue;
+      const d = calculateDistance(
+        currentLocation.latitude,
+        currentLocation.longitude,
+        r.latitude,
+        r.longitude,
+      );
+      if (d <= HIGHLIGHT_RANGE_M) nearby.add(r.id);
+    }
+    return nearby;
+  }, [
+    isNavigating,
+    proximityNearbyRadarIds,
+    currentLocation,
+    radars,
+  ]);
+
   useEffect(() => {
-    if (!isNavigating) return;
-    setNearbyRadarIds(proximityNearbyRadarIds);
-  }, [isNavigating, proximityNearbyRadarIds]);
+    setNearbyRadarIds(nearbyRadarIdsForMap);
+  }, [nearbyRadarIdsForMap]);
+
+  // Ao sair da navegação: atualizar localização e recentrar mapa
+  useEffect(() => {
+    const wasNav = prevIsNavigatingRef.current;
+    prevIsNavigatingRef.current = isNavigating;
+    if (wasNav && !isNavigating) {
+      getGeolocation().getCurrentPosition(
+        (position: { coords: { latitude: number; longitude: number } }) => {
+          const loc: LatLng = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          };
+          currentLocationRef.current = loc;
+          setCurrentLocation(loc);
+          setOrigin(loc);
+          setTimeout(() => {
+            mainMapRef.current?.focusOnCoord?.(loc.latitude, loc.longitude);
+          }, 300);
+        },
+        () => {},
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 },
+      );
+    }
+  }, [isNavigating]);
 
   // Array ordenado para animação pulsante no Mapbox (ordem consistente = hash estável no nativo)
   const nearbyRadarIdsArray = useMemo(
