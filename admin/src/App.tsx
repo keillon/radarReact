@@ -50,7 +50,7 @@ export default function App() {
   const [csvStatus, setCsvStatus] = useState<string>("Carregando…");
   const [csvMessage, setCsvMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
   const [csvUploading, setCsvUploading] = useState(false);
-  const loadTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const RADAR_TYPES = [
     { value: "placa" as const, label: "Placa de Velocidade", icon: "placa60" },
