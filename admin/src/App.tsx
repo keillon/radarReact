@@ -394,6 +394,12 @@ export default function App() {
           Admin Radares — Radar React
         </h1>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <a
+            href="/admin/csv"
+            style={{ color: "#fff", textDecoration: "none", fontWeight: 600, padding: "8px 12px" }}
+          >
+            CSV
+          </a>
           <button
             type="button"
             onClick={() => setMode("add")}

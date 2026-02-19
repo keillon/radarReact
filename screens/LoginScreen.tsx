@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import {
   ActivityIndicator,
   Animated,
+  Image,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
@@ -60,7 +61,16 @@ export default function LoginScreen({ onGoToRegister }: LoginScreenProps) {
       <Animated.View style={[styles.card, { opacity: fadeAnim }]}>
         <View style={styles.header}>
           <View style={styles.iconWrap}>
-            <Ionicons name="car-sport" size={40} color={colors.primary} />
+            <Image 
+            source={require("../assets/images/logo.png")} 
+            height={72}
+            width={72}
+            resizeMode="contain"
+            style={{
+              width: 75,
+              height: 75,
+            }}
+            />
           </View>
           <Text style={styles.title}>RadarZone</Text>
           <Text style={styles.subtitle}>Entre na sua conta</Text>

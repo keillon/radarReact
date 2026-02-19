@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Modal,
   StyleSheet,
@@ -28,6 +27,7 @@ import {
   updateRadar
 } from "../services/api";
 import { colors } from "../utils/theme";
+import { AppModal, type AppModalButton } from "../components/AppModal";
 
 const DEFAULT_CENTER = { latitude: -23.5505, longitude: -46.6333 };
 const LOAD_RADIUS_M = 30000;
@@ -73,6 +73,50 @@ export default function RadarEditorScreen({
   const [vignetteCenter, setVignetteCenter] = useState<{ x: number; y: number } | null>(null);
   const editorMapRef = useRef<MapHandle | null>(null);
   const selectedRadarIdRef = useRef<string | null>(null);
+  const [appModal, setAppModal] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    buttons: AppModalButton[];
+  }>({ visible: false, title: "", message: "", buttons: [] });
+
+  const showAlert = (title: string, message: string) => {
+    setAppModal({
+      visible: true,
+      title,
+      message,
+      buttons: [
+        { text: "OK", onPress: () => setAppModal((s) => ({ ...s, visible: false })) },
+      ],
+    });
+  };
+
+  const showConfirm = (
+    title: string,
+    message: string,
+    opts: { confirmText?: string; cancelText?: string; onConfirm: () => void },
+  ) => {
+    setAppModal({
+      visible: true,
+      title,
+      message,
+      buttons: [
+        {
+          text: opts.cancelText ?? "Cancelar",
+          style: "cancel",
+          onPress: () => setAppModal((s) => ({ ...s, visible: false })),
+        },
+        {
+          text: opts.confirmText ?? "Deletar",
+          style: "destructive",
+          onPress: () => {
+            setAppModal((s) => ({ ...s, visible: false }));
+            opts.onConfirm();
+          },
+        },
+      ],
+    });
+  };
 
   const RADAR_TYPES: {
     value: "móvel" | "semaforo" | "placa";
@@ -251,7 +295,7 @@ export default function RadarEditorScreen({
           setSelectedRadar({ ...selectedRadar, ...updated });
           setMode("view");
         } else {
-          Alert.alert(
+          showAlert(
             "Erro",
             "Não foi possível mover o radar. O servidor pode não suportar edição."
           );
@@ -278,7 +322,7 @@ export default function RadarEditorScreen({
       setRadarType("placa");
       setMode("view");
     } catch (e) {
-      Alert.alert(
+      showAlert(
         "Erro",
         e instanceof Error ? e.message : "Não foi possível adicionar o radar."
       );
@@ -299,7 +343,7 @@ export default function RadarEditorScreen({
       );
       setSelectedRadar({ ...selectedRadar, ...updated });
     } else {
-      Alert.alert(
+      showAlert(
         "Erro",
         "Não foi possível atualizar. O servidor pode não suportar edição."
       );
@@ -312,33 +356,30 @@ export default function RadarEditorScreen({
 
   const handleDelete = () => {
     if (!selectedRadar) return;
-    Alert.alert(
+    showConfirm(
       "Deletar radar",
       `Remover o radar (${selectedRadar.id})? O servidor pode não suportar exclusão.`,
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Deletar",
-          style: "destructive",
-          onPress: async () => {
-            setSaving(true);
-            const ok = await deleteRadar(selectedRadar.id);
-            setSaving(false);
-            if (ok) {
-              setRadars((prev) =>
-                prev.filter((r) => r.id !== selectedRadar.id)
-              );
-              setSelectedRadar(null);
-              setMode("view");
-            } else {
-              Alert.alert(
-                "Aviso",
-                "Não foi possível deletar. Tente inativar no servidor."
-              );
-            }
-          },
+      {
+        cancelText: "Cancelar",
+        confirmText: "Deletar",
+        onConfirm: async () => {
+          setSaving(true);
+          const ok = await deleteRadar(selectedRadar.id);
+          setSaving(false);
+          if (ok) {
+            setRadars((prev) =>
+              prev.filter((r) => r.id !== selectedRadar.id)
+            );
+            setSelectedRadar(null);
+            setMode("view");
+          } else {
+            showAlert(
+              "Aviso",
+              "Não foi possível deletar. Tente inativar no servidor."
+            );
+          }
         },
-      ]
+      },
     );
   };
 
@@ -758,6 +799,13 @@ export default function RadarEditorScreen({
           <Text style={styles.fabText}>+ Adicionar radar</Text>
         </TouchableOpacity>
       )}
+      <AppModal
+        visible={appModal.visible}
+        title={appModal.title}
+        message={appModal.message}
+        buttons={appModal.buttons}
+        onRequestClose={() => setAppModal((s) => ({ ...s, visible: false }))}
+      />
     </View>
   );
 }

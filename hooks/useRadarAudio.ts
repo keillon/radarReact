@@ -33,24 +33,28 @@ export function useRadarAudio() {
   const deviceVolume = useDeviceVolume();
   const deviceVolRef = useRef(deviceVolume);
   deviceVolRef.current = deviceVolume;
+  const isPlayingRef = useRef(false);
 
   const playRadarAlert = useCallback(() => {
     const { soundEnabled, mapVoiceEnabled, volume } = getStoredSettings();
     if (!soundEnabled) return;
+    if (isPlayingRef.current) return;
+
     try {
-      const Sound = require("react-native-sound").default;
+      const Sound = require("react-native-sound");
       Sound.setCategory("Playback", true);
+      isPlayingRef.current = true;
       const s = new Sound(
         require("../assets/audios/alertRadar.mp3"),
-        async (error: any) => {
+        (error: any) => {
           if (error) {
-            console.warn("Falha ao carregar alertRadar.mp3:", error);
+            isPlayingRef.current = false;
             const Tts = getTts();
             if (mapVoiceEnabled && Tts?.speak) {
               ensureTtsReady().then(async () => {
                 try {
                   const deviceVol = deviceVolRef.current;
-                  const vol = Math.max(0, Math.min(1, Number(volume) * deviceVol));
+                  const vol = Math.max(0.3, Math.min(1, Number(volume) * deviceVol));
                   const opts =
                     Platform.OS === "android"
                       ? {
@@ -66,12 +70,13 @@ export function useRadarAudio() {
             }
             return;
           }
-          Promise.resolve(deviceVolRef.current).then((deviceVol) => {
-            const vol = Math.max(0, Math.min(1, Number(volume) * deviceVol));
-            s.setVolume(vol);
+          const deviceVol = deviceVolRef.current;
+          const vol = Math.max(0.5, Math.min(1, Number(volume) * deviceVol));
+          s.setVolume(vol);
           const playOnce = (count: number) => {
             if (count <= 0) {
               s.release();
+              isPlayingRef.current = false;
               return;
             }
             s.setCurrentTime(0);
@@ -79,17 +84,16 @@ export function useRadarAudio() {
               if (count > 1 && success) {
                 setTimeout(() => playOnce(count - 1), 300);
               } else {
-                if (!success) console.warn("Falha ao reproduzir alertRadar.mp3");
                 s.release();
+                isPlayingRef.current = false;
               }
             });
           };
-            playOnce(3);
-          });
+          playOnce(3);
         }
       );
     } catch (e) {
-      // react-native-sound pode não estar linkado
+      isPlayingRef.current = false;
     }
   }, []);
 

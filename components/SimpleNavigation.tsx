@@ -1,6 +1,7 @@
 import MapboxGL from '@rnmapbox/maps';
 import React, { useRef, useState } from 'react';
-import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { AppModal, type AppModalButton } from './AppModal';
 
 // Token do Mapbox
 const MAPBOX_ACCESS_TOKEN = 'sk.eyJ1Ijoia2VpbGxvbiIsImEiOiJjbWsxZ3RwYnIwNjJ3M2NuNmtxdzFmbWk0In0.xQW5C9eE6JG4HBVkuEBLxg';
@@ -25,6 +26,23 @@ const SimpleNavigation: React.FC<SimpleNavigationProps> = ({
   const [routeCoordinates, setRouteCoordinates] = useState<any[]>([]);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const mapViewRef = useRef<MapboxGL.MapView>(null);
+  const [appModal, setAppModal] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    buttons: AppModalButton[];
+  }>({ visible: false, title: '', message: '', buttons: [] });
+
+  const showAlert = (title: string, message: string) => {
+    setAppModal({
+      visible: true,
+      title,
+      message,
+      buttons: [
+        { text: 'OK', onPress: () => setAppModal((s) => ({ ...s, visible: false })) },
+      ],
+    });
+  };
 
   const calculateRoute = async () => {
     if (!origin || !destination) return;
@@ -44,13 +62,13 @@ const SimpleNavigation: React.FC<SimpleNavigationProps> = ({
       }
     } catch (error) {
       console.error('Erro ao calcular rota:', error);
-      Alert.alert('Erro', 'Não foi possível calcular a rota');
+      showAlert('Erro', 'Não foi possível calcular a rota');
     }
   };
 
   const startNavigation = () => {
     if (!origin || !destination) {
-      Alert.alert('Erro', 'Origem e destino são necessários');
+      showAlert('Erro', 'Origem e destino são necessários');
       return;
     }
     calculateRoute();
@@ -159,6 +177,13 @@ const SimpleNavigation: React.FC<SimpleNavigationProps> = ({
           </Text>
         </View>
       )}
+      <AppModal
+        visible={appModal.visible}
+        title={appModal.title}
+        message={appModal.message}
+        buttons={appModal.buttons}
+        onRequestClose={() => setAppModal((s) => ({ ...s, visible: false }))}
+      />
     </View>
   );
 };

@@ -25,20 +25,6 @@ function getClosestPlacaName(speed: number | undefined): string {
   return `placa${closest}`;
 }
 
-/** Mapeia tipo para ícone — alinhado com mapa normal: só semaforico, movel e placa. */
-function getRadarIconName(type: string | undefined): string {
-  if (!type) return "placa60";
-  const t = type
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-  if (t.includes("semaforo") || t.includes("camera") || t.includes("fotografica")) return "radarSemaforico";
-  if (t.includes("movel") || t.includes("mobile")) return "radarMovel";
-  if (t.includes("fixo") || t.includes("placa") || t.includes("reportado")) return "placa60";
-  return "placa60";
-}
-
 /** Ícone no mapa: fixo/placa usa placa por velocidade; demais usam semaforico ou movel. */
 function getRadarIconForMap(r: { type?: string; speedLimit?: number }): string {
   const type = r?.type;

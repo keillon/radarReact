@@ -9,6 +9,10 @@
     "preandroid": "patch-package",
     "apply-patch": "patch-package",
     "build:release": "npm run apply-patch && cd android && ./gradlew assembleRelease",
+    "build:android:bundle": "cd android && gradlew.bat bundleRelease",
+    "build:android:bundle:full": "npm run apply-patch && npm run build:android:bundle",
+    "build:aab": "cd android && gradlew.bat bundleRelease",
+    "gen-keystore": "scripts\\gen-keystore.bat",
     "android": "react-native run-android",
     "android:clean-rebuild": "cd android && gradlew.bat clean && cd .. && npx react-native run-android",
     "android:build": "cd android && gradlew.bat assembleDebug && cd ..",
@@ -37,6 +41,7 @@
     "react-native-svg": "14.2.0",
     "react-native-tts": "^4.1.1",
     "react-native-vector-icons": "^10.3.0",
+    "react-native-iap": "^13.0.4",
     "socket.io-client": "^4.7.2"
   },
   "devDependencies": {

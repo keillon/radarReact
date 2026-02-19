@@ -1,4 +1,6 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://72.60.247.18:3000";
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL ??
+  (typeof window !== "undefined" ? "" : "http://localhost:3000");
 
 async function handleResponse<T>(res: Response, errorMsg: string): Promise<T> {
   const text = await res.text();

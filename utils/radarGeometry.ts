@@ -119,8 +119,8 @@ export const calculateDistanceAlongRouteWithCumulative = (
   const userCumulative = projectPointOntoRoute(userLocation, routePoints, cumulative);
   const radarCumulative = projectPointOntoRoute(radarLocation, routePoints, cumulative);
   const distanceAlongRoute = radarCumulative - userCumulative;
-  /** Janela "acabou de passar": -25m a +25m = ainda tratamos como "no radar" para mostrar modal. */
-  const PASS_WINDOW_METERS = 25;
+  /** Janela "acabou de passar": -5m a +5m = só trata como "no radar" quando realmente próximo (0m). */
+  const PASS_WINDOW_METERS = 5;
   const hasPassed = distanceAlongRoute < -PASS_WINDOW_METERS;
 
   return {

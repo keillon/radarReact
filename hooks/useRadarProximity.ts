@@ -33,7 +33,8 @@ const PROXIMITY_DEBOUNCE_MS = 80;
 const MOVEMENT_THRESHOLD_METERS = 2;
 const ALONG_ROUTE_WINDOW_METERS = 800;
 const MODAL_WINDOW_METERS = 300;
-const PASS_DISTANCE_METERS = 10;
+/** Distância (m) para considerar "passou" do radar (usa atRadarWindow que é ~5m). */
+const PASS_DISTANCE_METERS = 5;
 /** Se o radar estiver a até esta distância (m) do usuário em linha reta, considera para alerta mesmo fora da rota (ex.: radar do admin a 30m). */
 const DIRECT_ALERT_RANGE_METERS = 6;
 

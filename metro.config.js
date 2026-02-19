@@ -9,6 +9,8 @@ const { getDefaultConfig, mergeConfig } = require("@react-native/metro-config");
 const defaultConfig = getDefaultConfig(__dirname);
 const { assetExts } = defaultConfig.resolver;
 
+const path = require("path");
+
 const config = {
   transformer: {
     getTransformOptions: async () => ({
@@ -21,6 +23,16 @@ const config = {
   resolver: {
     assetExts: [...assetExts, "css"],
     blockList: [/node_modules\/.*\/android\/\.cxx\/.*/],
+    resolveRequest: (context, moduleName, platform) => {
+      if (moduleName === "react-native-iap") {
+        const iapRoot = path.resolve(__dirname, "node_modules", "react-native-iap");
+        return {
+          filePath: path.join(iapRoot, "lib", "commonjs", "index.js"),
+          type: "sourceFile",
+        };
+      }
+      return context.resolveRequest(context, moduleName, platform);
+    },
   },
 };
 

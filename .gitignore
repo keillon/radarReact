@@ -33,6 +33,7 @@ local.properties
 .cxx/
 *.keystore
 !debug.keystore
+android/keystore.properties
 
 # node.js
 #
@@ -245,6 +246,13 @@ android/.idea/
 android/local.properties
 android/app/google-services.json
 android/app/google-services-dev.json
+android/keystore.properties
+android/app/*-release.keystore
+
+# Release signing (nunca commitar)
+android/keystore.properties
+android/app/*.jks
+android/app/release.keystore
 
 # iOS build outputs
 ios/build/
