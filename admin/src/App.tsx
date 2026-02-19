@@ -3,6 +3,7 @@ import MapView from "./Map";
 import {
   Radar,
   deleteRadar,
+  getAdminConfig,
   getCsvStatus,
   getRadarsNearLocation,
   normalizeRadarPayload,
@@ -50,7 +51,14 @@ export default function App() {
   const [csvStatus, setCsvStatus] = useState<string>("Carregando…");
   const [csvMessage, setCsvMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
   const [csvUploading, setCsvUploading] = useState(false);
+  const [runtimeMapboxToken, setRuntimeMapboxToken] = useState<string>("");
   const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const effectiveMapboxToken =
+    import.meta.env.VITE_MAPBOX_TOKEN ||
+    import.meta.env.VITE_MapboxAccessToken ||
+    runtimeMapboxToken ||
+    "";
 
   const RADAR_TYPES = [
     { value: "placa" as const, label: "Placa de Velocidade", icon: "placa60" },
@@ -91,6 +99,14 @@ export default function App() {
       }
     };
   }, [loadRadars]);
+
+  // Token Mapbox em runtime (admin embutido no backend sem .env no build)
+  useEffect(() => {
+    if (effectiveMapboxToken) return;
+    getAdminConfig()
+      .then((c) => c.mapboxToken && setRuntimeMapboxToken(c.mapboxToken))
+      .catch(() => {});
+  }, [effectiveMapboxToken]);
 
   const loadCsvStatus = useCallback(async () => {
     setCsvStatus("Carregando…");
@@ -872,8 +888,7 @@ export default function App() {
       {adminTab === "map" && (
       <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
         <div style={{ flex: 1, position: "relative" }}>
-          {!import.meta.env.VITE_MAPBOX_TOKEN &&
-            !import.meta.env.VITE_MapboxAccessToken && (
+          {!effectiveMapboxToken && (
               <div
                 style={{
                   position: "absolute",
@@ -886,10 +901,11 @@ export default function App() {
                   zIndex: 10,
                 }}
               >
-                Defina VITE_MAPBOX_TOKEN no .env para ver o mapa.
+                Defina VITE_MAPBOX_TOKEN no .env (ou MAPBOX_TOKEN no backend) para ver o mapa.
               </div>
             )}
           <MapView
+            mapboxToken={effectiveMapboxToken || undefined}
             radars={radars}
             selectedId={selected?.id ?? null}
             onSelectRadar={handleSelectRadar}

@@ -58,6 +58,7 @@ const ICON_NAMES = [
 ] as const;
 
 interface MapProps {
+  mapboxToken?: string;
   radars?: Radar[];
   selectedId?: string | null;
   onSelectRadar?: (radar: Radar) => void;
@@ -88,6 +89,7 @@ function radarsToGeoJSON(radars: Radar[]): GeoJSON.FeatureCollection {
 }
 
 function Map({
+  mapboxToken: mapboxTokenProp,
   radars = [],
   selectedId = null,
   onSelectRadar = () => { },
@@ -99,6 +101,11 @@ function Map({
 }: Partial<MapProps> = {}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
+
+  // Token em runtime (admin embutido no backend)
+  useEffect(() => {
+    if (mapboxTokenProp) mapboxgl.accessToken = mapboxTokenProp;
+  }, [mapboxTokenProp]);
   const radarsRef = useRef<Radar[]>([]);
   const onMapClickRef = useRef(onMapClick);
   const onCenterChangeRef = useRef(onCenterChange);

@@ -311,6 +311,15 @@ export async function adminRoutes(fastify: FastifyInstance) {
     reply.type("text/html").send(loginHTML);
   });
 
+  // Config do admin (token Mapbox em runtime; evita .env no build do embed)
+  fastify.get("/admin/config", async (_request, reply) => {
+    const mapboxToken =
+      process.env.MAPBOX_TOKEN ||
+      process.env.VITE_MAPBOX_TOKEN ||
+      "";
+    return reply.send({ mapboxToken });
+  });
+
   // Rotas protegidas — exigem token admin
   fastify.get("/admin/csv/status", { preHandler: [requireAdmin] }, async (_request, reply) => {
     try {

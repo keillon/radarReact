@@ -171,6 +171,14 @@ export async function deleteRadar(id: string): Promise<boolean> {
   return true;
 }
 
+/** Config do admin (token Mapbox em runtime; usado quando não está no build) */
+export async function getAdminConfig(): Promise<{ mapboxToken: string }> {
+  const base = import.meta.env.VITE_API_URL ?? (typeof window !== "undefined" ? "" : "http://localhost:3000");
+  const res = await fetch(`${base}/admin/config`, { credentials: "same-origin" });
+  const data = await res.json();
+  return { mapboxToken: data.mapboxToken ?? "" };
+}
+
 /** Status do import CSV (admin) — cookie de sessão é enviado automaticamente */
 export async function getCsvStatus(): Promise<{
   success: boolean;
