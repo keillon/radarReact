@@ -144,7 +144,10 @@ export async function authRoutes(fastify: FastifyInstance) {
       const body = request.body as { name?: string };
 
       const updateData: { name?: string | null } = {};
-      if (body.name !== undefined) updateData.name = body.name.trim() || null;
+      if (body.name !== undefined) {
+        const val = body.name.trim() || null;
+        updateData.name = val;
+      }
       if (Object.keys(updateData).length === 0) {
         return reply.status(400).send({ error: "Nenhum dado para atualizar" });
       }
