@@ -1,6 +1,9 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import websocket from "@fastify/websocket";
+import cookie from "@fastify/cookie";
+import fastifyStatic from "@fastify/static";
+import path from "path";
 import { radarRoutes } from "./routes/radars";
 import { notificationRoutes } from "./routes/notifications";
 import { adminRoutes } from "./routes/admin";
@@ -33,6 +36,25 @@ async function start() {
 
   // Registrar WebSocket plugin
   await fastify.register(websocket);
+
+  // Cookie (para sessão admin no mapa)
+  await fastify.register(cookie, { secret: process.env.JWT_SECRET || "radar-secret" });
+
+  // Admin: registrar rotas GET /admin/login e GET /admin/csv ANTES do static
+  await fastify.register(adminRoutes);
+
+  // Admin: mapa React em /admin protegido; sem auth redireciona para /admin/login
+  const { requireAdminRedirect } = await import("./middlewares/adminAuth");
+  await fastify.register(
+    async (scoped) => {
+      scoped.addHook("onRequest", requireAdminRedirect);
+      await scoped.register(fastifyStatic, {
+        root: path.join(__dirname, "..", "public", "admin"),
+        prefix: "/",
+      });
+    },
+    { prefix: "/admin" }
+  );
 
   // Função helper para broadcast para todos os clientes conectados
   fastify.decorate("wsBroadcast", (event: string, data: any) => {
@@ -133,11 +155,10 @@ async function start() {
     }
   });
 
-  // Registrar outras rotas DEPOIS do WebSocket
+  // Registrar outras rotas DEPOIS do WebSocket (adminRoutes já registrado acima)
   await fastify.register(authRoutes);
   await fastify.register(radarRoutes);
   await fastify.register(notificationRoutes);
-  await fastify.register(adminRoutes);
   await fastify.register(userRoutes);
 
   const port = Number(process.env.PORT) || 3000;

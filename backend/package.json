@@ -14,10 +14,13 @@
     "import:antt": "tsx src/scripts/importANTTFile.ts",
     "sync:antt:auto": "tsx src/scripts/syncANTTAuto.ts",
     "clear:database": "tsx src/scripts/clearDatabase.ts",
-    "create-admin": "tsx scripts/create-admin.ts"
+    "create-admin": "tsx scripts/create-admin.ts",
+    "embed-admin": "cd ../admin && npm run build && cd ../backend && node scripts/embed-admin.mjs"
   },
   "dependencies": {
+    "@fastify/cookie": "^11.0.2",
     "@fastify/cors": "^8.4.0",
+    "@fastify/static": "^9.0.0",
     "@fastify/websocket": "^10.0.1",
     "@prisma/client": "^5.7.1",
     "@types/bcryptjs": "^2.4.6",

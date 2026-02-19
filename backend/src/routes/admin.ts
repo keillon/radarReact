@@ -1,6 +1,5 @@
 import { FastifyInstance } from "fastify";
 import path from "path";
-import fs from "fs";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { prisma } from "../utils/prisma";
@@ -10,10 +9,8 @@ import { requireAdmin } from "../middlewares/adminAuth";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-in-production";
 
-/**
- * Painel Admin HTML simples para enviar notificações
- */
-const adminHTML = `
+/** Login: após sucesso redireciona para /admin (mapa) */
+const loginHTML = `
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -208,7 +205,7 @@ const adminHTML = `
 </head>
 <body>
   <div class="container">
-    <div id="loginPanel" class="login-panel" style="display:block;">
+    <div class="login-panel">
       <h1>🔐 Painel Admin - Login</h1>
       <form id="loginForm">
         <div class="form-group">
@@ -223,136 +220,10 @@ const adminHTML = `
         <button type="submit" id="loginBtn">Entrar</button>
       </form>
     </div>
-
-    <div id="adminPanel" style="display:none;">
-    <h1>🚨 Painel Admin - Notificações</h1>
-    <p style="text-align:right; margin-bottom:12px; font-size:13px; color:#666;">
-      <span id="adminEmail"></span> <a href="#" id="logoutBtn" style="margin-left:8px; color:#dc3545;">Sair</a>
-    </p>
-
-    <div class="tabs">
-      <button class="tab-btn active" data-tab="notifications">Notificações</button>
-      <button class="tab-btn" data-tab="csv">CSV de Radares</button>
-    </div>
-
-    <div id="tab-notifications" class="tab-panel active">
-    <div class="stats" id="stats">
-      <div class="stat-card">
-        <h3>Dispositivos Registrados</h3>
-        <div class="number" id="deviceCount">-</div>
-      </div>
-    </div>
-
-    <form id="notificationForm">
-      <div class="form-group">
-        <label for="title">Título da Notificação *</label>
-        <input type="text" id="title" name="title" required placeholder="Ex: Novo Recurso Disponível">
-      </div>
-      
-      <div class="form-group">
-        <label for="body">Mensagem *</label>
-        <textarea id="body" name="body" required placeholder="Ex: Agora você pode reportar radares em tempo real!"></textarea>
-      </div>
-      
-      <button type="submit" id="submitBtn">Enviar Notificação</button>
-    </form>
-
-    <div class="message" id="message"></div>
-
-    <div class="tokens-section">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-        <h2 style="margin: 0;">Dispositivos Registrados</h2>
-        <button onclick="loadStats()" style="background: #28a745; padding: 8px 16px; font-size: 14px; width: auto;">
-          🔄 Atualizar
-        </button>
-      </div>
-      <div id="tokensList"></div>
-    </div>
-    </div>
-
-    <div id="tab-csv" class="tab-panel">
-      <h2 style="margin-bottom: 12px;">Atualizar Base CSV</h2>
-      <p style="margin-bottom: 12px; color:#475569;">
-        O backend só reprocessa quando o CSV mudar (hash diferente). Se for igual, ele ignora.
-      </p>
-
-      <div class="csv-drop">
-        <input type="file" id="csvFile" accept=".csv,text/csv" />
-        <p style="margin-top: 8px; color:#64748b; font-size: 13px;">
-          Selecione um arquivo CSV atualizado. O conteúdo será enviado e persistido no backend.
-        </p>
-      </div>
-
-      <button id="uploadCsvBtn" style="margin-bottom:10px;">Enviar CSV e Processar</button>
-      <button id="refreshCsvStatusBtn" style="background:#16a34a;">Atualizar Status CSV</button>
-
-      <div id="csvStatus" class="csv-meta">Carregando status...</div>
-    </div>
-    </div>
   </div>
 
   <script>
     const API_URL = window.location.origin;
-    const TOKEN_KEY = 'radarAdminToken';
-    const USER_KEY = 'radarAdminUser';
-
-    function getToken() {
-      return localStorage.getItem(TOKEN_KEY);
-    }
-
-    function setToken(token) {
-      if (token) localStorage.setItem(TOKEN_KEY, token);
-      else { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(USER_KEY); }
-    }
-
-    function setUser(user) {
-      if (user) localStorage.setItem(USER_KEY, JSON.stringify(user));
-    }
-
-    function getUser() {
-      try {
-        const u = localStorage.getItem(USER_KEY);
-        return u ? JSON.parse(u) : null;
-      } catch { return null; }
-    }
-
-    function isLoggedIn() {
-      return !!getToken();
-    }
-
-    function showLogin() {
-      document.getElementById('loginPanel').style.display = 'block';
-      document.getElementById('adminPanel').style.display = 'none';
-    }
-
-    function showAdmin(email) {
-      document.getElementById('loginPanel').style.display = 'none';
-      document.getElementById('adminPanel').style.display = 'block';
-      document.getElementById('adminEmail').textContent = email || '';
-    }
-
-    async function adminFetch(url, opts) {
-      const token = getToken();
-      const headers = { ...(opts?.headers || {}), 'Content-Type': 'application/json' };
-      if (token) headers['Authorization'] = 'Bearer ' + token;
-      const res = await fetch(url, { ...opts, headers });
-      if (res.status === 401 || res.status === 403) {
-        setToken(null);
-        showLogin();
-        throw new Error('Sessão expirada. Faça login novamente.');
-      }
-      return res;
-    }
-
-    function switchTab(tabId) {
-      document.querySelectorAll('.tab-btn').forEach((btn) => {
-        btn.classList.toggle('active', btn.dataset.tab === tabId);
-      });
-      document.querySelectorAll('.tab-panel').forEach((panel) => {
-        panel.classList.toggle('active', panel.id === 'tab-' + tabId);
-      });
-    }
-
     document.getElementById('loginForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const btn = document.getElementById('loginBtn');
@@ -370,12 +241,7 @@ const adminHTML = `
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Login falhou');
-        if (!data.token) throw new Error('Resposta inválida');
-        setToken(data.token);
-        setUser(data.user || { email: document.getElementById('loginEmail').value });
-        showAdmin((data.user && data.user.email) || document.getElementById('loginEmail').value);
-        loadStats();
-        loadCsvStatus();
+        window.location.href = '/admin/';
       } catch (err) {
         errEl.textContent = err.message || 'Erro ao fazer login';
         errEl.style.display = 'block';
@@ -383,50 +249,123 @@ const adminHTML = `
         btn.disabled = false;
       }
     });
+  </script>
+</body>
+</html>
+`;
+
+/** Painel CSV: sem notificações; link para Mapa (/admin) */
+const csvPanelHTML = `
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin CSV - Radar</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+      padding: 30px;
+    }
+    h1 { color: #333; margin-bottom: 30px; }
+    label { display: block; margin-bottom: 8px; color: #555; font-weight: 500; }
+    input, textarea { width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 16px; }
+    button {
+      background: #3b9eff; color: white; border: none; padding: 14px 28px; border-radius: 8px;
+      font-size: 16px; font-weight: 600; cursor: pointer; margin-right: 8px; margin-bottom: 10px;
+    }
+    button:hover { background: #2a7fd4; }
+    button:disabled { background: #ccc; cursor: not-allowed; }
+    .msg { margin-top: 12px; padding: 12px; border-radius: 8px; display: none; }
+    .msg.success { background: #d4edda; color: #155724; }
+    .msg.error { background: #f8d7da; color: #721c24; }
+    .csv-drop { border: 2px dashed #cbd5e1; border-radius: 10px; padding: 16px; background: #f8fafc; margin-bottom: 12px; }
+    .csv-meta { font-size: 13px; color: #475569; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; margin-top: 10px; white-space: pre-wrap; }
+    .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .top a { color: #4f46e5; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="top">
+      <h1>📄 CSV de Radares</h1>
+      <span>
+        <a href="/admin/">Mapa</a> | <a href="#" id="logoutBtn" style="color:#dc3545;">Sair</a>
+      </span>
+    </div>
+
+    <div>
+      <h2 style="margin-bottom: 12px;">Atualizar Base CSV</h2>
+      <p style="margin-bottom: 12px; color:#475569;">
+        O backend só reprocessa quando o CSV mudar (hash diferente). Se for igual, ele ignora.
+      </p>
+
+      <div class="csv-drop">
+        <input type="file" id="csvFile" accept=".csv,text/csv" />
+        <p style="margin-top: 8px; color:#64748b; font-size: 13px;">
+          Selecione um arquivo CSV atualizado. O conteúdo será enviado e persistido no backend.
+        </p>
+      </div>
+
+      <button id="uploadCsvBtn" style="margin-bottom:10px;">Enviar CSV e Processar</button>
+      <button id="refreshCsvStatusBtn" style="background:#16a34a;">Atualizar Status CSV</button>
+
+      <div id="csvMessage" class="msg"></div>
+      <div id="csvStatus" class="csv-meta">Carregando status...</div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = window.location.origin;
+    const TOKEN_KEY = 'radarAdminToken';
+    const USER_KEY = 'radarAdminUser';
+
+    function getToken() { return localStorage.getItem(TOKEN_KEY); }
+    function setToken(token) {
+      if (token) localStorage.setItem(TOKEN_KEY, token);
+      else { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(USER_KEY); }
+    }
+
+    async function adminFetch(url, opts) {
+      const token = getToken();
+      const headers = { ...(opts?.headers || {}), 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = 'Bearer ' + token;
+      const res = await fetch(url, { ...opts, headers });
+      if (res.status === 401 || res.status === 403) {
+        setToken(null);
+        window.location.href = '/admin/login';
+        throw new Error('Sessão expirada.');
+      }
+      return res;
+    }
+
+    function showMsg(text, type) {
+      const el = document.getElementById('csvMessage');
+      if (el) { el.textContent = text; el.className = 'msg ' + type; el.style.display = 'block'; setTimeout(() => { el.style.display = 'none'; }, 5000); }
+    }
 
     document.getElementById('logoutBtn').addEventListener('click', (e) => {
       e.preventDefault();
       setToken(null);
-      showLogin();
+      window.location.href = '/admin/login';
     });
 
-    if (!isLoggedIn()) {
-      showLogin();
-    } else {
-      showAdmin((getUser() && getUser().email) || '');
-      loadStats();
-      loadCsvStatus();
-    }
+    loadCsvStatus();
 
-    // Carregar estatísticas e tokens
-    async function loadStats() {
-      if (!isLoggedIn()) return;
-      try {
-        const response = await adminFetch(API_URL + '/admin/notifications/tokens');
-        
-        if (!response.ok) {
-          throw new Error(\`Erro HTTP: \${response.status} \${response.statusText}\`);
-        }
-        
-        const data = await response.json();
-        
-        if (data.success) {
-          document.getElementById('deviceCount').textContent = data.count || 0;
-          displayTokens(data.tokens || []);
-        } else {
-          throw new Error(data.error || 'Erro ao carregar tokens');
-        }
-      } catch (error) {
-        console.error('Erro ao carregar estatísticas:', error);
-        document.getElementById('deviceCount').textContent = '?';
-        document.getElementById('tokensList').innerHTML = 
-          '<p style="color: #dc3545; text-align: center; padding: 20px;">❌ Erro ao carregar dispositivos. Tente atualizar a página.</p>';
-        showMessage('Erro ao carregar dispositivos: ' + error.message, 'error');
-      }
-    }
+    document.getElementById('refreshCsvStatusBtn').addEventListener('click', loadCsvStatus);
 
     async function loadCsvStatus() {
-      if (!isLoggedIn()) return;
       const container = document.getElementById('csvStatus');
       try {
         const response = await adminFetch(API_URL + '/admin/csv/status');
@@ -449,120 +388,11 @@ const adminHTML = `
       }
     }
 
-    function displayTokens(tokens) {
-      const container = document.getElementById('tokensList');
-      if (!tokens || tokens.length === 0) {
-        container.innerHTML = '<p style="color: #666; text-align: center; padding: 20px;">📱 Nenhum dispositivo registrado ainda.<br><small>Os dispositivos aparecerão aqui quando o app for aberto e registrar o token.</small></p>';
-        return;
-      }
-
-      container.innerHTML = tokens.map(token => {
-        const createdDate = new Date(token.createdAt);
-        const updatedDate = token.updatedAt ? new Date(token.updatedAt) : null;
-        const platformEmoji = token.platform === 'android' ? '🤖' : token.platform === 'ios' ? '🍎' : '📱';
-        
-        return \`
-        <div class="token-item">
-          <div style="flex: 1;">
-            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
-              <span style="font-size: 16px;">\${platformEmoji}</span>
-              <code style="font-size: 11px; color: #666;">\${token.token.substring(0, 40)}...</code>
-            </div>
-            <div style="font-size: 11px; color: #999; margin-top: 4px;">
-              <strong>Plataforma:</strong> \${token.platform || 'Desconhecido'} • 
-              <strong>Criado:</strong> \${createdDate.toLocaleDateString('pt-BR')} \${createdDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-              \${updatedDate ? \` • <strong>Atualizado:</strong> \${updatedDate.toLocaleDateString('pt-BR')} \${updatedDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}\` : ''}
-            </div>
-          </div>
-          <button class="delete-btn" onclick="deleteToken('\${token.id}')">Remover</button>
-        </div>
-      \`;
-      }).join('');
-    }
-
-    async function deleteToken(id) {
-      if (!confirm('Tem certeza que deseja remover este dispositivo?')) {
-        return;
-      }
-
-      try {
-        const response = await adminFetch(API_URL + '/admin/notifications/tokens/' + id, {
-          method: 'DELETE'
-        });
-        const data = await response.json();
-        
-        if (data.success) {
-          showMessage('Token removido com sucesso!', 'success');
-          loadStats();
-        } else {
-          showMessage('Erro ao remover token', 'error');
-        }
-      } catch (error) {
-        showMessage('Erro ao remover token', 'error');
-      }
-    }
-
-    function showMessage(text, type) {
-      const messageEl = document.getElementById('message');
-      messageEl.textContent = text;
-      messageEl.className = \`message \${type}\`;
-      messageEl.style.display = 'block';
-      
-      setTimeout(() => {
-        messageEl.style.display = 'none';
-      }, 5000);
-    }
-
-    document.getElementById('notificationForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      
-      const submitBtn = document.getElementById('submitBtn');
-      submitBtn.disabled = true;
-      submitBtn.textContent = 'Enviando...';
-
-      const title = document.getElementById('title').value;
-      const body = document.getElementById('body').value;
-
-      try {
-        const response = await adminFetch(API_URL + '/admin/notifications/send', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            title,
-            body,
-            to: 'all'
-          })
-        });
-
-        const data = await response.json();
-
-        if (data.success) {
-          showMessage(\`✅ Notificação enviada para \${data.sentTo} dispositivo(s)!\`, 'success');
-          document.getElementById('notificationForm').reset();
-        } else {
-          showMessage('❌ Erro: ' + (data.error || 'Falha ao enviar notificação'), 'error');
-        }
-      } catch (error) {
-        showMessage('❌ Erro ao enviar notificação: ' + error.message, 'error');
-      } finally {
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Enviar Notificação';
-      }
-    });
-
-    document.querySelectorAll('.tab-btn').forEach((btn) => {
-      btn.addEventListener('click', () => switchTab(btn.dataset.tab));
-    });
-
-    document.getElementById('refreshCsvStatusBtn').addEventListener('click', loadCsvStatus);
-
     document.getElementById('uploadCsvBtn').addEventListener('click', async () => {
       const fileInput = document.getElementById('csvFile');
       const file = fileInput.files && fileInput.files[0];
       if (!file) {
-        showMessage('Selecione um arquivo CSV.', 'error');
+        showMsg('Selecione um arquivo CSV.', 'error');
         return;
       }
       const btn = document.getElementById('uploadCsvBtn');
@@ -583,13 +413,13 @@ const adminHTML = `
           throw new Error(data.error || 'Falha ao processar CSV');
         }
         if (data.imported) {
-          showMessage('✅ CSV processado com sucesso. Criados: ' + (data.stats?.created || 0) + ', Atualizados: ' + (data.stats?.updated || 0), 'success');
+          showMsg('✅ CSV processado com sucesso. Criados: ' + (data.stats?.created || 0) + ', Atualizados: ' + (data.stats?.updated || 0), 'success');
         } else {
-          showMessage('ℹ️ CSV não processado: ' + (data.reason || 'sem mudanças'), 'success');
+          showMsg('ℹ️ CSV não processado: ' + (data.reason || 'sem mudanças'), 'success');
         }
         await loadCsvStatus();
       } catch (error) {
-        showMessage('❌ Erro ao enviar CSV: ' + error.message, 'error');
+        showMsg('❌ Erro ao enviar CSV: ' + error.message, 'error');
       } finally {
         btn.disabled = false;
         btn.textContent = 'Enviar CSV e Processar';
@@ -643,6 +473,12 @@ export async function adminRoutes(fastify: FastifyInstance) {
         JWT_SECRET,
         { expiresIn: "7d" }
       );
+      reply.setCookie("admin_session", token, {
+        path: "/admin",
+        httpOnly: true,
+        maxAge: 7 * 24 * 60 * 60,
+        sameSite: "lax",
+      });
       return reply.send({
         success: true,
         token,
@@ -658,9 +494,14 @@ export async function adminRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // Servir painel admin (HTML — sem proteção; a própria página exige login)
-  fastify.get("/admin", async (_request, reply) => {
-    reply.type("text/html").send(adminHTML);
+  // Login — sem proteção; após login redireciona para /admin (mapa)
+  fastify.get("/admin/login", async (_request, reply) => {
+    reply.type("text/html").send(loginHTML);
+  });
+
+  // Painel CSV — protegido; link para Mapa (/admin)
+  fastify.get("/admin/csv", { preHandler: [requireAdmin] }, async (_request, reply) => {
+    reply.type("text/html").send(csvPanelHTML);
   });
 
   // Rotas protegidas — exigem token admin
