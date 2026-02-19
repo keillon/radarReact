@@ -3845,10 +3845,19 @@ index 4c3d3c3..b0dd903 100644
 +    </style>
  </resources>
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/ios/MapboxNavigationView.swift b/node_modules/@pawan-pk/react-native-mapbox-navigation/ios/MapboxNavigationView.swift
-index 05c943f..44f77e1 100644
+index 05c943f..7a8457d 100644
 --- a/node_modules/@pawan-pk/react-native-mapbox-navigation/ios/MapboxNavigationView.swift
 +++ b/node_modules/@pawan-pk/react-native-mapbox-navigation/ios/MapboxNavigationView.swift
-@@ -60,8 +60,8 @@ public class MapboxNavigationView: UIView, NavigationViewControllerDelegate {
+@@ -2,6 +2,8 @@
+ import MapboxCoreNavigation
+ import MapboxNavigation
+ import MapboxDirections
++import MapboxMaps
++import Turf
+ 
+ extension UIView {
+     var parentViewController: UIViewController? {
+@@ -60,17 +62,45 @@ public class MapboxNavigationView: UIView, NavigationViewControllerDelegate {
      @objc var hideStatusView: Bool = false
      @objc var mute: Bool = false
      @objc var distanceUnit: NSString = "imperial"
@@ -3859,6 +3868,492 @@ index 05c943f..44f77e1 100644
  
      @objc var onLocationChange: RCTDirectEventBlock?
      @objc var onRouteProgressChange: RCTDirectEventBlock?
+     @objc var onError: RCTDirectEventBlock?
+     @objc var onCancelNavigation: RCTDirectEventBlock?
+     @objc var onArrive: RCTDirectEventBlock?
++    @objc var onRadarTap: RCTDirectEventBlock?
+     @objc var vehicleMaxHeight: NSNumber?
+     @objc var vehicleMaxWidth: NSNumber?
+ 
++    // Radares (paridade com Android)
++    @objc var radarsGeoJsonUrl: NSString? {
++        didSet {
++            if let vc = navViewController, let mv = vc.navigationMapView?.mapView {
++                performUpdateRadars(mapView: mv)
++            }
++        }
++    }
++    @objc var nearbyRadarIds: NSArray? {
++        didSet {
++            guard let vc = navViewController, let mv = vc.navigationMapView?.mapView else { return }
++            let ids = (nearbyRadarIds as? [String]) ?? []
++            let hash = ids.sorted().joined(separator: "|").hashValue
++            if hash != lastNearbyIdsHash {
++                lastNearbyIdsHash = hash
++                updateHighlightFilterAndPulse(style: mv.mapboxMap.style, mapView: mv)
++            }
++        }
++    }
++    @objc var bottomPadding: NSNumber = 0
++    private var radarOverlayData: [[String: Any]] = []
++    private var radarBaseData: [[String: Any]] = []
++    private var lastRadarsUrlUsed: String?
++    private var lastNearbyIdsHash: Int = 0
++    private var pulseDisplayLink: CADisplayLink?
++    private var pulseValue: Float = 0
++
+     override init(frame: CGRect) {
+         self.embedded = false
+         self.embedding = false
+@@ -92,6 +122,8 @@ public class MapboxNavigationView: UIView, NavigationViewControllerDelegate {
+     }
+ 
+     public override func removeFromSuperview() {
++        pulseDisplayLink?.invalidate()
++        pulseDisplayLink = nil
+         super.removeFromSuperview()
+         // cleanup and teardown any existing resources
+         self.navViewController?.removeFromParent()
+@@ -149,6 +181,7 @@ public class MapboxNavigationView: UIView, NavigationViewControllerDelegate {
+                 vc.view.frame = strongSelf.bounds
+                 vc.didMove(toParent: parentVC)
+                 strongSelf.navViewController = vc
++                strongSelf.scheduleRadarsSetup()
+             }
+ 
+             strongSelf.embedding = false
+@@ -191,4 +224,387 @@ public class MapboxNavigationView: UIView, NavigationViewControllerDelegate {
+         ])
+         return true;
+     }
++
++    // MARK: - Radares (paridade com Android)
++
++    private var radarTapGesture: UITapGestureRecognizer?
++    private weak var radarTapMapView: MapView?
++
++    private func scheduleRadarsSetup() {
++        guard let mapView = navViewController?.navigationMapView?.mapView else {
++            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.scheduleRadarsSetup() }
++            return
++        }
++        if radarTapGesture == nil {
++            let tap = UITapGestureRecognizer(target: self, action: #selector(radarTapRecognized(_:)))
++            tap.cancelsTouchesInView = false
++            mapView.addGestureRecognizer(tap)
++            radarTapGesture = tap
++            radarTapMapView = mapView
++        }
++        mapView.mapboxMap.onNext(event: .styleLoaded) { [weak self] _ in
++            self?.performUpdateRadars(mapView: mapView)
++        }
++        // Fallback: tentar após delay (estilo pode já estar carregado)
++        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
++            guard let self = self, let mv = self.navViewController?.navigationMapView?.mapView else { return }
++            if mv.mapboxMap.style.sourceExists(withId: "radars-source") { return }
++            self.performUpdateRadars(mapView: mv)
++        }
++    }
++
++    @objc private func radarTapRecognized(_ gesture: UITapGestureRecognizer) {
++        let pt = gesture.location(in: gesture.view)
++        handleRadarTap(at: pt)
++    }
++
++    private func performUpdateRadars(mapView: MapView) {
++        let style = mapView.mapboxMap.style
++        if let urlStr = radarsGeoJsonUrl as String?, !urlStr.isEmpty, let url = URL(string: urlStr) {
++            performUpdateRadarsFromUrl(style: style, url: url, mapView: mapView)
++        } else if !radarBaseData.isEmpty || !radarOverlayData.isEmpty {
++            performUpdateRadarsFromBridge(style: style, mapView: mapView)
++        }
++    }
++
++    private func performUpdateRadarsFromUrl(style: Style, url: URL, mapView: MapView) {
++        let urlStr = url.absoluteString
++        let urlChanged = urlStr != lastRadarsUrlUsed
++        do {
++            if !style.sourceExists(withId: "radars-source") {
++                var source = GeoJSONSource()
++                source.data = .url(url)
++                source.cluster = true
++                source.clusterRadius = 50
++                source.clusterMaxZoom = 12
++                try style.addSource(source, id: "radars-source")
++                lastRadarsUrlUsed = urlStr
++                addBaseRadarLayersIfNeeded(style: style, mapView: mapView)
++            } else if urlChanged {
++                try style.updateGeoJSONSource(withId: "radars-source", geoJSON: .url(url))
++                lastRadarsUrlUsed = urlStr
++            }
++            updateOverlaySource(style: style)
++            updateHighlightFilterAndPulse(style: style, mapView: mapView)
++            if nearbyIdsSet().isEmpty == false {
++                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
++                    guard let s = self else { return }
++                    s.updateHighlightFilterAndPulse(style: mapView.mapboxMap.style, mapView: mapView)
++                }
++            }
++        } catch {
++            print("MapboxNavigationView: Erro radares URL: \(error)")
++        }
++    }
++
++    private func performUpdateRadarsFromBridge(style: Style, mapView: MapView) {
++        let all = radarBaseData + radarOverlayData
++        let features = all.compactMap { dict -> Feature? in
++            guard let id = dict["id"] as? String,
++                  let lat = (dict["latitude"] as? NSNumber)?.doubleValue ?? (dict["latitude"] as? Double),
++                  let lon = (dict["longitude"] as? NSNumber)?.doubleValue ?? (dict["longitude"] as? Double) else { return nil }
++            let typeStr = ((dict["type"] as? String) ?? "unknown").lowercased()
++            let speed = (dict["speedLimit"] as? NSNumber)?.doubleValue ?? (dict["speedLimit"] as? Double)
++            let (icon, size) = iconForRadar(type: typeStr, speedLimit: speed)
++            var feature = Feature(geometry: .point(Point(CLLocationCoordinate2D(latitude: lat, longitude: lon))))
++            feature.properties = [
++                "id": .string(id),
++                "iconImage": .string(icon),
++                "iconSize": .string(String(size))
++            ]
++            return feature
++        }
++        let fc = FeatureCollection(features: features)
++        do {
++            if !style.sourceExists(withId: "radars-source") {
++                var source = GeoJSONSource()
++                source.data = .featureCollection(fc)
++                source.cluster = true
++                source.clusterRadius = 50
++                try style.addSource(source, id: "radars-source")
++                addBaseRadarLayersIfNeeded(style: style, mapView: mapView)
++            } else {
++                try style.updateGeoJSONSource(withId: "radars-source", geoJSON: .featureCollection(fc))
++            }
++            updateHighlightFilterAndPulse(style: style, mapView: mapView)
++        } catch {
++            print("MapboxNavigationView: Erro radares bridge: \(error)")
++        }
++    }
++
++    private func ensureRadarImagesInStyle(style: Style) {
++        let placas = [0, 10] + Array(stride(from: 20, through: 160, by: 10))
++        let iconIds = ["radar_semaforico", "radar_movel", "radar_fixo"] + placas.map { "placa\($0)" }
++        for id in iconIds {
++            if style.imageExists(withId: id) { continue }
++            let camel = id.split(separator: "_").enumerated().map { $0.offset == 0 ? String($0.element) : String($0.element).capitalized }.joined()
++            let candidates = [id, camel, "radarSemaforico", "radarMovel", "radarFixo", "assets_images_\(id)"]
++            var added = false
++            for name in candidates {
++                if let img = UIImage(named: name) ?? (Bundle.main.path(forResource: name, ofType: "png").flatMap { UIImage(contentsOfFile: $0) }) {
++                    try? style.addImage(img, id: id, sdf: false, stretchX: [], stretchY: [], content: nil)
++                    added = true
++                    break
++                }
++            }
++            if !added, let fallback = makePlaceholderRadarImage() {
++                try? style.addImage(fallback, id: id, sdf: false, stretchX: [], stretchY: [], content: nil)
++            }
++        }
++    }
++
++    private func makePlaceholderRadarImage() -> UIImage? {
++        let size: CGFloat = 32
++        UIGraphicsBeginImageContextWithOptions(CGSize(width: size, height: size), false, 0)
++        defer { UIGraphicsEndImageContext() }
++        guard let ctx = UIGraphicsGetCurrentContext() else { return nil }
++        ctx.setFillColor(UIColor.systemYellow.cgColor)
++        ctx.fillEllipse(in: CGRect(x: 0, y: 0, width: size, height: size))
++        ctx.setStrokeColor(UIColor.white.cgColor)
++        ctx.setLineWidth(2)
++        ctx.strokeEllipse(in: CGRect(x: 1, y: 1, width: size - 2, height: size - 2))
++        return UIGraphicsGetImageFromCurrentImageContext()
++    }
++
++    private func iconForRadar(type: String, speedLimit: Double?) -> (String, Double) {
++        if type.contains("semaforo") || type.contains("camera") || type.contains("fotografica") {
++            return ("radar_semaforico", 0.05)
++        }
++        if type.contains("movel") || type.contains("mobile") {
++            return ("radar_movel", 0.05)
++        }
++        if type.contains("fixo") || type.contains("placa") {
++            let speeds = [20.0, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160]
++            let s = speedLimit ?? 0
++            let closest = speeds.min(by: { abs($0 - s) < abs($1 - s) }) ?? 0
++            return (closest > 0 ? "placa\(Int(closest))" : "radar_fixo", 0.18)
++        }
++        return ("radar_movel", 0.05)
++    }
++
++    private func addBaseRadarLayersIfNeeded(style: Style, mapView: MapView) {
++        if style.layerExists(withId: "radars-cluster-layer") { return }
++        ensureRadarImagesInStyle(style: style)
++        let layerPos: LayerPosition? = style.layerExists(withId: "mapbox-navigation-route-line") ? .below("mapbox-navigation-route-line") : nil
++        do {
++            var sym = SymbolLayer(id: "radars-layer-symbol")
++            sym.source = "radars-source"
++            sym.filter = Exp(.not) { Exp(.has) { "point_count" } }
++            sym.iconImage = .expression(Exp(.get) { "iconImage" })
++            sym.iconSize = .expression(Exp(.get) { "iconSize" })
++            sym.iconAllowOverlap = .constant(true)
++            sym.iconIgnorePlacement = .constant(true)
++            try style.addPersistentLayer(sym, layerPosition: layerPos)
++
++            var cluster = CircleLayer(id: "radars-cluster-layer")
++            cluster.source = "radars-source"
++            cluster.filter = Exp(.has) { "point_count" }
++            cluster.circleColor = .constant(StyleColor(.systemYellow))
++            cluster.circleRadius = .constant(20)
++            cluster.circleStrokeWidth = .constant(2)
++            cluster.circleStrokeColor = .constant(StyleColor(.systemYellow))
++            try style.addPersistentLayer(cluster, layerPosition: layerPos)
++
++            var count = SymbolLayer(id: "radars-cluster-count-layer")
++            count.source = "radars-source"
++            count.filter = Exp(.has) { "point_count" }
++            count.textField = .expression(Exp(.toString) { Exp(.get) { "point_count" } })
++            count.textSize = .constant(12)
++            count.textColor = .constant(StyleColor(.white))
++            try style.addPersistentLayer(count, layerPosition: layerPos)
++
++            let filter = buildHighlightFilter()
++            var highlight = CircleLayer(id: "radars-highlight-layer")
++            highlight.source = "radars-source"
++            highlight.filter = filter
++            highlight.circleRadius = .constant(26)
++            highlight.circleColor = .constant(StyleColor(.systemRed))
++            highlight.circleOpacity = .constant(0.45)
++            highlight.circleStrokeWidth = .constant(2)
++            highlight.circleStrokeColor = .constant(StyleColor(.white))
++            try style.addPersistentLayer(highlight, layerPosition: layerPos)
++
++            if !nearbyIdsSet().isEmpty { startPulse(mapView: mapView) }
++        } catch {
++            print("MapboxNavigationView: Erro ao adicionar layers: \(error)")
++        }
++    }
++
++    private func buildHighlightFilter() -> MapboxMaps.Expression {
++        let ids = nearbyIdsSet()
++        if ids.isEmpty {
++            let json: [Any] = ["==", true, false]
++            return (try? JSONSerialization.data(withJSONObject: json)).flatMap { try? JSONDecoder().decode(MapboxMaps.Expression.self, from: $0) } ?? Exp(.eq) { true; false }
++        }
++        let arr = ids.sorted()
++        let json: [Any] = [
++            "all",
++            ["!", ["has", "point_count"]],
++            ["in", ["to-string", ["get", "id"]], ["literal", arr]]
++        ]
++        do {
++            let data = try JSONSerialization.data(withJSONObject: json)
++            return try JSONDecoder().decode(MapboxMaps.Expression.self, from: data)
++        } catch {
++            return Exp(.eq) { true; false }
++        }
++    }
++
++    private func nearbyIdsSet() -> Set<String> {
++        guard let arr = nearbyRadarIds as? [String] else { return [] }
++        return Set(arr)
++    }
++
++    private func updateOverlaySource(style: Style) {
++        guard radarsGeoJsonUrl != nil, !radarOverlayData.isEmpty else { return }
++        let features = radarOverlayData.compactMap { dict -> Feature? in
++            guard let id = dict["id"] as? String,
++                  let lat = (dict["latitude"] as? NSNumber)?.doubleValue ?? (dict["latitude"] as? Double),
++                  let lon = (dict["longitude"] as? NSNumber)?.doubleValue ?? (dict["longitude"] as? Double) else { return nil }
++            let (icon, size) = iconForRadar(type: ((dict["type"] as? String) ?? "unknown").lowercased(), speedLimit: (dict["speedLimit"] as? NSNumber)?.doubleValue)
++            var f = Feature(geometry: .point(Point(CLLocationCoordinate2D(latitude: lat, longitude: lon))))
++            f.properties = ["id": .string(id), "iconImage": .string(icon), "iconSize": .string(String(size))]
++            return f
++        }
++        let fc = FeatureCollection(features: features)
++        if style.sourceExists(withId: "radars-overlay-source") {
++            try? style.updateGeoJSONSource(withId: "radars-overlay-source", geoJSON: .featureCollection(fc))
++        } else {
++            var src = GeoJSONSource()
++            src.data = .featureCollection(fc)
++            try? style.addSource(src, id: "radars-overlay-source")
++            let layerPos: LayerPosition? = style.layerExists(withId: "radars-layer-symbol") ? .above("radars-layer-symbol") : nil
++            var sym = SymbolLayer(id: "radars-overlay-symbol")
++            sym.source = "radars-overlay-source"
++            sym.iconImage = .expression(Exp(.get) { "iconImage" })
++            sym.iconSize = .expression(Exp(.get) { "iconSize" })
++            sym.iconAllowOverlap = .constant(true)
++            sym.iconIgnorePlacement = .constant(true)
++            try? style.addPersistentLayer(sym, layerPosition: layerPos)
++        }
++    }
++
++    private func updateHighlightFilterAndPulse(style: Style, mapView: MapView) {
++        guard style.sourceExists(withId: "radars-source") else { return }
++        do {
++            if style.layerExists(withId: "radars-highlight-layer") {
++                let filter = buildHighlightFilter()
++                try style.updateLayer(withId: "radars-highlight-layer", type: CircleLayer.self) { (layer: inout CircleLayer) in
++                    layer.filter = filter
++                }
++            } else {
++                addBaseRadarLayersIfNeeded(style: style, mapView: mapView)
++                return
++            }
++            if !nearbyIdsSet().isEmpty {
++                startPulse(mapView: mapView)
++            } else {
++                pulseDisplayLink?.invalidate()
++                pulseDisplayLink = nil
++            }
++        } catch {
++            print("MapboxNavigationView: Erro highlight: \(error)")
++        }
++    }
++
++    private func startPulse(mapView: MapView) {
++        guard pulseDisplayLink == nil else { return }
++        pulseValue = 0
++        pulseDisplayLink = CADisplayLink(target: self, selector: #selector(pulseTick))
++        pulseDisplayLink?.add(to: .main, forMode: .common)
++    }
++
++    @objc private func pulseTick() {
++        guard let mapView = navViewController?.navigationMapView?.mapView,
++              mapView.mapboxMap.style.layerExists(withId: "radars-highlight-layer"),
++              !nearbyIdsSet().isEmpty else {
++            pulseDisplayLink?.invalidate()
++            pulseDisplayLink = nil
++            return
++        }
++        pulseValue += 0.04
++        if pulseValue > 1 { pulseValue = 0 }
++        let sine = sin(Double(pulseValue) * .pi)
++        let radius = 26 + (44 - 26) * sine
++        let opacity = 0.45 + (0.75 - 0.45) * sine
++        try? mapView.mapboxMap.style.updateLayer(withId: "radars-highlight-layer", type: CircleLayer.self) { (layer: inout CircleLayer) in
++            layer.circleRadius = .constant(radius)
++            layer.circleOpacity = .constant(opacity)
++        }
++    }
++
++    func setRadarsGeoJsonUrl(_ url: String?) {
++        radarsGeoJsonUrl = url as NSString?
++        if let vc = navViewController, let mv = vc.navigationMapView?.mapView {
++            performUpdateRadars(mapView: mv)
++        }
++    }
++
++    func setBaseRadars(_ radars: [[String: Any]]) {
++        radarBaseData = radars
++        if let vc = navViewController, let mv = vc.navigationMapView?.mapView {
++            performUpdateRadars(mapView: mv)
++        }
++    }
++
++    func setOverlayRadars(_ radars: [[String: Any]]) {
++        radarOverlayData = radars
++        if let vc = navViewController, let mv = vc.navigationMapView?.mapView {
++            performUpdateRadars(mapView: mv)
++        }
++    }
++
++    @objc func setBaseRadars(_ value: NSArray?) {
++        let list: [[String: Any]] = (value as? [[String: Any]]) ?? (value?.compactMap { item -> [String: Any]? in
++            if let d = item as? [String: Any] { return d }
++            if let d = item as? NSDictionary { return d as? [String: Any] }
++            return nil
++        } ?? [])
++        setBaseRadars(list)
++    }
++
++    @objc func setOverlayRadars(_ value: NSArray?) {
++        let list: [[String: Any]] = (value as? [[String: Any]]) ?? (value?.compactMap { item -> [String: Any]? in
++            if let d = item as? [String: Any] { return d }
++            if let d = item as? NSDictionary { return d as? [String: Any] }
++            return nil
++        } ?? [])
++        setOverlayRadars(list)
++    }
++
++    func setNearbyRadarIds(_ ids: [String]) {
++        let hash = ids.sorted().joined(separator: "|").hashValue
++        if hash == lastNearbyIdsHash { return }
++        lastNearbyIdsHash = hash
++        nearbyRadarIds = ids as NSArray
++        if let vc = navViewController, let mv = vc.navigationMapView?.mapView {
++            updateHighlightFilterAndPulse(style: mv.mapboxMap.style, mapView: mv)
++        }
++    }
++
++    func handleRadarTap(at point: CGPoint) {
++        guard let mapView = navViewController?.navigationMapView?.mapView else { return }
++        let options = RenderedQueryOptions(layerIds: ["radars-layer-symbol", "radars-cluster-layer", "radars-overlay-symbol"], filter: nil)
++        mapView.mapboxMap.queryRenderedFeatures(with: point, options: options) { [weak self] result in
++            switch result {
++            case .success(let features):
++                guard !features.isEmpty else { return }
++                let qf = features[0]
++                let feature = qf.feature
++                if let ptCount = feature.properties?["point_count"], case .number(let n) = ptCount, n > 0 { return }
++                if case .point(let pt) = feature.geometry {
++                    let c = pt.coordinates
++                    var evt: [String: Any] = [
++                        "id": feature.properties?["id"]?.rawValue as? String ?? "",
++                        "latitude": c.latitude,
++                        "longitude": c.longitude
++                    ]
++                    if case .number(let s) = feature.properties?["speedLimit"] ?? .null { evt["speedLimit"] = s }
++                    if case .string(let t) = feature.properties?["type"] ?? .null { evt["type"] = t }
++                    self?.onRadarTap?(evt)
++                }
++            case .failure: break
++            }
++        }
++    }
+ }
+diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/ios/MapboxNavigationViewManager.m b/node_modules/@pawan-pk/react-native-mapbox-navigation/ios/MapboxNavigationViewManager.m
+index 4ea4beb..223d513 100644
+--- a/node_modules/@pawan-pk/react-native-mapbox-navigation/ios/MapboxNavigationViewManager.m
++++ b/node_modules/@pawan-pk/react-native-mapbox-navigation/ios/MapboxNavigationViewManager.m
+@@ -31,4 +31,18 @@ RCT_EXPORT_VIEW_PROPERTY(language, NSString)
+ RCT_EXPORT_VIEW_PROPERTY(distanceUnit, NSString)
+ RCT_EXPORT_VIEW_PROPERTY(mute, BOOL)
+ 
++// Radares (paridade com Android)
++RCT_EXPORT_VIEW_PROPERTY(onRadarTap, RCTDirectEventBlock)
++RCT_EXPORT_VIEW_PROPERTY(radarsGeoJsonUrl, NSString)
++RCT_EXPORT_VIEW_PROPERTY(nearbyRadarIds, NSArray)
++RCT_EXPORT_VIEW_PROPERTY(bottomPadding, NSNumber)
++RCT_CUSTOM_VIEW_PROPERTY(radars, NSArray, NSObject)
++{
++    [self performSelector:@selector(setRadars:radars:) withObject:view withObject:json];
++}
++RCT_CUSTOM_VIEW_PROPERTY(overlayRadars, NSArray, NSObject)
++{
++    [self performSelector:@selector(setOverlayRadars:overlayRadars:) withObject:view withObject:json];
++}
++
+ @end
+diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/ios/MapboxNavigationViewManager.swift b/node_modules/@pawan-pk/react-native-mapbox-navigation/ios/MapboxNavigationViewManager.swift
+index 11b240c..91b4ce2 100644
+--- a/node_modules/@pawan-pk/react-native-mapbox-navigation/ios/MapboxNavigationViewManager.swift
++++ b/node_modules/@pawan-pk/react-native-mapbox-navigation/ios/MapboxNavigationViewManager.swift
+@@ -22,4 +22,16 @@ class MapboxNavigationViewManager: RCTViewManager {
+         }
+         currentView.setWaypoints(waypoints: waypoints)
+     }
++
++    @objc(setRadars:radars:)
++    public func setRadars(view: Any, radars: NSArray?) {
++        guard let currentView = view as? MapboxNavigationView else { return }
++        currentView.setBaseRadars(radars)
++    }
++
++    @objc(setOverlayRadars:overlayRadars:)
++    public func setOverlayRadars(view: Any, overlayRadars: NSArray?) {
++        guard let currentView = view as? MapboxNavigationView else { return }
++        currentView.setOverlayRadars(overlayRadars)
++    }
+ }
 diff --git a/node_modules/@pawan-pk/react-native-mapbox-navigation/src/MapboxNavigation.tsx b/node_modules/@pawan-pk/react-native-mapbox-navigation/src/MapboxNavigation.tsx
 index e3d3f19..fcba4f4 100644
 --- a/node_modules/@pawan-pk/react-native-mapbox-navigation/src/MapboxNavigation.tsx

@@ -1,15 +1,15 @@
-diff --git a/node_modules/@rnmapbox/maps/src/specs/NativeRNMBXLocationModule.ts b/node_modules/@rnmapbox/maps/src/specs/NativeRNMBXLocationModule.ts
---- a/node_modules/@rnmapbox/maps/src/specs/NativeRNMBXLocationModule.ts
-+++ b/node_modules/@rnmapbox/maps/src/specs/NativeRNMBXLocationModule.ts
-@@ -1,8 +1,6 @@
+diff --git a/src/specs/NativeRNMBXLocationModule.ts b/src/specs/NativeRNMBXLocationModule.ts
+index 1111111..2222222 100644
+--- a/src/specs/NativeRNMBXLocationModule.ts
++++ b/src/specs/NativeRNMBXLocationModule.ts
+@@ -1,6 +1,4 @@
  import { type TurboModule, TurboModuleRegistry } from 'react-native';
 -// @ts-ignore - CI environment type resolution issue for CodegenTypes
 -import type { EventEmitter } from 'react-native/Libraries/Types/CodegenTypes';
  
  type LocationEvent = {
    type: string; //"userlocationdupdated"
-   payload: {
-@@ -23,7 +21,8 @@ export interface Spec extends TurboModule {
+@@ -21,8 +19,9 @@ export interface Spec extends TurboModule {
    getLastKnownLocation(): Promise<LocationEvent['payload']>;
    simulateHeading(changesPerSecond: number, increment: number): void;
    setLocationEventThrottle(throttle: number): void;
@@ -21,3 +21,36 @@ diff --git a/node_modules/@rnmapbox/maps/src/specs/NativeRNMBXLocationModule.ts 
  }
  
  export default TurboModuleRegistry.getEnforcing<Spec>('RNMBXLocationModule');
+diff --git a/android/src/main/java/com/rnmapbox/rnmbx/modules/RNMBXLocationModule.kt b/android/src/main/java/com/rnmapbox/rnmbx/modules/RNMBXLocationModule.kt
+--- a/android/src/main/java/com/rnmapbox/rnmbx/modules/RNMBXLocationModule.kt
++++ b/android/src/main/java/com/rnmapbox/rnmbx/modules/RNMBXLocationModule.kt
+@@ -58,14 +58,9 @@ class RNMBXLocationModule(reactContext: ReactApplicationContext) :
+             mLastLocation = location
+             if (changed && (location != null) && shouldSendLocationEvent()) {
+                 val locationEvent = LocationEvent(location)
+-
+-                if(mEventEmitterCallback != null){
+-                    emitOnLocationUpdate(locationEvent.toJSON())
+-                }else {
+-                    // Emmit event for old architecture
+-                    val emitter = EventEmitter.getModuleEmitter(reactApplicationContext)
+-                    emitter?.emit(LOCATION_UPDATE, locationEvent.payload)
+-                }
++                // Spec no longer has onLocationUpdate (codegen fix); always use EventEmitter
++                val emitter = EventEmitter.getModuleEmitter(reactApplicationContext)
++                emitter?.emit(LOCATION_UPDATE, locationEvent.payload)
+             }
+         }
+     }
+diff --git a/android/src/main/old-arch/com/rnmapbox/rnmbx/NativeRNMBXLocationModuleSpec.java b/android/src/main/old-arch/com/rnmapbox/rnmbx/NativeRNMBXLocationModuleSpec.java
+--- a/android/src/main/old-arch/com/rnmapbox/rnmbx/NativeRNMBXLocationModuleSpec.java
++++ b/android/src/main/old-arch/com/rnmapbox/rnmbx/NativeRNMBXLocationModuleSpec.java
+@@ -36,7 +36,7 @@
+   }
+ 
+   protected final void emitOnLocationUpdate(ReadableMap value) {
+-    mEventEmitterCallback.invoke("onLocationUpdate", value);
++    // No-op: onLocationUpdate removed from Spec (codegen fix); RNMBXLocationModule emits via EventEmitter
+   }
+ 
+   @ReactMethod

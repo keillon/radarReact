@@ -200,6 +200,7 @@ const styles = StyleSheet.create({
   },
   buttonDefault: {
     backgroundColor: colors.primary,
+    minHeight: 48,
   },
   buttonDestructive: {
     backgroundColor: colors.error,
@@ -212,7 +213,7 @@ const styles = StyleSheet.create({
   buttonTextDefault: {
     fontSize: 16,
     fontWeight: "600",
-    color: colors.textDark,
+    color: "#111111",
   },
   buttonTextDestructive: {
     fontSize: 16,

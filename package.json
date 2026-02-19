@@ -4,10 +4,10 @@
   "private": true,
   "scripts": {
     "start": "react-native start",
-    "postinstall": "patch-package",
+    "postinstall": "patch-package || node scripts/apply-patches.js",
     "patch:save": "npx rimraf node_modules/@pawan-pk/react-native-mapbox-navigation/android/build && npx patch-package @pawan-pk/react-native-mapbox-navigation",
     "preandroid": "patch-package",
-    "apply-patch": "patch-package",
+    "apply-patch": "patch-package || node scripts/apply-patches.js",
     "build:release": "npm run apply-patch && cd android && ./gradlew assembleRelease",
     "build:android:bundle": "cd android && gradlew.bat bundleRelease",
     "build:android:bundle:full": "npm run apply-patch && npm run build:android:bundle",

@@ -73,9 +73,11 @@ interface MenuModalProps {
   onClose: () => void;
   /** Chamado ao tocar em "Atualizar radares" (opcional) */
   onRefreshRadars?: () => void;
+  /** Ao abrir, exibir esta tela em vez do menu principal (ex.: "subscription") */
+  openToScreen?: MenuScreen | null;
 }
 
-function MenuModal({ visible, onClose, onRefreshRadars }: MenuModalProps) {
+function MenuModal({ visible, onClose, onRefreshRadars, openToScreen }: MenuModalProps) {
   const slideAnim = useRef(new Animated.Value(-300)).current;
   const backdropAnim = useRef(new Animated.Value(0)).current;
   const { user, logout, updateProfile, changePassword } = useAuth();
@@ -160,12 +162,12 @@ function MenuModal({ visible, onClose, onRefreshRadars }: MenuModalProps) {
   useEffect(() => {
     if (visible) {
       setProfileName(user?.name || "");
-      setScreen("menu");
+      setScreen(openToScreen ?? "menu");
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
     }
-  }, [visible, user?.name]);
+  }, [visible, user?.name, openToScreen]);
 
   const pickVoice = (voiceId: string) => {
     setTtsVoiceId(voiceId);

@@ -9,27 +9,25 @@
   - Eventos `onRadarTap`, `onRouteChanged`, etc.
   - Rotas alternativas, callouts, etc.
 
-- **iOS**: O pacote `@pawan-pk/react-native-mapbox-navigation` usa Swift. O patch altera apenas:
-  - `language` / `destinationTitle` (pt-BR, "Destino")
-  - Props adicionais no TypeScript (volume, recenterTrigger, ttsVoiceId)
-  - Tipos de eventos (onRadarTap, onRouteChanged, etc.)
-
-  **O código Swift nativo NÃO implementa**: radarsGeoJsonUrl, nearbyRadarIds, overlayRadars, radares no mapa, highlight, etc.
+- **iOS**: Paridade implementada no mesmo patch:
+  - **MapboxNavigationViewManager.m**: Props `radarsGeoJsonUrl`, `nearbyRadarIds`, `bottomPadding`, `onRadarTap`, `radars`, `overlayRadars`
+  - **MapboxNavigationView.swift**: GeoJSON URL, bridge (radars/overlayRadars), layers (symbol, cluster, highlight), pulse, onRadarTap, carregamento de imagens
+  - Mesma lógica do Android: source `radars-source`, overlay `radars-overlay-source`, highlight com nearbyRadarIds
 
 ## O que funciona no iOS hoje
 
 - Navegação turn-by-turn (rota, instruções, chegada)
 - Eventos básicos: onLocationChange, onRouteProgressChange, onArrive, onCancelNavigation
+- **Radares no mapa** (GeoJSON URL ou bridge)
+- **Highlight/pulse** do radar ativo (nearbyRadarIds)
+- **onRadarTap** ao tocar em radar
 - Idioma e unidade em pt-BR
 
-## O que falta no iOS
+## O que ainda falta no iOS
 
-1. **Radares no mapa durante navegação** – GeoJSON URL ou lista de radares
-2. **Highlight do radar ativo** – Pulse/círculo no radar em alerta
-3. **onRadarTap** – Tocar em radar para abrir detalhe
-4. **radarsGeoJsonUrl, nearbyRadarIds, overlayRadars, bottomPadding** – Props usadas no Android
-5. **Rotas alternativas com callouts** – UI customizada do Android
-6. **RecenterTrigger, TTS voice** – Controles extras
+1. **Rotas alternativas com callouts** – UI customizada do Android
+2. **RecenterTrigger, TTS voice** – Controles extras
+3. **Imagens de radar**: Adicione `assets/images/*.png` (placa20–160, radarMovel, radarSemaforico) ao Xcode ou use o placeholder (círculo amarelo) que é gerado quando as imagens não existem no bundle
 
 ## Como alcançar paridade
 

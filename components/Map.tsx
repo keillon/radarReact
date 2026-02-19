@@ -104,6 +104,8 @@ export type MapHandle = {
     longitude: number,
     latitude: number,
   ) => Promise<[number, number] | null>;
+  /** Abre o menu lateral na aba Assinatura (para bloqueio pós-período grátis) */
+  openMenuToSubscription: () => void;
 };
 
 const Map = forwardRef<MapHandle, MapProps>(function Map(
@@ -127,6 +129,7 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
   ref,
 ) {
   const [menuVisible, setMenuVisible] = useState(false);
+  const [menuOpenToScreen, setMenuOpenToScreen] = useState<"menu" | "profile" | "accountSettings" | "soundSettings" | "subscription" | null>(null);
   const [userLocation, setUserLocation] = useState<{
     latitude: number;
     longitude: number;
@@ -453,6 +456,10 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
           return null;
         }
       },
+      openMenuToSubscription: () => {
+        setMenuOpenToScreen("subscription");
+        setMenuVisible(true);
+      },
     }),
     [],
   );
@@ -485,8 +492,12 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
           </TouchableOpacity>
           <MenuModal
             visible={menuVisible}
-            onClose={() => setMenuVisible(false)}
+            onClose={() => {
+              setMenuVisible(false);
+              setMenuOpenToScreen(null);
+            }}
             onRefreshRadars={onRefreshRadars}
+            openToScreen={menuOpenToScreen}
           />
         </>
       )}

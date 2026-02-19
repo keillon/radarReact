@@ -490,7 +490,7 @@ export default function App() {
         }}
       >
         <h1 style={{ margin: 0, fontSize: "20px", fontWeight: 600 }}>
-          Admin Radares — Radar React
+          Admin radarZone
         </h1>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <button
