@@ -249,6 +249,7 @@ export default function Home() {
   const [showMapPicker, setShowMapPicker] = useState(false);
   const [showUpdateRadarsModal, setShowUpdateRadarsModal] = useState(false);
   const [isUpdatingRadars, setIsUpdatingRadars] = useState(false);
+  const hasShownUpdateModalThisSessionRef = useRef(false);
 
   const [mapPickerCenter, setMapPickerCenter] = useState<LatLng | null>(null);
   const [pickerPreviewCoords, setPickerPreviewCoords] = useState<LatLng | null>(
@@ -876,8 +877,10 @@ export default function Home() {
 
             AsyncStorage.getItem(RADARS_LAST_FETCH_AT_KEY).then((stored) => {
               if (!isMountedRef.current) return;
+              if (hasShownUpdateModalThisSessionRef.current) return;
               const clientLastFetch = Number(stored ?? 0) || 0;
               if (serverLastUpdated > clientLastFetch) {
+                hasShownUpdateModalThisSessionRef.current = true;
                 setShowUpdateRadarsModal(true);
               }
             });
@@ -1584,8 +1587,9 @@ export default function Home() {
           });
         }
 
-        if (shouldRefreshAll && !isNavigatingRef.current) {
-          // CSV atualizado: mostrar modal obrigatório para atualizar
+        if (shouldRefreshAll && !isNavigatingRef.current && !hasShownUpdateModalThisSessionRef.current) {
+          // CSV atualizado: mostrar modal obrigatório para atualizar (só 1x por sessão)
+          hasShownUpdateModalThisSessionRef.current = true;
           setShowUpdateRadarsModal(true);
         }
 
@@ -1680,6 +1684,11 @@ export default function Home() {
   useEffect(() => {
     setNearbyRadarIds(nearbyRadarIdsForMap);
   }, [nearbyRadarIdsForMap]);
+
+  // Ao entrar na navegação: fechar modal de atualização (não mostrar durante navegação)
+  useEffect(() => {
+    if (isNavigating) setShowUpdateRadarsModal(false);
+  }, [isNavigating]);
 
   // Ao sair da navegação: atualizar localização e recentrar mapa
   useEffect(() => {
@@ -3310,9 +3319,9 @@ export default function Home() {
         </TouchableOpacity>
       </Modal>
 
-      {/* Modal: Atualizar lista de radares — só quando há update; obrigatório */}
+      {/* Modal: Atualizar lista de radares — só quando há update; obrigatório; nunca durante navegação */}
       <Modal
-        visible={showUpdateRadarsModal}
+        visible={showUpdateRadarsModal && !isNavigating}
         transparent
         animationType="fade"
         onRequestClose={() => {}}
