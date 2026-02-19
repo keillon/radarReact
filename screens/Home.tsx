@@ -1660,29 +1660,11 @@ export default function Home() {
     };
   }, [rearmRadarRuntimeState, syncAllRadarsFromCurrentLocation]);
 
-  // Durante navegação: highlight via proximity. Fora: highlight radares próximos (800m)
+  // Highlight só durante navegação: um radar por vez (o ativo). Ao passar, remove pulse.
   const nearbyRadarIdsForMap = useMemo(() => {
-    if (isNavigating) return proximityNearbyRadarIds;
-    if (!currentLocation || radars.length === 0) return new Set<string>();
-    const HIGHLIGHT_RANGE_M = 800;
-    const nearby = new Set<string>();
-    for (const r of radars) {
-      if (!r?.id) continue;
-      const d = calculateDistance(
-        currentLocation.latitude,
-        currentLocation.longitude,
-        r.latitude,
-        r.longitude,
-      );
-      if (d <= HIGHLIGHT_RANGE_M) nearby.add(r.id);
-    }
-    return nearby;
-  }, [
-    isNavigating,
-    proximityNearbyRadarIds,
-    currentLocation,
-    radars,
-  ]);
+    if (!isNavigating) return new Set<string>();
+    return proximityNearbyRadarIds;
+  }, [isNavigating, proximityNearbyRadarIds]);
 
   useEffect(() => {
     setNearbyRadarIds(nearbyRadarIdsForMap);
