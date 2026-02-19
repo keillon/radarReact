@@ -494,6 +494,11 @@ export async function adminRoutes(fastify: FastifyInstance) {
     }
   });
 
+  // /admin (exato) → redireciona para /admin/ (mapa)
+  fastify.get("/admin", async (_request, reply) => {
+    return reply.redirect(302, "/admin/");
+  });
+
   // Login — sem proteção; após login redireciona para /admin (mapa)
   fastify.get("/admin/login", async (_request, reply) => {
     reply.type("text/html").send(loginHTML);
