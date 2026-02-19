@@ -2,15 +2,23 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import MapView from "./Map";
 import {
   Radar,
+  adminLogout,
+  createAdminUser,
+  deleteAdminUser,
   deleteRadar,
   getAdminConfig,
+  getAdminMe,
+  getAdminUsers,
   getCsvStatus,
   getRadarsNearLocation,
   normalizeRadarPayload,
+  patchAdminMe,
   reportRadar,
+  updateAdminUser,
   updateRadar,
   uploadCsv,
 } from "./api";
+import type { AdminUser } from "./api";
 
 const DEFAULT_CENTER: [number, number] = [-46.6333, -23.5505]; // [lng, lat] São Paulo
 
@@ -47,7 +55,25 @@ export default function App() {
     "placa" | "móvel" | "semaforo"
   >("placa");
   const [error, setError] = useState<string | null>(null);
-  const [adminTab, setAdminTab] = useState<"map" | "csv">("map");
+  const [adminTab, setAdminTab] = useState<"map" | "csv" | "users">("map");
+  const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [profileName, setProfileName] = useState("");
+  const [profileEmail, setProfileEmail] = useState("");
+  const [profileCurrentPassword, setProfileCurrentPassword] = useState("");
+  const [profileNewPassword, setProfileNewPassword] = useState("");
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [usersList, setUsersList] = useState<AdminUser[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [userModalMode, setUserModalMode] = useState<"create" | "edit" | null>(null);
+  const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
+  const [userFormEmail, setUserFormEmail] = useState("");
+  const [userFormName, setUserFormName] = useState("");
+  const [userFormRole, setUserFormRole] = useState<"user" | "admin">("user");
+  const [userFormPassword, setUserFormPassword] = useState("");
+  const [userFormError, setUserFormError] = useState<string | null>(null);
+  const [userFormSaving, setUserFormSaving] = useState(false);
   const [csvStatus, setCsvStatus] = useState<string>("Carregando…");
   const [csvMessage, setCsvMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
   const [csvUploading, setCsvUploading] = useState(false);
@@ -107,6 +133,23 @@ export default function App() {
       .then((c) => c.mapboxToken && setRuntimeMapboxToken(c.mapboxToken))
       .catch(() => {});
   }, [effectiveMapboxToken]);
+
+  // Perfil do admin logado
+  useEffect(() => {
+    getAdminMe()
+      .then(setAdminUser)
+      .catch(() => setAdminUser(null));
+  }, []);
+
+  // Listar usuários ao abrir aba Usuários
+  useEffect(() => {
+    if (adminTab !== "users") return;
+    setUsersLoading(true);
+    getAdminUsers()
+      .then(setUsersList)
+      .catch(() => setUsersList([]))
+      .finally(() => setUsersLoading(false));
+  }, [adminTab]);
 
   const loadCsvStatus = useCallback(async () => {
     setCsvStatus("Carregando…");
@@ -480,6 +523,21 @@ export default function App() {
           >
             CSV
           </button>
+          <button
+            type="button"
+            onClick={() => setAdminTab("users")}
+            style={{
+              padding: "8px 14px",
+              background: adminTab === "users" ? "#4f46e5" : "transparent",
+              color: "#fff",
+              border: "1px solid rgba(255,255,255,0.5)",
+              borderRadius: 8,
+              cursor: "pointer",
+              fontWeight: 600,
+            }}
+          >
+            Usuários
+          </button>
           {adminTab === "map" && (
           <>
           <button
@@ -516,6 +574,47 @@ export default function App() {
           </button>
           </>
           )}
+          <span style={{ width: 16 }} />
+          <button
+            type="button"
+            onClick={() => {
+              setProfileName(adminUser?.name ?? "");
+              setProfileEmail(adminUser?.email ?? "");
+              setProfileCurrentPassword("");
+              setProfileNewPassword("");
+              setProfileError(null);
+              setProfileModalOpen(true);
+            }}
+            style={{
+              padding: "8px 14px",
+              background: "transparent",
+              color: "#fff",
+              border: "1px solid rgba(255,255,255,0.5)",
+              borderRadius: 8,
+              cursor: "pointer",
+              fontWeight: 600,
+            }}
+          >
+            Meu perfil
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              await adminLogout();
+              window.location.href = "/admin/login";
+            }}
+            style={{
+              padding: "8px 14px",
+              background: "#dc2626",
+              color: "#fff",
+              border: "none",
+              borderRadius: 8,
+              cursor: "pointer",
+              fontWeight: 600,
+            }}
+          >
+            Sair
+          </button>
         </div>
       </header>
 
@@ -562,7 +661,15 @@ export default function App() {
                     });
                     loadCsvStatus();
                   } else if (data.success) {
-                    setCsvMessage({ text: `ℹ️ ${data.reason ?? "Sem mudanças."}`, type: "success" });
+                    const reasonMsg: Record<string, string> = {
+                      unchanged_csv: "CSV idêntico ao último import. Nenhuma alteração aplicada.",
+                      empty_csv: "Arquivo CSV vazio.",
+                      no_valid_rows: "Nenhuma linha válida no CSV.",
+                    };
+                    setCsvMessage({
+                      text: `ℹ️ ${reasonMsg[data.reason ?? ""] ?? data.reason ?? "Sem mudanças."}`,
+                      type: "success",
+                    });
                     loadCsvStatus();
                   } else {
                     setCsvMessage({ text: data.error ?? "Erro ao processar.", type: "error" });
@@ -628,6 +735,114 @@ export default function App() {
           >
             {csvStatus}
           </pre>
+        </div>
+      )}
+
+      {/* Aba Usuários */}
+      {adminTab === "users" && (
+        <div style={{ flex: 1, overflow: "auto", padding: 24, background: "#f8fafc" }}>
+          <h2 style={{ margin: "0 0 16px", fontSize: 20 }}>👥 Usuários</h2>
+          <button
+            type="button"
+            onClick={() => {
+              setUserModalMode("create");
+              setEditingUser(null);
+              setUserFormEmail("");
+              setUserFormName("");
+              setUserFormRole("user");
+              setUserFormPassword("");
+              setUserFormError(null);
+            }}
+            style={{
+              padding: "10px 20px",
+              background: "#4f46e5",
+              color: "#fff",
+              border: "none",
+              borderRadius: 8,
+              cursor: "pointer",
+              fontWeight: 600,
+              marginBottom: 16,
+            }}
+          >
+            + Novo usuário
+          </button>
+          {usersLoading ? (
+            <p style={{ color: "#64748b" }}>Carregando usuários…</p>
+          ) : (
+            <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 8, overflow: "hidden" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ background: "#f1f5f9" }}>
+                    <th style={{ padding: 12, textAlign: "left", borderBottom: "1px solid #e2e8f0" }}>Email</th>
+                    <th style={{ padding: 12, textAlign: "left", borderBottom: "1px solid #e2e8f0" }}>Nome</th>
+                    <th style={{ padding: 12, textAlign: "left", borderBottom: "1px solid #e2e8f0" }}>Role</th>
+                    <th style={{ padding: 12, textAlign: "left", borderBottom: "1px solid #e2e8f0" }}>Criado em</th>
+                    <th style={{ padding: 12, textAlign: "right", borderBottom: "1px solid #e2e8f0" }}>Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {usersList.map((u) => (
+                    <tr key={u.id} style={{ borderBottom: "1px solid #e2e8f0" }}>
+                      <td style={{ padding: 12 }}>{u.email}</td>
+                      <td style={{ padding: 12 }}>{u.name ?? "—"}</td>
+                      <td style={{ padding: 12 }}>{u.role}</td>
+                      <td style={{ padding: 12 }}>{new Date(u.createdAt).toLocaleString("pt-BR")}</td>
+                      <td style={{ padding: 12, textAlign: "right" }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setUserModalMode("edit");
+                            setEditingUser(u);
+                            setUserFormEmail(u.email);
+                            setUserFormName(u.name ?? "");
+                            setUserFormRole((u.role === "admin" ? "admin" : "user") as "user" | "admin");
+                            setUserFormPassword("");
+                            setUserFormError(null);
+                          }}
+                          style={{
+                            padding: "6px 12px",
+                            marginRight: 8,
+                            background: "#3b82f6",
+                            color: "#fff",
+                            border: "none",
+                            borderRadius: 6,
+                            cursor: "pointer",
+                            fontSize: 13,
+                          }}
+                        >
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!confirm(`Excluir usuário ${u.email}?`)) return;
+                            try {
+                              await deleteAdminUser(u.id);
+                              setUsersList((prev) => prev.filter((x) => x.id !== u.id));
+                            } catch (e) {
+                              alert(e instanceof Error ? e.message : "Erro ao excluir");
+                            }
+                          }}
+                          disabled={u.id === adminUser?.id}
+                          style={{
+                            padding: "6px 12px",
+                            background: u.id === adminUser?.id ? "#9ca3af" : "#dc2626",
+                            color: "#fff",
+                            border: "none",
+                            borderRadius: 6,
+                            cursor: u.id === adminUser?.id ? "not-allowed" : "pointer",
+                            fontSize: 13,
+                          }}
+                        >
+                          Excluir
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
@@ -1123,6 +1338,317 @@ export default function App() {
           </p>
         </aside>
       </div>
+      )}
+
+      {/* Modal: Meu perfil */}
+      {profileModalOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+          }}
+          onClick={() => !profileSaving && setProfileModalOpen(false)}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 12,
+              padding: 24,
+              maxWidth: 400,
+              width: "100%",
+              boxShadow: "0 20px 50px rgba(0,0,0,0.2)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ margin: "0 0 16px", fontSize: 18 }}>Meu perfil</h3>
+            {profileError && (
+              <p style={{ color: "#dc2626", marginBottom: 12, fontSize: 14 }}>{profileError}</p>
+            )}
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ display: "block", marginBottom: 4, fontWeight: 600, fontSize: 14 }}>Nome</label>
+              <input
+                type="text"
+                value={profileName}
+                onChange={(e) => setProfileName(e.target.value)}
+                placeholder="Nome"
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  border: "1px solid #d1d5db",
+                  borderRadius: 8,
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ display: "block", marginBottom: 4, fontWeight: 600, fontSize: 14 }}>Email</label>
+              <input
+                type="email"
+                value={profileEmail}
+                onChange={(e) => setProfileEmail(e.target.value)}
+                placeholder="email@exemplo.com"
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  border: "1px solid #d1d5db",
+                  borderRadius: 8,
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ display: "block", marginBottom: 4, fontWeight: 600, fontSize: 14 }}>Nova senha (deixe em branco para não alterar)</label>
+              <input
+                type="password"
+                value={profileNewPassword}
+                onChange={(e) => setProfileNewPassword(e.target.value)}
+                placeholder="••••••••"
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  border: "1px solid #d1d5db",
+                  borderRadius: 8,
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+            {profileNewPassword.trim() && (
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ display: "block", marginBottom: 4, fontWeight: 600, fontSize: 14 }}>Senha atual (obrigatório para alterar)</label>
+                <input
+                  type="password"
+                  value={profileCurrentPassword}
+                  onChange={(e) => setProfileCurrentPassword(e.target.value)}
+                  placeholder="••••••••"
+                  style={{
+                    width: "100%",
+                    padding: "10px 12px",
+                    border: "1px solid #d1d5db",
+                    borderRadius: 8,
+                    boxSizing: "border-box",
+                  }}
+                />
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+              <button
+                type="button"
+                onClick={() => !profileSaving && setProfileModalOpen(false)}
+                style={{
+                  padding: "10px 20px",
+                  background: "#e5e7eb",
+                  border: "none",
+                  borderRadius: 8,
+                  cursor: "pointer",
+                  fontWeight: 600,
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={profileSaving}
+                onClick={async () => {
+                  setProfileError(null);
+                  setProfileSaving(true);
+                  try {
+                    const body: { name?: string; email?: string; currentPassword?: string; newPassword?: string } = {};
+                    if (profileName.trim() !== (adminUser?.name ?? "")) body.name = profileName.trim();
+                    if (profileEmail.trim() !== (adminUser?.email ?? "")) body.email = profileEmail.trim();
+                    if (profileNewPassword.trim()) {
+                      body.currentPassword = profileCurrentPassword;
+                      body.newPassword = profileNewPassword;
+                    }
+                    const updated = await patchAdminMe(body);
+                    setAdminUser(updated);
+                    setProfileModalOpen(false);
+                  } catch (e) {
+                    setProfileError(e instanceof Error ? e.message : "Erro ao atualizar");
+                  } finally {
+                    setProfileSaving(false);
+                  }
+                }}
+                style={{
+                  padding: "10px 20px",
+                  background: "#4f46e5",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 8,
+                  cursor: profileSaving ? "not-allowed" : "pointer",
+                  fontWeight: 600,
+                }}
+              >
+                {profileSaving ? "Salvando…" : "Salvar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Criar/Editar usuário */}
+      {userModalMode && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+          }}
+          onClick={() => !userFormSaving && setUserModalMode(null)}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 12,
+              padding: 24,
+              maxWidth: 400,
+              width: "100%",
+              boxShadow: "0 20px 50px rgba(0,0,0,0.2)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ margin: "0 0 16px", fontSize: 18 }}>
+              {userModalMode === "create" ? "Novo usuário" : "Editar usuário"}
+            </h3>
+            {userFormError && (
+              <p style={{ color: "#dc2626", marginBottom: 12, fontSize: 14 }}>{userFormError}</p>
+            )}
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ display: "block", marginBottom: 4, fontWeight: 600, fontSize: 14 }}>Email</label>
+              <input
+                type="email"
+                value={userFormEmail}
+                onChange={(e) => setUserFormEmail(e.target.value)}
+                placeholder="email@exemplo.com"
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  border: "1px solid #d1d5db",
+                  borderRadius: 8,
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ display: "block", marginBottom: 4, fontWeight: 600, fontSize: 14 }}>Nome</label>
+              <input
+                type="text"
+                value={userFormName}
+                onChange={(e) => setUserFormName(e.target.value)}
+                placeholder="Nome"
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  border: "1px solid #d1d5db",
+                  borderRadius: 8,
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ display: "block", marginBottom: 4, fontWeight: 600, fontSize: 14 }}>Perfil</label>
+              <select
+                value={userFormRole}
+                onChange={(e) => setUserFormRole(e.target.value as "user" | "admin")}
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  border: "1px solid #d1d5db",
+                  borderRadius: 8,
+                  boxSizing: "border-box",
+                }}
+              >
+                <option value="user">Usuário</option>
+                <option value="admin">Administrador</option>
+              </select>
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ display: "block", marginBottom: 4, fontWeight: 600, fontSize: 14 }}>
+                {userModalMode === "create" ? "Senha (obrigatória)" : "Nova senha (deixe em branco para não alterar)"}
+              </label>
+              <input
+                type="password"
+                value={userFormPassword}
+                onChange={(e) => setUserFormPassword(e.target.value)}
+                placeholder="••••••••"
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  border: "1px solid #d1d5db",
+                  borderRadius: 8,
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+              <button
+                type="button"
+                onClick={() => !userFormSaving && setUserModalMode(null)}
+                style={{
+                  padding: "10px 20px",
+                  background: "#e5e7eb",
+                  border: "none",
+                  borderRadius: 8,
+                  cursor: "pointer",
+                  fontWeight: 600,
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={userFormSaving || !userFormEmail.trim() || (userModalMode === "create" && !userFormPassword.trim())}
+                onClick={async () => {
+                  setUserFormError(null);
+                  setUserFormSaving(true);
+                  try {
+                    if (userModalMode === "create") {
+                      const created = await createAdminUser({
+                        email: userFormEmail.trim().toLowerCase(),
+                        password: userFormPassword,
+                        name: userFormName.trim() || undefined,
+                        role: userFormRole,
+                      });
+                      setUsersList((prev) => [created, ...prev]);
+                    } else if (editingUser) {
+                      const body: { email?: string; name?: string; role?: string; newPassword?: string } = {};
+                      if (userFormEmail.trim() !== editingUser.email) body.email = userFormEmail.trim().toLowerCase();
+                      if (userFormName.trim() !== (editingUser.name ?? "")) body.name = userFormName.trim();
+                      if (userFormRole !== editingUser.role) body.role = userFormRole;
+                      if (userFormPassword.trim()) body.newPassword = userFormPassword;
+                      const updated = await updateAdminUser(editingUser.id, body);
+                      setUsersList((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
+                    }
+                    setUserModalMode(null);
+                  } catch (e) {
+                    setUserFormError(e instanceof Error ? e.message : "Erro");
+                  } finally {
+                    setUserFormSaving(false);
+                  }
+                }}
+                style={{
+                  padding: "10px 20px",
+                  background: "#4f46e5",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 8,
+                  cursor: userFormSaving ? "not-allowed" : "pointer",
+                  fontWeight: 600,
+                }}
+              >
+                {userFormSaving ? "Salvando…" : userModalMode === "create" ? "Criar" : "Salvar"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

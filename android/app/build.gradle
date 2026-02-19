@@ -193,7 +193,7 @@ android {
         applicationId "com.radarzone"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 5
+        versionCode 6
         versionName "1.1"
         // react-native-iap: usar variante Google Play (não Amazon)
         missingDimensionStrategy "store", "play"

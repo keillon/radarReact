@@ -207,3 +207,93 @@ export async function uploadCsv(fileName: string, csvText: string): Promise<{
   });
   return res.json();
 }
+
+const adminFetch = (path: string, init?: RequestInit) =>
+  fetch(`${API_BASE_URL}${path}`, { credentials: "same-origin", ...init });
+
+/** Perfil do admin logado */
+export interface AdminUser {
+  id: string;
+  email: string;
+  name: string | null;
+  role: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function getAdminMe(): Promise<AdminUser> {
+  const res = await adminFetch("/admin/me");
+  if (!res.ok) throw new Error((await res.json()).error ?? "Erro ao carregar perfil");
+  return res.json();
+}
+
+export async function patchAdminMe(body: {
+  name?: string;
+  email?: string;
+  currentPassword?: string;
+  newPassword?: string;
+}): Promise<AdminUser> {
+  const res = await adminFetch("/admin/me", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.error ?? "Erro ao atualizar perfil");
+  }
+  return res.json();
+}
+
+export async function adminLogout(): Promise<void> {
+  await adminFetch("/admin/auth/logout", { method: "POST" });
+}
+
+/** Listar usuários (admin) */
+export async function getAdminUsers(): Promise<AdminUser[]> {
+  const res = await adminFetch("/admin/users");
+  if (!res.ok) throw new Error("Erro ao listar usuários");
+  return res.json();
+}
+
+export async function createAdminUser(body: {
+  email: string;
+  password: string;
+  name?: string;
+  role?: string;
+}): Promise<AdminUser> {
+  const res = await adminFetch("/admin/users", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.error ?? "Erro ao criar usuário");
+  }
+  return res.json();
+}
+
+export async function updateAdminUser(
+  id: string,
+  body: { email?: string; name?: string; role?: string; newPassword?: string }
+): Promise<AdminUser> {
+  const res = await adminFetch(`/admin/users/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.error ?? "Erro ao atualizar usuário");
+  }
+  return res.json();
+}
+
+export async function deleteAdminUser(id: string): Promise<void> {
+  const res = await adminFetch(`/admin/users/${id}`, { method: "DELETE" });
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.error ?? "Erro ao excluir usuário");
+  }
+}
