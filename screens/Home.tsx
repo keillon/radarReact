@@ -590,10 +590,12 @@ export default function Home() {
 
   // Atualização manual de radares (modal ou menu) — obrigatória quando há atualização
   const fetchRadarsManually = useCallback(() => {
-    const loc = currentLocationRef.current;
-    if (!loc?.latitude || !loc?.longitude) return;
     setIsUpdatingRadars(true);
-    getRadarsFromGeoJson()
+    const timeoutMs = 25000;
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("A requisição demorou demais. Verifique sua conexão.")), timeoutMs),
+    );
+    Promise.race([getRadarsFromGeoJson(), timeoutPromise])
       .then((allRadars) => {
         if (!isMountedRef.current) return;
         hasInitialRadarLoadRef.current = true;
@@ -617,11 +619,17 @@ export default function Home() {
       })
       .catch((error) => {
         console.error("Erro ao atualizar radares:", error);
+        if (isMountedRef.current) {
+          showAppAlert(
+            "Erro ao atualizar",
+            error instanceof Error ? error.message : "Não foi possível buscar os radares. Tente novamente.",
+          );
+        }
       })
       .finally(() => {
         if (isMountedRef.current) setIsUpdatingRadars(false);
       });
-  }, []);
+  }, [showAppAlert]);
 
   // Preview de lat/lon no picker: valor inicial; atualizações via onCameraChanged (throttled) + fallback getCenter a cada 600ms
   useEffect(() => {
@@ -3744,7 +3752,8 @@ const styles = StyleSheet.create({
   reportModalContent: {
     backgroundColor: colors.backgroundLight,
     borderRadius: 16,
-    padding: 20,
+    padding: 36,
+  
     width: "100%",
     maxWidth: 360,
   },
