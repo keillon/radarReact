@@ -6,10 +6,13 @@ require Pod::Executable.execute_command('node', ['-p',
   )', __dir__]).strip
 
 # Codegen: UnsupportedModulePropertyParserError com @rnmapbox/maps é contornado pelo patch
-# em patches/@rnmapbox+maps+10.2.10.patch (remove onLocationUpdate do Spec). Rode npm install antes de pod install.
-# MapboxMaps 11.x exige iOS 14.0+; abaixo disso CocoaPods não resolve o pod.
+# em patches/@rnmapbox+maps+10.2.10.patch (remove onLocationUpdate do Spec).
+# Aplicamos patches antes do codegen para evitar erro ao rodar pod install sem npm install prévio.
 platform :ios, '14.0'
 plugin 'cocoapods-patch'
+
+root = File.expand_path('..', __dir__)
+system("cd #{root} && npx patch-package 2>/dev/null || true")
 
 # Força MapboxMaps 10.x para compatibilidade entre @rnmapbox/maps e react-native-mapbox-navigation.
 # react-native-mapbox-navigation usa MapboxNavigation 2.18.x que exige MapboxMaps ~> 10.17.0.
