@@ -3151,7 +3151,7 @@ export default function Home() {
                   <Text
                     style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 4 }}
                   >
-                    Posição do pin (será reportad)
+                    Posição do pin (será reportada)
                   </Text>
                   <Text
                     style={{
