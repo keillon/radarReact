@@ -193,7 +193,7 @@ export default function Home() {
   type RadarArrayUpdater = Radar[] | ((prev: Radar[]) => Radar[]);
   type RadarIdArrayUpdater = string[] | ((prev: string[]) => string[]);
 
-  const { playRadarAlert, speakRadarAlert } = useRadarAudio();
+  const { playRadarAlert, stopRadarAlert, speakRadarAlert } = useRadarAudio();
   const [origin, setOrigin] = useState<LatLng | null>(null);
   const [destination, setDestination] = useState<LatLng | null>(null);
   const [destinationText, setDestinationText] = useState<string>("");
@@ -1899,6 +1899,7 @@ export default function Home() {
     const activeRadar = radarAtivo;
     const activeDistance = distanciaAtual;
     if (!activeRadar || activeDistance == null) {
+      stopRadarAlert();
       if (!postPassTimerRef.current) {
         radarZeroTimeRef2.current = null;
         if (lastNearbyRadarIdRef.current != null) {
@@ -1915,13 +1916,18 @@ export default function Home() {
       // nearbyRadarIdsForMap (via useEffect) já inclui radarAtivo/nearestRadar — highlight sincronizado
     }
 
-    // Alerta sonoro entre 40m e 5m: dispara uma vez quando na faixa (usa soundEnabled reativo)
+    // Parar alerta sonoro ao passar do radar: só tocar enquanto estiver em aproximação
+    if (acabouDePassar) {
+      stopRadarAlert();
+    }
+
+    // Alerta sonoro entre 40m e 5m: dispara quando em aproximação; para ao passar (acima)
     const shouldPlay30mAlert =
       activeDistance != null &&
       activeDistance <= 40 &&
       activeDistance >= 5 &&
       !radar30mSoundPlayedIds.current.has(activeRadar.id);
-    if (soundEnabled && (deveTocarAlerta || shouldPlay30mAlert)) {
+    if (soundEnabled && !acabouDePassar && (deveTocarAlerta || shouldPlay30mAlert)) {
       if (shouldPlay30mAlert) radar30mSoundPlayedIds.current.add(activeRadar.id);
       playRadarAlert();
     }
@@ -2016,6 +2022,7 @@ export default function Home() {
     modalScale,
     openRadarFeedbackCard,
     playRadarAlert,
+    stopRadarAlert,
     proximityNearbyRadarIds,
     radarAtivo,
     soundEnabled,

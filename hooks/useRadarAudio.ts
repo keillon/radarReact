@@ -34,6 +34,26 @@ export function useRadarAudio() {
   const deviceVolRef = useRef(deviceVolume);
   deviceVolRef.current = deviceVolume;
   const isPlayingRef = useRef(false);
+  const currentSoundRef = useRef<{ stop: () => void; release: () => void } | null>(null);
+  const playTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const stopRadarAlert = useCallback(() => {
+    if (playTimeoutRef.current) {
+      clearTimeout(playTimeoutRef.current);
+      playTimeoutRef.current = null;
+    }
+    const s = currentSoundRef.current;
+    if (s) {
+      try {
+        s.stop?.();
+      } catch {}
+      try {
+        s.release?.();
+      } catch {}
+      currentSoundRef.current = null;
+    }
+    isPlayingRef.current = false;
+  }, []);
 
   const playRadarAlert = useCallback(() => {
     const { soundEnabled, mapVoiceEnabled, volume } = getStoredSettings();
@@ -49,6 +69,7 @@ export function useRadarAudio() {
         (error: any) => {
           if (error) {
             isPlayingRef.current = false;
+            currentSoundRef.current = null;
             const Tts = getTts();
             if (mapVoiceEnabled && Tts?.speak) {
               ensureTtsReady().then(async () => {
@@ -70,21 +91,24 @@ export function useRadarAudio() {
             }
             return;
           }
+          currentSoundRef.current = s;
           const deviceVol = deviceVolRef.current;
           const vol = Math.max(0.5, Math.min(1, Number(volume) * deviceVol));
           s.setVolume(vol);
           const playOnce = (count: number) => {
             if (count <= 0) {
               s.release();
+              currentSoundRef.current = null;
               isPlayingRef.current = false;
               return;
             }
             s.setCurrentTime(0);
             s.play((success: boolean) => {
               if (count > 1 && success) {
-                setTimeout(() => playOnce(count - 1), 300);
+                playTimeoutRef.current = setTimeout(() => playOnce(count - 1), 300);
               } else {
                 s.release();
+                currentSoundRef.current = null;
                 isPlayingRef.current = false;
               }
             });
@@ -94,6 +118,7 @@ export function useRadarAudio() {
       );
     } catch (e) {
       isPlayingRef.current = false;
+      currentSoundRef.current = null;
     }
   }, []);
 
@@ -129,5 +154,5 @@ export function useRadarAudio() {
     []
   );
 
-  return { playRadarAlert, speakRadarAlert };
+  return { playRadarAlert, stopRadarAlert, speakRadarAlert };
 }

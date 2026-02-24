@@ -1751,7 +1751,7 @@ index 41a3ba0..2848ab4 100644
    }
  
    fun setLocal(language: String) {
-@@ -817,7 +1304,1779 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
+@@ -817,7 +1304,1780 @@ class MapboxNavigationView(private val context: ThemedReactContext): FrameLayout
      this.isVoiceInstructionsMuted = mute
    }
  
@@ -1856,6 +1856,7 @@ index 41a3ba0..2848ab4 100644
 +      Log.d("MapboxNavigationView", "📡 ${radarIds.size} radares próximos definidos")
 +      updateHighlightFilterAndPulse()
 +      if (radarIds.isNotEmpty()) {
++        updateRadarsOnMap()
 +        // Retries: estilo pode não estar pronto ou GeoJSON ainda carregando
 +        listOf(100L, 300L, 600L, 1000L, 1500L, 2500L).forEach { delayMs ->
 +          throttleHandler.postDelayed({ updateHighlightFilterAndPulse() }, delayMs)
